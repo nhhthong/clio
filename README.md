@@ -17,7 +17,7 @@ Clio keeps three small, append-only ledgers inside your repo. Claude Code reads 
 and writes to them after. A new session loads the context that matters in seconds, and when the
 agent hits a gap it records the gap instead of filling it with a plausible guess.
 
-## Why Clio
+## The name
 
 Clio is the Greek Muse of history, daughter of Mnemosyne, whose name means memory. Her sisters
 got poetry and music; she got a scroll. She does not compose, she records, and when nobody told
@@ -48,9 +48,8 @@ Three questions, three homes, one join key (`req`, the requirement row number):
 | What was **built**, and when? | `.claude/clio/index.jsonl` | `/clio:memo` |
 | What is still **owed**? | `.claude/clio/debt.jsonl` | `/clio:memo`, `/clio:update` |
 
-Both `.jsonl` files are append-only. A record is never edited. An update is a new line with the same
-`id`, and readers take the last line. You get history for free, concurrent sessions cannot clobber
-each other, and `git log` recovers anything you narrowed away.
+Both `.jsonl` files are append-only: an update is a new line with the same `id`, and readers take
+the last line.
 
 ```
   new task ──► clio:context (auto): spec that governs it → what was built → what is owed
@@ -67,8 +66,7 @@ done. Skip it and the next session starts without that work in its memory.
 
 ## Install
 
-You need Claude Code with plugin support, plus `bash`, `jq`, `git` and `awk` (on macOS also
-`brew install gnu-sed`).
+You need Claude Code, plus `bash`, `jq`, `git` and `awk` (on macOS also `brew install gnu-sed`).
 
 ```bash
 claude plugin marketplace add nhhthong/clio
@@ -142,8 +140,8 @@ the step being executed is in context. Every step ends in something you can chec
     └── decisions/*.md        # ADRs
 ```
 
-The skills and the validator stay in the plugin. Nothing outside `.claude/` is touched, and the
-plugin does nothing at all in a project without `.claude/clio/`, so you can leave it enabled
+The skills and the validator stay in the plugin. Nothing outside `.claude/` is touched. In a
+project without `.claude/clio/` the skills say so and stop, so you can leave the plugin enabled
 everywhere.
 
 ## Design rules
@@ -165,7 +163,7 @@ everywhere.
 ## FAQ
 
 **Does it work without a requirements document?**
-Yes. `/clio:setup` offers Lite mode: no spec register, every record uses `req: []` and joins on
+Yes. `/clio:setup` offers Lite mode: an empty spec register, every record uses `req: []` and joins on
 domain, keywords and files. You still get the task docs and the debt ledger.
 
 **Why JSONL instead of a database?**
@@ -188,12 +186,10 @@ belong to Claude Code.
 
 ## Contributing
 
-Stack rule files and skill fixes help most, and both are small. Keep one source of truth: the
-ledger schema lives in `skills/memo/steps/DEBT-IT.md` and `INDEX-IT.md`, validation in
-`skills/memo/scripts/validate.sh`. Point at them, do not copy them. A skill that fills a gap
-with a plausible answer instead of a ⚠️ is a regression, whatever else it improves. Before a PR,
-`claude plugin validate .` must pass; to try a working copy, `claude plugin marketplace add
-/path/to/clio` then `claude plugin install clio@nhhthong`.
+Stack rule files and skill fixes help most. Keep one source of truth: the ledger schema lives in
+`skills/memo/steps/DEBT-IT.md` and `INDEX-IT.md`, validation in `skills/memo/scripts/validate.sh`;
+point at them, do not copy them. Before a PR, `claude plugin validate .` must pass. To try a working
+copy: `claude plugin marketplace add /path/to/clio`, then `claude plugin install clio@nhhthong`.
 
 ## License
 
