@@ -9,7 +9,6 @@
   [![Claude Code plugin](https://img.shields.io/badge/Claude_Code-plugin-D97757?logo=anthropic&logoColor=white)](https://code.claude.com/docs/en/plugins)
   [![Version](https://img.shields.io/badge/version-1.0.1-blue)](CHANGELOG.md)
   [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
-  [![Tests](https://img.shields.io/badge/selftest-52_passing-brightgreen)](tests/selftest.sh)
 </div>
 
 ---
@@ -19,20 +18,6 @@ and writes to them after. A new session loads the context that matters in second
 agent hits a gap it records the gap instead of filling it with a plausible guess.
 
 The name comes from the Greek Muse of history, who carried a scroll and wrote down what happened.
-
-## Table of contents
-
-- [Why](#why)
-- [How it works](#how-it-works)
-- [Install](#install)
-- [Quick start](#quick-start)
-- [Commands](#commands)
-- [What lands in your repo](#what-lands-in-your-repo)
-- [Hooks](#hooks)
-- [Design rules](#design-rules)
-- [FAQ](#faq)
-- [Contributing](#contributing)
-- [License](#license)
 
 ## Why
 
@@ -63,12 +48,7 @@ Both `.jsonl` files are append-only. A record is never edited. An update is a ne
 `id`, and readers take the last line. You get history for free, concurrent sessions cannot clobber
 each other, and `git log` recovers anything you narrowed away.
 
-The loop runs itself:
-
 ```
-session start ──► hook: open debt + "CONTEXT.md is falling behind"
-      │
-      ▼
   new task ──► clio-context (auto): spec that governs it → what was built → what is owed
       │                              ⚠️ row with no record?  stop and ask, don't guess
       ▼
@@ -76,12 +56,10 @@ session start ──► hook: open debt + "CONTEXT.md is falling behind"
       │
       ▼
   /clio-memo ──► task doc · index.jsonl line · debt.jsonl lines · validate
-      │
-      ▼
-session stop ──► hook: "3 files changed, nothing recorded — memo it, or say why not"
 ```
 
-A developer has to remember one command: `/clio-memo` when a piece of work is done.
+There is no hook. A developer has to remember one command, `/clio-memo`, when a piece of work is
+done. Skip it and the next session starts without that work in its memory.
 
 ## Install
 
@@ -93,7 +71,8 @@ claude plugin marketplace add nhhthong/clio
 claude plugin install clio@nhhthong
 ```
 
-Or inside a session: `/plugin install clio@nhhthong`.
+Or inside a session: `/plugin install clio@nhhthong`. Update later with `claude plugin update clio`;
+your ledgers and docs are data in your repo, and an update never touches them.
 
 To have a whole team pick it up when they trust the repo, add this to the project's `.claude/settings.json`:
 
@@ -106,9 +85,6 @@ To have a whole team pick it up when they trust the repo, add this to the projec
 }
 ```
 
-Update later with `claude plugin update clio`. Your ledgers and docs are data in your repo, and an
-update never touches them.
-
 ## Quick start
 
 ```
@@ -117,10 +93,9 @@ update never touches them.
 
 Run it once per repository. It scaffolds `.claude/`, then asks a handful of questions (domain
 vocabulary, formatter, timezone, generated files, the things that are expensive to get wrong) and
-writes your answers into `CLAUDE.md` and `CONTEXT.md`. It also takes stock of your MCP servers and
-plugins and offers the ones that help it work (Context7, a code graph, review plugins, Playwright or a
-DB server where the stack calls for it). Nothing is pre-selected, and nothing you did not pick gets
-installed.
+writes your answers into `CLAUDE.md` and `CONTEXT.md`. It also lists the MCP servers and plugins you
+are missing (Context7, a code graph, review plugins, Playwright or a DB server where the stack calls
+for it, and an optional strict permission list) and installs only what you pick.
 
 Have a requirements document, contract or PRD?
 
@@ -129,8 +104,7 @@ Have a requirements document, contract or PRD?
 ```
 
 That distils it into one short `memory/<area>.md` per domain plus a row table, and marks every
-undecided point ⚠️ with the name of whoever owes the answer. From then on `clio-context` runs on its
-own before non-trivial work, and the Stop hook nudges you when work goes unrecorded.
+undecided point ⚠️ with the name of whoever owes the answer.
 
 ## Commands
 
@@ -144,8 +118,8 @@ own before non-trivial work, and the Stop hook nudges you when work goes unrecor
 | `/clio-debt [filter]` | what is still owed, actionable vs. blocked (read-only) | any time |
 | `/clio-ask [x]` | explain any of the above | when unsure |
 
-Each skill is a short `SKILL.md` that walks numbered step files, so only the step being executed is
-in context. Every step ends in something you can check: a file exists, a validator passes.
+Each skill is a short `SKILL.md`; `clio-memo` and `clio-context` walk numbered step files, so only
+the step being executed is in context. Every step ends in something you can check.
 
 ## What lands in your repo
 
@@ -155,8 +129,8 @@ in context. Every step ends in something you can check: a file exists, a validat
 ├── CONTEXT.md                # stable facts: entities, term collisions, key flows, landmines
 ├── rules/<stack>.md          # path-scoped stack rules, only for stacks the repo has
 ├── clio/
-│   ├── index.jsonl           # what was built — append-only
-│   └── debt.jsonl            # what is owed — append-only
+│   ├── index.jsonl           # what was built, append-only
+│   └── debt.jsonl            # what is owed, append-only
 └── docs/
     ├── specs/requirements.md # decision register: row → spec file → ✅ ⚠️ ❌
     ├── specs/memory/*.md     # distilled per-domain decisions, each quoting its source verbatim
@@ -164,21 +138,11 @@ in context. Every step ends in something you can check: a file exists, a validat
     └── decisions/*.md        # ADRs
 ```
 
-The skills, the hooks and the validator stay in the plugin. Nothing outside `.claude/` is touched.
-
-## Hooks
-
-| Event | Hook | Behaviour |
-|---|---|---|
-| `SessionStart` | `session-debt` | prints open, actionable debt (newest first, at most five) and warns when `CONTEXT.md` is older than five recorded runs |
-| `Stop` | `memo-reminder` | if tracked files changed after the ledger was last written, blocks once with "run `/clio-memo`, or say in one line why this needs no record" |
-
-Both exit silently in any project without `.claude/clio/`, so you can leave the plugin enabled
+The skills and the validator stay in the plugin. Nothing outside `.claude/` is touched, and the
+plugin does nothing at all in a project without `.claude/clio/`, so you can leave it enabled
 everywhere.
 
 ## Design rules
-
-These are the rules the skills enforce.
 
 - The agent does not speculate. Anything it has not verified by reading, grepping, querying or
   running is reported as unverified, and it asks. When several readings of a requirement are valid,
@@ -198,35 +162,34 @@ These are the rules the skills enforce.
 
 **Does it work without a requirements document?**
 Yes. `/clio-setup` offers Lite mode: no spec register, every record uses `req: []` and joins on
-domain, keywords and files. You still get the task docs, the debt ledger and the hooks.
+domain, keywords and files. You still get the task docs and the debt ledger.
 
 **Why JSONL instead of a database?**
 Appending one line with `>>` is atomic, diffs are readable, `jq` is the whole query language, and
-`git log` is the audit trail. A database would add a dependency without giving the ledger anything it
-needs.
+`git log` is the audit trail.
 
 **Why not one big `CLAUDE.md`?**
 `CLAUDE.md` loads every session, so everything in it is paid for on every task. Clio keeps that file
 under about 150 lines and moves history into files that load only when a query says they are
 relevant.
 
-**I set this up with the old copy-into-project skeleton. Now what?**
-Run `/clio-setup`. It detects `.claude/database/`, runs `scripts/migrate.sh` to rename the
-directories and the `est` / `folder` fields and rewrite references, then tells you what to delete by
-hand.
-
 **Which stacks have rule starters?**
-PHP, Go, Java/Kotlin, Dart/Flutter. Others need one small PR; see [CONTRIBUTING.md](CONTRIBUTING.md).
+PHP, Go, Java/Kotlin, Dart/Flutter. Others are one small file: 10 to 20 verified bullets in
+`skills/clio-setup/rules/<stack>.md` with `paths:` frontmatter, plus the marker file added to the
+`ls` line in `skills/clio-setup/SKILL.md` step 1.
 
 **Is this only for Claude Code?**
-Yes, for now. The skills are plain Markdown, but the hooks, the `${CLAUDE_PLUGIN_ROOT}` paths and the
-install flow belong to Claude Code.
+Yes. The skills are plain Markdown, but the `${CLAUDE_PLUGIN_ROOT}` paths and the install flow
+belong to Claude Code.
 
 ## Contributing
 
-Stack rule files and skill fixes are the two contributions that help most, and both are small. See
-[CONTRIBUTING.md](CONTRIBUTING.md). Run `tests/selftest.sh` before opening a PR; it has to end with
-`fail 0`.
+Stack rule files and skill fixes help most, and both are small. Keep one source of truth: the
+ledger schema lives in `skills/clio-memo/steps/DEBT-IT.md` and `INDEX-IT.md`, validation in
+`skills/clio-memo/scripts/validate.sh`. Point at them, do not copy them. A skill that fills a gap
+with a plausible answer instead of a ⚠️ is a regression, whatever else it improves. Before a PR,
+`claude plugin validate .` must pass; to try a working copy, `claude plugin marketplace add
+/path/to/clio` then `claude plugin install clio@nhhthong`.
 
 ## License
 

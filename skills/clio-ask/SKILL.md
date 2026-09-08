@@ -5,40 +5,33 @@ argument-hint: "[command name or question, optional]"
 ---
 
 Read-only. Answer from the plugin's own files; never invent behaviour a SKILL.md does not describe.
+No `.claude/clio/` in this project → say so first, point at `/clio-setup`.
 
 Question (may be empty): $ARGUMENTS
 
-## No argument → the overview
-
-Print this table, then one line on the loop: *`clio-context` runs before work, the Stop hook nags
-after, `/clio-memo` is the only command a developer must remember.*
+**No argument** → print this, then one line: *`clio-context` runs before work; `/clio-memo` after is
+the one command to remember, nothing reminds you.*
 
 | Command | Does | Run when |
 |---|---|---|
-| `/clio-setup` | scaffold `.claude/` and fill CLAUDE.md / CONTEXT.md by asking | once per repo |
+| `/clio-setup` | scaffold `.claude/`, fill CLAUDE.md / CONTEXT.md by asking | once per repo |
 | `/clio-ingest <doc>` | distil a requirement document into `docs/specs/memory/*.md` + `requirements.md` | once, and when a new source arrives |
-| `clio-context` (auto) | before coding: the spec that governs the area, what was built, what is owed | Claude triggers it |
+| `clio-context` (auto) | before coding: the governing spec, what was built, what is owed | Claude triggers it |
 | `/clio-memo` | record finished work: task doc, `index.jsonl`, `debt.jsonl` | after each feature / fix |
 | `/clio-update` | a spec changed: record the delta vs. existing code, move the row marker | when requirements change |
-| `/clio-debt [filter]` | list what is still owed, actionable vs. blocked | any time |
+| `/clio-debt [filter]` | what is still owed, actionable vs. blocked | any time |
 | `/clio-ask [x]` | this | when unsure |
 
-Three ledgers, three questions: decided? → `.claude/docs/specs/requirements.md` status column ·
-built? → `.claude/clio/index.jsonl` · owed? → `.claude/clio/debt.jsonl`. Both `.jsonl` files are
-append-only; the last line per `id` / `doc` is current state.
+Three questions, three files: decided? → `.claude/docs/specs/requirements.md` · built? →
+`.claude/clio/index.jsonl` · owed? → `.claude/clio/debt.jsonl`. The `.jsonl` files are append-only;
+the last line per `id` / `doc` is current state.
 
-## Argument names a command
+**Argument names a command** → read `${CLAUDE_PLUGIN_ROOT}/skills/clio-<name>/SKILL.md` (its
+`steps/` or `HOP*.md` only if needed). ≤ 15 lines: purpose · files read · files written · one
+example invocation · the mistake it exists to prevent.
 
-Read `${CLAUDE_PLUGIN_ROOT}/skills/clio-<name>/SKILL.md` (and its `steps/` or `HOP*.md` files only
-if the question needs them). Answer in ≤ 15 lines: purpose · inputs · files read · files written ·
-one concrete example invocation · the one mistake it exists to prevent.
-
-## Argument is a question
-
-Find the answer in the plugin files — ledger schema and `kind`s in
+**Argument is a question** → ledger schema and `kind`s are in
 `${CLAUDE_PLUGIN_ROOT}/skills/clio-memo/steps/DEBT-IT.md` and `INDEX-IT.md`, read-side queries in
 `${CLAUDE_PLUGIN_ROOT}/skills/clio-context/HOP*.md`, status semantics in
-`${CLAUDE_PLUGIN_ROOT}/skills/clio-update/steps/DECIDE-STATUS.md`. Quote the file you answered
-from. Not covered anywhere → say so; do not guess.
-
-If the current project has no `.claude/clio/`, say so in one line first and point at `/clio-setup`.
+`${CLAUDE_PLUGIN_ROOT}/skills/clio-update/SKILL.md` § 2. Quote the file you answered from. Not
+covered → say so.

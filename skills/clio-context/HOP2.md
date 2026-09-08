@@ -4,8 +4,8 @@ Append-only, written by `/clio-memo`. Every record is a document record (`type` 
 carrying `domain`, `keywords`, `files`, `specs`, `req`. Open items aren't here — see [HOP3.md](HOP3.md).
 
 **A doc gets one record per run; most array fields are that run's *delta*, not current state.**
-`files`/`keywords`/`commit` — union across records (a hub doc's last record may list 4 files of the
-doc's real 30+; sub-task keywords vanish if you take `last`).
+`files`/`keywords`/`commit` — union across records (a doc's last record may list 4 files of its
+real 30+).
 
 **`req`/`specs` are the exception — take last, never union.** They're the doc's full current claim,
 restated every run (`[2,3]` later restated as `[2,3,8]`, never the delta `[8]`), and therefore
@@ -43,8 +43,6 @@ Prefer `specs`, fall back to `domain`/`keywords`/`files`.
 matters. Go to `## Decisions` (constraints), `## Side Effects` (what you can break), `## Follow-up`
 (knowingly left unfinished) — a doc's most expensive-to-rediscover content is at the bottom.
 
-Sub-task entries (`.claude/docs/tasks/sub-tasks/`) aren't indexed individually — a hub hit means read
-the hub's `## Entries` list, then open only the relevant entry.
 
 **If a query hits a record that looks off** — missing `doc`, unfamiliar `domain`, or pointing at a
 file not on disk: a `doc` path missing on disk means the doc was renamed; look for a later record

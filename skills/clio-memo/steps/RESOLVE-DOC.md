@@ -3,7 +3,7 @@
 Do this FIRST, before writing anything.
 
 **Case A — path passed:** `test -f "<path>" && echo EXISTS || echo MISSING`
-- `EXISTS` → UPDATE mode, go to `GATHER-FACTS.md` (same dir).
+- `EXISTS` → UPDATE mode, go to `GATHER-FACTS.md`.
 - `MISSING` → stop, ask. Don't create at that path — likely a typo, and creating it forks the
   feature's history.
 
@@ -17,7 +17,7 @@ grep -i "<feature keyword>" .claude/clio/index.jsonl
 ```
 - One plausible match, same feature → UPDATE.
 - Several/ambiguous → show candidates, ask.
-- None → CREATE. Go to `GATHER-FACTS.md`, then `CREATE-MODE.md` (both same dir).
+- None → CREATE. Go to `GATHER-FACTS.md`, then `WRITE-DOC.md` § CREATE.
 
 **Same feature vs new:** same files ≠ same feature. Continuing/fixing/extending/reverting existing
 work → UPDATE. Genuinely different work in same domain → new doc.

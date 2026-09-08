@@ -1,27 +1,19 @@
 <!-- HOW TO FILL THIS FILE
      This file reaches every session through the `@CONTEXT.md` import in CLAUDE.md, and comment
-     stripping is NOT guaranteed on imported files. So: read the guidance in each comment, fill the
-     section, then DELETE every HTML comment (this one included) before finishing setup.
-     Stable facts only: entities, flows, landmines. Task history belongs in .claude/docs/tasks/.
-     Writes after setup go through /clio-memo, which proposes a diff and waits for a yes. -->
+     stripping is NOT guaranteed on imported files. Fill each section from its comment, then DELETE
+     every HTML comment (this one included). Stable facts only: entities, flows, landmines. Task
+     history belongs in .claude/docs/tasks/. Later writes go through /clio-memo, which proposes a
+     diff and waits for a yes. -->
 
 # Domain Context
 
 **No speculation, no hallucination — ask if unsure.** Full rule in `.claude/CLAUDE.md` § Rules;
-applies to everything in this file too (spec status, mappings, setting values, file locations).
-
-Where to look: `.claude/CLAUDE.md` § Project memory names the three homes and their writers; the
-`clio-context` skill explains how to read the ledgers. The one query worth keeping loaded — what
-is actionable right now:
-
-```bash
-jq -s -c 'group_by(.id)[] | last | select(.status!="done" and .blocked_by==null)' .claude/clio/debt.jsonl
-```
+applies to everything in this file too.
 
 ## Dev Environment
 
 <!-- Start/stop commands, services, ports. Then the landmines — but ONLY ones that already cost
-     someone a session. Leave this empty at setup; it gets filled by real incidents, not guesses. -->
+     someone a session. Leave empty at setup; real incidents fill it. -->
 
 ## Core Entities
 
@@ -30,8 +22,8 @@ jq -s -c 'group_by(.id)[] | last | select(.status!="done" and .blocked_by==null)
 
 ## Terms that mean two different things
 
-<!-- The highest-value section here. For each collision: both meanings, where each lives, and the
-     rule for not conflating them. Delete the heading if the domain has none. -->
+<!-- The highest-value section. For each collision: both meanings, where each lives, and the rule
+     for not conflating them. Delete the heading if the domain has none. -->
 
 ## Key Flows
 

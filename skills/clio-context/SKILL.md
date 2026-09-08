@@ -42,9 +42,7 @@ plainly, without fixing:
 - an `req`/`specs` tag that doesn't survive reading the doc — a wrong `req` on a ⚠️ row is the
   expensive one, it makes this skill send you to ask about something already settled.
 
-`/clio-memo` reads these off the session and writes corrections at the end (its step 4d). Work
-ends without `/clio-memo` running → the finding is lost, rediscovered next time — accepted cost
-of staying read-only.
+`/clio-memo` writes the corrections at the end of the session; skip it and the finding is lost.
 
 ## If nothing matches
 
