@@ -21,7 +21,7 @@ agent hits a gap it records the gap instead of filling it with a plausible guess
 
 Clio is the Greek Muse of history, daughter of Mnemosyne, whose name means memory. Her sisters
 got poetry and music; she got a scroll. She does not compose, she records, and when nobody told
-her what happened she leaves the line blank. That blank line is the ⚠️ in this plugin.
+her what happened she leaves the line blank. This plugin does the same.
 
 ## Why
 
@@ -53,7 +53,7 @@ the last line.
 
 ```
   new task ──► clio:context (auto): spec that governs it → what was built → what is owed
-      │                              ⚠️ row with no record?  stop and ask, don't guess
+      │                              open row with no record? stop and ask, don't guess
       ▼
   work …
       │
@@ -106,7 +106,7 @@ Have a requirements document, contract or PRD?
 ```
 
 That distils it into one short `memory/<area>.md` per domain plus a row table, and marks every
-undecided point ⚠️ with the name of whoever owes the answer.
+undecided point as open, with the name of whoever owes the answer.
 
 ## Commands
 
@@ -149,13 +149,13 @@ everywhere.
 - The agent does not speculate. Anything it has not verified by reading, grepping, querying or
   running is reported as unverified, and it asks. When several readings of a requirement are valid,
   it presents them all instead of picking one.
-- ✅ means decided, never built. Build state lives in the ledgers and decision state in the spec
+- Decided means decided, never built. Build state lives in the ledgers and decision state in the spec
   register. Mixing the two is how "done" gets claimed twice.
 - Ledger lines are never edited, reordered or deleted. An update is a new line.
 - One feature gets one doc, for good. Continuing a feature updates its doc; it never creates a second.
 - `blocked_by` decides whether work may start; `status` only says how far it got. A debt record with
   `blocked_by: null` is the work queue. Anything else waits.
-- Every ⚠️ has a record. An open point in the spec without a `debt.jsonl` line naming who owes the
+- Every open point has a record. An open point in the spec without a `debt.jsonl` line naming who owes the
   answer is itself a finding.
 - Work that ran no test, build or recorded manual check is filed as `unverified`, not passed off as
   built.
