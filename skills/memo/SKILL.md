@@ -1,5 +1,5 @@
 ---
-name: clio-memo
+name: memo
 description: Record a finished piece of work — update (or create) its task doc in .claude/docs/tasks/, append the run to .claude/clio/index.jsonl, log what is still owed to .claude/clio/debt.jsonl, and propose a CONTEXT.md diff or an ADR when warranted. Run after finishing a feature, fix or refactor.
 argument-hint: "[path to existing task doc, optional]"
 disable-model-invocation: true

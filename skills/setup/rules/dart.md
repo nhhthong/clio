@@ -3,7 +3,7 @@ paths:
   - "**/*.dart"
 ---
 # Dart / Flutter
-<!-- Clio starter — /clio-setup step 4. Verify every line against this repo, delete lines that
+<!-- Clio starter — /clio:setup step 4. Verify every line against this repo, delete lines that
      don't hold here, delete the whole file if the repo has no Dart. Keep it under 20 lines. -->
 
 - Before finishing: `dart format .`, `flutter analyze` (warnings count as errors here), `flutter test`.

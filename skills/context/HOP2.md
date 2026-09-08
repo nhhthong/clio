@@ -1,6 +1,6 @@
 # Hop 2 — what was already built (`.claude/clio/index.jsonl`)
 
-Append-only, written by `/clio-memo`. Every record is a document record (`type` `task`/`adr`)
+Append-only, written by `/clio:memo`. Every record is a document record (`type` `task`/`adr`)
 carrying `domain`, `keywords`, `files`, `specs`, `req`. Open items aren't here — see [HOP3.md](HOP3.md).
 
 **A doc gets one record per run; most array fields are that run's *delta*, not current state.**

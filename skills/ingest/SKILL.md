@@ -1,6 +1,6 @@
 ---
-name: clio-ingest
-description: Turn a long requirement document (contract, PRD, spec.md, ticket export) into the distilled spec layer — one .claude/docs/specs/memory/*.md per domain area plus the requirements.md row table — marking every undecided point ⚠️ instead of inventing an answer. Run once after /clio-setup when the project has a requirement source, and again whenever a new source arrives.
+name: ingest
+description: Turn a long requirement document (contract, PRD, spec.md, ticket export) into the distilled spec layer — one .claude/docs/specs/memory/*.md per domain area plus the requirements.md row table — marking every undecided point ⚠️ instead of inventing an answer. Run once after /clio:setup when the project has a requirement source, and again whenever a new source arrives.
 argument-hint: "[path to the source requirement doc, or a keyword to re-ingest one area]"
 disable-model-invocation: true
 ---
@@ -72,11 +72,11 @@ Fill the source-priority list; the top entry is the live decision channel.
 
 ## 4. File every ⚠️/❌ row as debt
 
-Each open point needs a record, or `clio-context` keeps stopping future sessions with nothing
-explaining why. Schema and validation → `${CLAUDE_PLUGIN_ROOT}/skills/clio-memo/steps/DEBT-IT.md`.
+Each open point needs a record, or `clio:context` keeps stopping future sessions with nothing
+explaining why. Schema and validation → `${CLAUDE_PLUGIN_ROOT}/skills/memo/steps/DEBT-IT.md`.
 ```bash
 echo '{"date":"YYYY-MM-DD","id":"<kebab-key>","kind":"spec-blocked","status":"pending","domain":"<domain>","what":["<what is undecided>"],"req":[7.1],"specs":[".claude/docs/specs/memory/ocr.md"],"docs":[],"code":[],"action":"<what unblocks it>","source":"<source §n>","blocked_by":"<who owes what>","issue":null}' >> .claude/clio/debt.jsonl
-"${CLAUDE_PLUGIN_ROOT}"/skills/clio-memo/scripts/validate.sh all
+"${CLAUDE_PLUGIN_ROOT}"/skills/memo/scripts/validate.sh all
 ```
 Fix every `FAIL` and every "no open debt record tracks it" before reporting.
 

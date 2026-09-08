@@ -3,7 +3,7 @@ paths:
   - "**/*.php"
 ---
 # PHP
-<!-- Clio starter — /clio-setup step 4. Verify every line against this repo, delete lines that
+<!-- Clio starter — /clio:setup step 4. Verify every line against this repo, delete lines that
      don't hold here, delete the whole file if the repo has no PHP. Keep it under 20 lines. -->
 
 - `declare(strict_types=1);` is the first statement of every new file; follow the repo where existing files differ.

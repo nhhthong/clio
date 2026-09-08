@@ -1,5 +1,5 @@
 ---
-name: clio-update
+name: update
 description: After a spec file changes, work out what the change means for code already written — which task/decision docs it invalidates, whether it is safe to implement yet — record each delta in .claude/clio/debt.jsonl, and move the requirements.md row marker when the decision itself changed. Run when a requirement, contract or ticket changes.
 argument-hint: "[spec file or keyword, optional — omit to sweep all specs]"
 disable-model-invocation: true
@@ -50,16 +50,16 @@ second-hand, or carrying a "re-verify" note in the live channel, keeps a non-nul
 ## 3. Append the delta
 
 `kind` is always `spec-delta`. Full 14-field schema, append-only rule and validation →
-`${CLAUDE_PLUGIN_ROOT}/skills/clio-memo/steps/DEBT-IT.md`. Reuse an existing `id` for the same delta
+`${CLAUDE_PLUGIN_ROOT}/skills/memo/steps/DEBT-IT.md`. Reuse an existing `id` for the same delta
 (`jq -c --arg i "<id>" 'select(.id==$i)' .claude/clio/debt.jsonl`), then:
 ```bash
 echo '{"date":"YYYY-MM-DD","id":"<kebab-key>","kind":"spec-delta","status":"pending","domain":"checkout","what":["…"],"req":[18],"specs":[".claude/docs/specs/memory/<file>.md"],"docs":["…"],"code":["…"],"action":"…","source":"…","blocked_by":null,"issue":null}' >> .claude/clio/debt.jsonl
-"${CLAUDE_PLUGIN_ROOT}"/skills/clio-memo/scripts/validate.sh debt
+"${CLAUDE_PLUGIN_ROOT}"/skills/memo/scripts/validate.sh debt
 ```
 
 ## 4. Move the `requirements.md` row if the *decision* changed
 
-You are the only writer of `.claude/docs/specs/`; a stale marker keeps `clio-context` stopping
+You are the only writer of `.claude/docs/specs/`; a stale marker keeps `clio:context` stopping
 future sessions to ask about a settled point.
 
 | Marker now | Delta means | Do |
@@ -77,7 +77,7 @@ Decisions only, never build state. Never flip ⚠️→✅ off a low-priority so
 A delta you just recorded may be the answer another open record on the same rows was waiting on.
 For each one it resolves, append a new line under that record's `id`, in full, with `blocked_by:
 null` — never edit the old line, never change its `kind` (re-filing `spec-blocked` as `code-debt`
-is `/clio-memo`'s call). `index.jsonl` is not yours: a wrong `req`/`specs` there is reported, not
+is `/clio:memo`'s call). `index.jsonl` is not yours: a wrong `req`/`specs` there is reported, not
 fixed.
 
 Report each delta as `id` · `status` · `blocked_by` · row · one-line action, queue (`blocked_by:

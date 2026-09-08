@@ -23,9 +23,9 @@
 
 | Question | Home | Written by |
 |---|---|---|
-| Has it been *decided*? | `.claude/docs/specs/requirements.md` status column | humans + `/clio-update` |
-| What was *built*, when? | `.claude/clio/index.jsonl` | `/clio-memo` |
-| What is still *owed*? | `.claude/clio/debt.jsonl` | `/clio-memo`, `/clio-update` |
+| Has it been *decided*? | `.claude/docs/specs/requirements.md` status column | humans + `/clio:update` |
+| What was *built*, when? | `.claude/clio/index.jsonl` | `/clio:memo` |
+| What is still *owed*? | `.claude/clio/debt.jsonl` | `/clio:memo`, `/clio:update` |
 
 ✅ means decided, never built. Never write build progress into a spec file, or a spec decision into
 the ledgers.
@@ -33,9 +33,9 @@ the ledgers.
 Domains — the only values allowed in the `domain` field of both ledgers, by business area served,
 never by directory: <!-- fill at setup, e.g. `account` `checkout` `billing` `infra` `all` -->
 
-- Before non-trivial work in an area → run the `clio-context` skill.
-- After finishing a piece of work → `/clio-memo`. What is owed → `/clio-debt`.
-- A spec changed but the code hasn't → `/clio-update`. It is the only writer of `docs/specs/`.
+- Before non-trivial work in an area → run the `clio:context` skill.
+- After finishing a piece of work → `/clio:memo`. What is owed → `/clio:debt`.
+- A spec changed but the code hasn't → `/clio:update`. It is the only writer of `docs/specs/`.
 - Keep the `@CONTEXT.md` line above; keep CONTEXT.md free of HTML comments.
 - New file in `.claude/rules/` → start it with `paths:` frontmatter, or it loads in every session.
 
@@ -55,7 +55,7 @@ never by directory: <!-- fill at setup, e.g. `account` `checkout` `billing` `inf
   say so before building the complex one.
 - Define the success criterion before starting: "add validation" → "tests for invalid inputs pass";
   "fix the bug" → "a test reproduces it, then passes". That criterion is what `## Testing Done`
-  records; nothing ran → say so, and `/clio-memo` files it as `unverified`.
+  records; nothing ran → say so, and `/clio:memo` files it as `unverified`.
 - IMPORTANT: Do not add code comments unless the user explicitly asks for them.
 
 <!-- Project-specific hard rules go here, as bullets in the list above. Ask the user, don't guess:

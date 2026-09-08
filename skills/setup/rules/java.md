@@ -4,7 +4,7 @@ paths:
   - "**/*.kt"
 ---
 # Java / Kotlin (JVM)
-<!-- Clio starter — /clio-setup step 4. Verify every line against this repo, delete lines that
+<!-- Clio starter — /clio:setup step 4. Verify every line against this repo, delete lines that
      don't hold here, delete the whole file if the repo has no JVM code. Keep it under 20 lines. -->
 
 - Build and test through the wrapper the repo ships: `./mvnw -q test` or `./gradlew test`. Never edit `target/` or `build/`.

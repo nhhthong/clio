@@ -1,11 +1,11 @@
 ---
-name: clio-debt
+name: debt
 description: Show what is still owed — open records in .claude/clio/debt.jsonl split into actionable-now vs blocked, optionally filtered by domain, requirement row number or keyword. Read-only.
 argument-hint: "[domain | req row number | keyword, optional]"
 ---
 
-Read-only. `/clio-memo` and `/clio-update` are the writers. No `.claude/clio/` here → say so, point
-at `/clio-setup`.
+Read-only. `/clio:memo` and `/clio:update` are the writers. No `.claude/clio/` here → say so, point
+at `/clio:setup`.
 
 Filter (may be empty): $ARGUMENTS
 
@@ -21,5 +21,5 @@ Report two groups, in this order; `blocked_by` alone decides which:
 - **Blocked** — `id` · what it is waiting on. Say plainly these must not be started.
 
 Then one line: `in-process` items nothing has touched in a while, and any `spec-blocked` record whose
-`blocked_by` names a `requirements.md` row that is now ✅ — stale, for the next `/clio-memo` to
+`blocked_by` names a `requirements.md` row that is now ✅ — stale, for the next `/clio:memo` to
 re-file. Flag, don't fix. Nothing open → one line.

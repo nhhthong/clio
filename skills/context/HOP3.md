@@ -1,6 +1,6 @@
 # Hop 3 — what is still open (`.claude/clio/debt.jsonl`)
 
-Every open item lives here: `/clio-update` writes spec-moved-code-hasn't deltas, `/clio-memo`
+Every open item lives here: `/clio:update` writes spec-moved-code-hasn't deltas, `/clio:memo`
 writes leftover business from a completed run. Keyed by `id`, one line per `id`.
 
 ```bash

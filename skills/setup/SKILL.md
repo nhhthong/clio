@@ -1,6 +1,6 @@
 ---
-name: clio-setup
-description: Set up Clio in the current project — scaffold .claude/ (CLAUDE.md, CONTEXT.md, requirements.md, the two ledgers, stack rules), then fill them by asking the user, never guessing. Run once per repository, before any other clio-* skill.
+name: setup
+description: Set up Clio in the current project — scaffold .claude/ (CLAUDE.md, CONTEXT.md, requirements.md, the two ledgers, stack rules), then fill them by asking the user, never guessing. Run once per repository, before any other clio:* skill.
 disable-model-invocation: true
 ---
 
@@ -55,12 +55,12 @@ Each fill-in is an HTML comment holding its own instructions.
 - **Greenfield:** fill `CONTEXT.md` § Entities/Terms/Key Flows from `docs/specs/memory/*.md`; leave
   § Dev Environment and § Source of truth empty. **ASK** stack + versions, storage, and the
   architectural seam; write them as the opening paragraph plus a one-line § Architecture, and record
-  the decision as an ADR (template: `${CLAUDE_PLUGIN_ROOT}/skills/clio-memo/steps/WRAP-UP.md`).
+  the decision as an ADR (template: `${CLAUDE_PLUGIN_ROOT}/skills/memo/steps/WRAP-UP.md`).
 
 ## 3. Requirements
 
 **ASK** which shape:
-- **Full** — a requirement source exists. Tell the user to run `/clio-ingest <source>` when this
+- **Full** — a requirement source exists. Tell the user to run `/clio:ingest <source>` when this
   setup finishes.
 - **Lite** — none. Replace the two tables in `requirements.md` with one line:
   `Lite mode — no requirement source; every record uses req: [] and joins on domain/keywords/files.`
@@ -73,7 +73,7 @@ Uncovered stack → write one, 10–20 lines, `paths:` frontmatter, verified fac
 **Greenfield:** keep the file unverified and append one `debt.jsonl` record (`kind:"doc-stale"`,
 `domain:"all"`, `what:["rules/<stack>.md unverified — written before the scaffold"]`,
 `code:[".claude/rules/<stack>.md"]`, `blocked_by:null`; schema in
-`${CLAUDE_PLUGIN_ROOT}/skills/clio-memo/steps/DEBT-IT.md`).
+`${CLAUDE_PLUGIN_ROOT}/skills/memo/steps/DEBT-IT.md`).
 
 ## 5. Tooling (optional, ASK once)
 
@@ -123,9 +123,9 @@ keep it on here; to turn one off for this repo only, `jq`-merge into `.claude/se
 ## 7. Verify and stop
 
 ```bash
-"${CLAUDE_PLUGIN_ROOT}"/skills/clio-memo/scripts/validate.sh all    # ⚠️/✅ notes are expected; a FAIL is not
+"${CLAUDE_PLUGIN_ROOT}"/skills/memo/scripts/validate.sh all    # ⚠️/✅ notes are expected; a FAIL is not
 ```
 Ask the user to run `/context`: `CLAUDE.md` and `CONTEXT.md` must both appear under **Memory files**.
 **ASK** whether `.claude/` is committed (recommended: yes, the ledgers are history). Do not seed the
-ledgers beyond what steps 2–4 wrote. From here the loop runs itself: `clio-context` before
-non-trivial work, `/clio-memo` after. Nothing reminds the user; say that once.
+ledgers beyond what steps 2–4 wrote. From here the loop runs itself: `clio:context` before
+non-trivial work, `/clio:memo` after. Nothing reminds the user; say that once.

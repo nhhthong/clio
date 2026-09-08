@@ -77,7 +77,7 @@ case $mode in
     # orphan docs — on disk, never indexed
     for d in .claude/docs/tasks/*.md .claude/docs/decisions/*.md; do
       [ -e "$d" ] || continue
-      grep -qF "\"doc\":\"$d\"" "$IDX" 2>/dev/null || warn "orphan doc, no index record: $d — /clio-memo was skipped"
+      grep -qF "\"doc\":\"$d\"" "$IDX" 2>/dev/null || warn "orphan doc, no index record: $d — /clio:memo was skipped"
     done
     # index records pointing at docs that no longer exist without a supersedes trail
     while read -r doc; do

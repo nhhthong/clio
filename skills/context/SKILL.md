@@ -1,5 +1,5 @@
 ---
-name: clio-context
+name: context
 description: Load the context needed before working in an area — the requirement spec that governs it, the past task/decision docs that built it, and the open debt still attached to it. Use before starting non-trivial work in a domain area (e.g. account, checkout, billing, infra) — whenever you'd otherwise ask "has this been touched before?", "what did the customer actually ask for?", or "was there a reason it's built this way?". Triggers on starting a new task, opening files in an unfamiliar area, or the user asking "any history on this?" / "check past decisions".
 ---
 
@@ -11,7 +11,7 @@ broken/undecided (`.claude/clio/debt.jsonl`). This skill loads all three cheaply
 without reading the whole archive.
 
 **Read-only.** Never writes to `index.jsonl`/`debt.jsonl`, never edits a spec, never fixes a stale
-record — it *reports* contradictions; `/clio-memo` and `/clio-update` are the writers. Staying
+record — it *reports* contradictions; `/clio:memo` and `/clio:update` are the writers. Staying
 silent because "nothing was actionable" is the failure mode.
 
 ## Walk the hops, in order
@@ -42,7 +42,7 @@ plainly, without fixing:
 - an `req`/`specs` tag that doesn't survive reading the doc — a wrong `req` on a ⚠️ row is the
   expensive one, it makes this skill send you to ask about something already settled.
 
-`/clio-memo` writes the corrections at the end of the session; skip it and the finding is lost.
+`/clio:memo` writes the corrections at the end of the session; skip it and the finding is lost.
 
 ## If nothing matches
 

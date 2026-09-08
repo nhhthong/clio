@@ -24,4 +24,4 @@ full — they're short and already distilled.
 - No row matches → say so (outside contracted scope, or `requirements.md` missing a row). Worth a sentence,
   not a reason to stop.
 
-Note the row number(s) (`req`) — reused in [HOP2.md](HOP2.md), and `/clio-memo` needs them.
+Note the row number(s) (`req`) — reused in [HOP2.md](HOP2.md), and `/clio:memo` needs them.

@@ -13,7 +13,7 @@ jq -s -c --argjson n <req> 'group_by(.id)[] | last
 ```
 Fully resolved → append with `status:"done"`, commit hash in `action`. Partly → `status:"in-process"`,
 narrow `what` to what is left. Unblocked but not finished → `blocked_by:null`, keep `status`. Include
-the items `clio-context` flagged for this area, not only your diff.
+the items `clio:context` flagged for this area, not only your diff.
 
 ## 2. Was this run verified?
 
@@ -32,7 +32,7 @@ Group by problem, never mix kinds in one record.
 | `code-debt` | known-wrong code; prefix `what` with `perf:` or `flaky:` when that is the nature |
 | `unverified` | shipped, never verified by any test, build or recorded manual run |
 | `doc-stale` | a doc describes something untrue |
-| `spec-delta` | spec moved, code hasn't — `/clio-update` writes these |
+| `spec-delta` | spec moved, code hasn't — `/clio:update` writes these |
 | `spec-blocked` | waiting on an outside answer — the only kind with a non-null `blocked_by` |
 
 All 14 fields, always present (`null` / `[]`, never omitted):
@@ -56,7 +56,7 @@ All 14 fields, always present (`null` / `[]`, never omitted):
 
 ```bash
 echo '{"date":"YYYY-MM-DD","id":"<kebab-key>","kind":"code-debt","status":"pending","domain":"cart","what":["<what is wrong>"],"req":[15],"specs":[".claude/docs/specs/memory/products-pricing.md"],"docs":[".claude/docs/tasks/YYYY-MM-DD_<doc>.md"],"code":["app/Services/CartService.php:52"],"action":"<fix>","source":null,"blocked_by":null,"issue":null}' >> .claude/clio/debt.jsonl
-"${CLAUDE_PLUGIN_ROOT}"/skills/clio-memo/scripts/validate.sh debt
+"${CLAUDE_PLUGIN_ROOT}"/skills/memo/scripts/validate.sh debt
 ```
 `FAIL` → `sed -i '$d' .claude/clio/debt.jsonl`, fix, re-append.
 

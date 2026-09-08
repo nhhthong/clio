@@ -3,7 +3,7 @@ paths:
   - "**/*.go"
 ---
 # Go
-<!-- Clio starter — /clio-setup step 4. Verify every line against this repo, delete lines that
+<!-- Clio starter — /clio:setup step 4. Verify every line against this repo, delete lines that
      don't hold here, delete the whole file if the repo has no Go. Keep it under 20 lines. -->
 
 - `gofmt` (or `goimports`) on every file; `go vet ./...` clean; tests `go test -race ./...`.

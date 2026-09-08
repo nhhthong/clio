@@ -28,7 +28,7 @@ Renamed or deleted doc → never rewrite old lines; append a new-path record wit
 
 Validate — never declare done on a line it rejects:
 ```bash
-"${CLAUDE_PLUGIN_ROOT}"/skills/clio-memo/scripts/validate.sh index
+"${CLAUDE_PLUGIN_ROOT}"/skills/memo/scripts/validate.sh index
 ```
 `FAIL` → `sed -i '$d' .claude/clio/index.jsonl`, fix, re-append.
 

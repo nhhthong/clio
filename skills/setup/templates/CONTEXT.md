@@ -2,7 +2,7 @@
      This file reaches every session through the `@CONTEXT.md` import in CLAUDE.md, and comment
      stripping is NOT guaranteed on imported files. Fill each section from its comment, then DELETE
      every HTML comment (this one included). Stable facts only: entities, flows, landmines. Task
-     history belongs in .claude/docs/tasks/. Later writes go through /clio-memo, which proposes a
+     history belongs in .claude/docs/tasks/. Later writes go through /clio:memo, which proposes a
      diff and waits for a yes. -->
 
 # Domain Context
