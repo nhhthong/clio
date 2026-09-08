@@ -5,6 +5,11 @@
 - Skills renamed to `setup`, `context`, `memo`, `update`, `ingest`, `debt`, `ask`. Plugin skills are
   namespaced by Claude Code, so the commands are `/clio:memo`, `/clio:debt` and so on; the old
   `clio-` prefix doubled the name.
+- `/clio:setup` keeps an existing `CLAUDE.md` (root or `.claude/`) and appends only what Clio
+  needs; asks what to do with an existing `.claude/CONTEXT.md`; three question batches instead of
+  six; greenfield fills context from the requirement document itself; real install commands and
+  per-repo off switches for `ponytail` and `caveman`.
+- `validate.sh` no longer counts CLAUDE.md lines or needs perl.
 
 ## 1.0.1 — 2026-09-08
 

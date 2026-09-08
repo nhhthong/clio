@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# .claude/clio/validate.sh [index|debt|all]
+# validate.sh [index|debt|all] — run from anywhere inside a project that has .claude/clio/
 #   index  validate the LAST line appended to index.jsonl
 #   debt   validate the LAST line appended to debt.jsonl
 #   all    repo-wide audit (the "coverage" hop nothing else computes)
@@ -18,14 +18,9 @@ fail(){ echo "FAIL: $*"; fails=$((fails+1)); }
 warn(){ echo "WARN: $*"; }
 info(){ echo "INFO: $*"; }
 
-routes_rows(){
+req_rows(){
   [ -f "$REQ" ] || return 0
-  awk -F'|' '/^\|/{gsub(/[ \t]/,"",$2);
-    if($2 ~ /^[0-9]+(\.[0-9]+)*(–[0-9]+(\.[0-9]+)*)?$/){
-      n=split($2,a,"–");
-      if(n==1) print a[1];
-      else if(a[1] !~ /\./ && a[2] !~ /\./) { for(i=a[1];i<=a[2];i++) print i }
-      else { print a[1]; print a[2] }}}' "$REQ"
+  awk -F'|' '/^\|/{gsub(/[ \t]/,"",$2); if($2 ~ /^[0-9]+(\.[0-9]+)*$/) print $2}' "$REQ"
 }
 
 check_index_line(){
@@ -37,7 +32,7 @@ check_index_line(){
   [ -f "$doc" ] || fail "index .doc points at a missing file: $doc"
   while read -r p; do [ -z "$p" ] || [ -f "$p" ] || fail "index .specs missing: $p"; done \
     < <(jq -r '.specs[]?' <<<"$line")
-  local rows; rows=$(routes_rows)
+  local rows; rows=$(req_rows)
   while read -r n; do
     [ -z "$n" ] && continue
     printf '%s\n' "$rows" | grep -qx "$n" || fail "index .req $n has no requirements.md row"
@@ -87,15 +82,6 @@ case $mode in
         && info "renamed doc, superseded: $doc" \
         || fail "index record points at a missing doc and nothing supersedes it: $doc"
     done < <(jq -r '.doc' "$IDX" 2>/dev/null | sort -u)
-    # every-session line budget: CLAUDE.md + CONTEXT.md after HTML-comment strip
-    budget=0
-    for f in .claude/CLAUDE.md .claude/CONTEXT.md; do
-      [ -f "$f" ] || continue
-      if command -v perl >/dev/null 2>&1; then n=$(perl -0pe 's/<!--.*?-->//gs' "$f" | grep -c . || true)
-      else n=$(grep -c . "$f" || true); fi
-      budget=$((budget + n))
-    done
-    [ "$budget" -gt 150 ] && warn "CLAUDE.md + CONTEXT.md load every session: $budget non-blank lines, budget ~150 — move path-specific parts into .claude/rules/ with paths: frontmatter"
     grep -q '<!--' .claude/CONTEXT.md 2>/dev/null && warn "CONTEXT.md still has HTML comments — they are imported into context, delete them"
     # requirements.md markers vs the ledgers
     if [ -f "$REQ" ]; then
