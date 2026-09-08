@@ -1,0 +1,16 @@
+{
+  "name": "nhhthong",
+  "owner": {
+    "name": "nhhthong",
+    "url": "https://github.com/nhhthong"
+  },
+  "plugins": [
+    {
+      "name": "clio",
+      "source": "./",
+      "description": "Project memory for Claude Code. Three append-only ledgers (decided / built / owed) that load context fast and stop the agent from guessing.",
+      "version": "1.0.0"
+    }
+  ],
+  "description": "Plugins by nhhthong. Clio: project memory for Claude Code."
+}

@@ -1,0 +1,20 @@
+{
+  "description": "Clio ledgers: surface open debt at session start, and block once at stop when code changed but nothing was recorded. Both hooks exit silently in projects without .claude/clio/.",
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup|resume|clear|compact",
+        "hooks": [
+          { "type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}\"/hooks/session-debt", "timeout": 5 }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          { "type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}\"/hooks/memo-reminder", "timeout": 10 }
+        ]
+      }
+    ]
+  }
+}

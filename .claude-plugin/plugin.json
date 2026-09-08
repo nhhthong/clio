@@ -1,0 +1,11 @@
+{
+  "name": "clio",
+  "displayName": "Clio",
+  "version": "1.0.0",
+  "description": "Project memory for Claude Code. Three append-only ledgers (decided / built / owed) that load context fast and stop the agent from guessing.",
+  "author": { "name": "nhhthong", "url": "https://github.com/nhhthong" },
+  "homepage": "https://github.com/nhhthong/clio",
+  "repository": "https://github.com/nhhthong/clio",
+  "license": "MIT",
+  "keywords": ["claude-code", "plugin", "skills", "project-memory", "context", "anti-hallucination", "spec", "tech-debt"]
+}
