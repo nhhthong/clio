@@ -3,6 +3,14 @@
 All notable changes to this project are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow [SemVer](https://semver.org/).
 
+## [1.0.1] — 2026-09-08
+
+### Added
+- `/clio-setup` step 5 *Tooling*: takes stock of installed MCP servers and plugins, then offers the
+  missing ones in a single multi-select question (Context7, codebase-memory-mcp, `feature-dev`,
+  `code-review`, `security-guidance`, `ponytail`, `caveman`, Playwright / DB MCP per stack). Nothing
+  is pre-selected, nothing is installed without a yes.
+
 ## [1.0.0] — 2026-09-08
 
 First release as a Claude Code plugin. Previously a copy-into-project skeleton.

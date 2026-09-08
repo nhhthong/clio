@@ -51,7 +51,7 @@ Both exist now; each fill-in is an HTML comment holding its own instructions.
   ```bash
   jq '{hooks: [.hooks // {} | .[][] | .hooks[].command], plugins: .enabledPlugins}' ~/.claude/settings.json
   ```
-- Mechanical rule → a hook (step 5) or `permissions.deny`, not a bullet.
+- Mechanical rule → a hook (step 6) or `permissions.deny`, not a bullet.
 - **ASK** in one batch: the `domain` vocabulary (e.g. `account checkout admin infra all`; game:
   `gameplay ui assets netcode save`; CRM: `leads pipeline contacts`) · i18n · timezone · money
   representation · generated files and their real source · formatter command · anything expensive
@@ -85,7 +85,43 @@ facts only — or none. **Greenfield:** keep the chosen stack's file, skip verif
 scaffold","wire the formatter PostToolUse hook"]`, `code:[".claude/rules/<stack>.md"]`,
 `blocked_by:null`.
 
-## 5. Formatter hook (optional)
+## 5. Tooling (optional, ASK once)
+
+Stack-dependent → project scope; user-dependent → global. Take stock first, then list **only what is
+missing** in one `AskUserQuestion` (multi-select, nothing pre-selected), and run what was approved:
+```bash
+claude mcp list; jq '.enabledPlugins' ~/.claude/settings.json; claude plugin marketplace list
+```
+
+| Scope | Item | Why |
+|---|---|---|
+| global MCP | Context7 | library docs on demand instead of remembered APIs |
+| global MCP | codebase-memory-mcp | code graph for callers/impact instead of guessed call chains |
+| global plugin | `feature-dev`, `code-review`, `security-guidance` | build / review loop |
+| global plugin | `ponytail` (minimal solutions), `caveman` (terse replies) | behaviour, taste — offer, never pre-select |
+| project MCP | Playwright — only if the repo has a browser UI | verify in a real browser |
+| project MCP | a DB MCP — only if the repo owns a database; **ASK** which server and connection string, never pick a package yourself | read the real schema |
+
+Cap global MCP at 3–4. Skip Serena if codebase-memory-mcp is installed.
+```bash
+claude mcp add -s user context7 -- npx -y @upstash/context7-mcp
+command -v codebase-memory-mcp >/dev/null && claude mcp add -s user codebase-memory-mcp -- codebase-memory-mcp \
+  || echo "codebase-memory-mcp binary missing — ASK the user to install it first"
+claude plugin install feature-dev@claude-plugins-official      # confirm marketplace names via `claude plugin marketplace list`
+claude plugin install ponytail@<marketplace>                   # only if chosen; same for caveman
+claude mcp add -s project playwright -- npx -y @playwright/mcp@latest
+claude mcp list                                                # verify what resolved
+```
+codebase-memory-mcp indexes on first use: in the next session, call its `index_repository` tool once.
+
+Behaviour plugins with a `SessionStart` hook (`caveman`, `ponytail`) are always-on everywhere once
+installed. If either is installed, **ASK** whether to keep it on for this repo; to turn one off here
+only, `jq`-merge into `.claude/settings.json` (never overwrite):
+```json
+{ "env": { "CAVEMAN_DEFAULT_MODE": "off", "PONYTAIL_DEFAULT_MODE": "off" } }
+```
+
+## 6. Formatter hook (optional)
 
 **ASK** whether to add a formatter hook to `.claude/settings.local.json`, command from step 4's
 rules file. Merge with `jq` into the existing JSON, never overwrite:
@@ -98,7 +134,7 @@ Keep only this repo's branches. **Greenfield:** skip — the step-4 debt record 
 A stricter permission set is available at `${CLAUDE_PLUGIN_ROOT}/docs/permissions.example.json`;
 mention it once, do not merge it unless asked.
 
-## 6. Verify and stop
+## 7. Verify and stop
 
 ```bash
 "${CLAUDE_PLUGIN_ROOT}"/scripts/validate.sh all    # ⚠️/✅ requirements.md notes are expected; any FAIL is not

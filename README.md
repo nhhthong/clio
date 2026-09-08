@@ -4,21 +4,21 @@
   # Clio
 
   **Project memory for Claude Code.**
-  She writes down what happened, not what sounds right.
+  She keeps a record of what was decided, what was built, and what is still owed.
 
   [![Claude Code plugin](https://img.shields.io/badge/Claude_Code-plugin-D97757?logo=anthropic&logoColor=white)](https://code.claude.com/docs/en/plugins)
-  [![Version](https://img.shields.io/badge/version-1.0.0-blue)](CHANGELOG.md)
+  [![Version](https://img.shields.io/badge/version-1.0.1-blue)](CHANGELOG.md)
   [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
   [![Tests](https://img.shields.io/badge/selftest-52_passing-brightgreen)](tests/selftest.sh)
 </div>
 
 ---
 
-Clio keeps three small, append-only ledgers inside your repo and teaches Claude Code to read them
-before it works and write to them after. The result: a new session loads the context that matters
-in seconds, and the agent stops filling gaps with plausible guesses.
+Clio keeps three small, append-only ledgers inside your repo. Claude Code reads them before it works
+and writes to them after. A new session loads the context that matters in seconds, and when the
+agent hits a gap it records the gap instead of filling it with a plausible guess.
 
-Named after the Greek Muse of history, who carried a scroll and recorded only what actually happened.
+The name comes from the Greek Muse of history, who carried a scroll and wrote down what happened.
 
 ## Table of contents
 
@@ -36,18 +36,18 @@ Named after the Greek Muse of history, who carried a scroll and recorded only wh
 
 ## Why
 
-Three things go wrong on any project an agent works on for more than a week:
+Three things go wrong on any project an agent works on for more than a week.
 
 1. **Context re-derivation.** Every session starts cold and rereads the codebase to rediscover what
-   the last session already knew. Expensive, slow, and it misses the decisions that never made it
-   into code.
-2. **Hallucinated certainty.** Asked about a rule, a route, a column, a number, the agent answers
-   with something that *sounds* right. Wrong-per-spec is worse than incomplete.
-3. **Silent debt.** "I'll test that later", "the spec is unclear here", "this is a workaround" —
-   said in a session, gone by the next one.
+   the last session already knew. That is slow, and it misses the decisions that never made it into
+   code.
+2. **Confident guesses.** Asked about a rule, a route, a column or a number, the agent answers with
+   something that sounds right. An answer that is wrong per spec costs more than an incomplete one.
+3. **Silent debt.** "I'll test that later", "the spec is unclear here", "this is a workaround". Said
+   in one session, gone by the next.
 
-Clio answers each with a file the agent must consult, and a rule that a gap is recorded as a gap,
-never papered over.
+Clio gives each of these a file the agent has to consult, plus one rule: a gap gets recorded as a
+gap.
 
 ## How it works
 
@@ -55,13 +55,13 @@ Three questions, three homes, one join key (`req`, the requirement row number):
 
 | Question | Home | Written by |
 |---|---|---|
-| Has it been **decided**? | `.claude/docs/specs/requirements.md` — status column | humans + `/clio-update` |
+| Has it been **decided**? | `.claude/docs/specs/requirements.md`, status column | humans + `/clio-update` |
 | What was **built**, and when? | `.claude/clio/index.jsonl` | `/clio-memo` |
 | What is still **owed**? | `.claude/clio/debt.jsonl` | `/clio-memo`, `/clio-update` |
 
-Both `.jsonl` files are **append-only**. A record is never edited; an update is a new line with the
-same `id`, and readers take the last line. History is free, concurrent sessions cannot clobber each
-other, and `git log` recovers anything.
+Both `.jsonl` files are append-only. A record is never edited. An update is a new line with the same
+`id`, and readers take the last line. You get history for free, concurrent sessions cannot clobber
+each other, and `git log` recovers anything you narrowed away.
 
 The loop runs itself:
 
@@ -85,7 +85,8 @@ A developer has to remember one command: `/clio-memo` when a piece of work is do
 
 ## Install
 
-Requires Claude Code with plugin support, plus `bash`, `jq`, `git`, `awk` (macOS: `brew install gnu-sed`).
+You need Claude Code with plugin support, plus `bash`, `jq`, `git` and `awk` (on macOS also
+`brew install gnu-sed`).
 
 ```bash
 claude plugin marketplace add nhhthong/clio
@@ -94,7 +95,7 @@ claude plugin install clio@nhhthong
 
 Or inside a session: `/plugin install clio@nhhthong`.
 
-To make a whole team pick it up when they trust the repo, add to the project's `.claude/settings.json`:
+To have a whole team pick it up when they trust the repo, add this to the project's `.claude/settings.json`:
 
 ```json
 {
@@ -105,8 +106,8 @@ To make a whole team pick it up when they trust the repo, add to the project's `
 }
 ```
 
-Update later with `claude plugin update clio`. Your ledgers and docs are data in your repo; updates
-never touch them.
+Update later with `claude plugin update clio`. Your ledgers and docs are data in your repo, and an
+update never touches them.
 
 ## Quick start
 
@@ -114,9 +115,12 @@ never touch them.
 /clio-setup
 ```
 
-Runs once per repository. Scaffolds `.claude/`, then asks a handful of questions (domain vocabulary,
-formatter, timezone, generated files, the things that are expensive to get wrong) and writes the
-answers into `CLAUDE.md` and `CONTEXT.md`. It never guesses an answer you did not give.
+Run it once per repository. It scaffolds `.claude/`, then asks a handful of questions (domain
+vocabulary, formatter, timezone, generated files, the things that are expensive to get wrong) and
+writes your answers into `CLAUDE.md` and `CONTEXT.md`. It also takes stock of your MCP servers and
+plugins and offers the ones that help it work (Context7, a code graph, review plugins, Playwright or a
+DB server where the stack calls for it). Nothing is pre-selected, and nothing you did not pick gets
+installed.
 
 Have a requirements document, contract or PRD?
 
@@ -124,24 +128,24 @@ Have a requirements document, contract or PRD?
 /clio-ingest docs/requirements.pdf
 ```
 
-Distils it into one short `memory/<area>.md` per domain plus a row table, marking every undecided
-point ⚠️ with the name of whoever owes the answer. From now on, `clio-context` fires on its own
-before non-trivial work, and the Stop hook nudges you when work goes unrecorded.
+That distils it into one short `memory/<area>.md` per domain plus a row table, and marks every
+undecided point ⚠️ with the name of whoever owes the answer. From then on `clio-context` runs on its
+own before non-trivial work, and the Stop hook nudges you when work goes unrecorded.
 
 ## Commands
 
 | Command | Does | Run when |
 |---|---|---|
-| `/clio-setup` | scaffold `.claude/` and fill CLAUDE.md / CONTEXT.md by asking you | once per repo |
+| `/clio-setup` | scaffold `.claude/`, fill CLAUDE.md / CONTEXT.md by asking you, offer tooling | once per repo |
 | `/clio-ingest <doc>` | turn a requirement document into `docs/specs/memory/*.md` + `requirements.md` | once, and when a new source arrives |
-| `clio-context` | before coding: the governing spec, what was built, what is owed — read-only | Claude triggers it |
-| `/clio-memo [doc]` | record finished work: task doc, `index.jsonl`, `debt.jsonl`, CONTEXT.md diff, ADR | after each feature / fix |
-| `/clio-update [spec]` | a spec changed: what it invalidates, is it safe to build yet, move the row marker | when requirements change |
-| `/clio-debt [filter]` | what is still owed, actionable vs. blocked — read-only | any time |
+| `clio-context` | before coding: the governing spec, what was built, what is owed (read-only) | Claude triggers it |
+| `/clio-memo [doc]` | record finished work: task doc, `index.jsonl`, `debt.jsonl`, CONTEXT.md diff, ADR | after each feature or fix |
+| `/clio-update [spec]` | a spec changed: what it invalidates, whether it is safe to build yet, move the row marker | when requirements change |
+| `/clio-debt [filter]` | what is still owed, actionable vs. blocked (read-only) | any time |
 | `/clio-ask [x]` | explain any of the above | when unsure |
 
 Each skill is a short `SKILL.md` that walks numbered step files, so only the step being executed is
-in context. Every step ends in something checkable — a file exists, a validator passes.
+in context. Every step ends in something you can check: a file exists, a validator passes.
 
 ## What lands in your repo
 
@@ -160,67 +164,69 @@ in context. Every step ends in something checkable — a file exists, a validato
     └── decisions/*.md        # ADRs
 ```
 
-Everything else — skills, hooks, the validator — stays in the plugin. Nothing outside `.claude/` is
-touched.
+The skills, the hooks and the validator stay in the plugin. Nothing outside `.claude/` is touched.
 
 ## Hooks
 
 | Event | Hook | Behaviour |
 |---|---|---|
-| `SessionStart` | `session-debt` | prints open, actionable debt (newest first, max 5) and warns when `CONTEXT.md` is older than five recorded runs |
-| `Stop` | `memo-reminder` | if tracked files changed after the ledger was last written, blocks **once** with "run `/clio-memo`, or say in one line why this needs no record" |
+| `SessionStart` | `session-debt` | prints open, actionable debt (newest first, at most five) and warns when `CONTEXT.md` is older than five recorded runs |
+| `Stop` | `memo-reminder` | if tracked files changed after the ledger was last written, blocks once with "run `/clio-memo`, or say in one line why this needs no record" |
 
-Both exit silently in any project without `.claude/clio/`, so the plugin is safe to leave enabled
+Both exit silently in any project without `.claude/clio/`, so you can leave the plugin enabled
 everywhere.
 
 ## Design rules
 
-These are the rules the skills enforce. They are the point.
+These are the rules the skills enforce.
 
-- **No speculation.** Not verified by reading, grepping, querying or running → say "unverified" and
-  ask. Multiple valid interpretations → present them, never pick one silently.
-- **✅ means decided, never built.** Build state lives in the ledgers, decision state in the spec
-  register. Mixing them is how "done" gets claimed twice.
-- **Append only.** Ledger lines are never edited, reordered or deleted. Updates are new lines.
-- **One feature, one doc, forever.** Continuing a feature updates its doc; it never creates a second.
-- **`blocked_by` decides, not `status`.** A debt record with `blocked_by: null` is the work queue;
-  anything else must not be started, whatever its status says.
-- **Every ⚠️ has a record.** An open point in the spec without a `debt.jsonl` line naming who owes
-  the answer is itself a finding.
-- **Verification is not optional.** Work that ran no test, build or recorded manual check is filed
-  as `unverified`, not passed off as built.
+- The agent does not speculate. Anything it has not verified by reading, grepping, querying or
+  running is reported as unverified, and it asks. When several readings of a requirement are valid,
+  it presents them all instead of picking one.
+- ✅ means decided, never built. Build state lives in the ledgers and decision state in the spec
+  register. Mixing the two is how "done" gets claimed twice.
+- Ledger lines are never edited, reordered or deleted. An update is a new line.
+- One feature gets one doc, for good. Continuing a feature updates its doc; it never creates a second.
+- `blocked_by` decides whether work may start; `status` only says how far it got. A debt record with
+  `blocked_by: null` is the work queue. Anything else waits.
+- Every ⚠️ has a record. An open point in the spec without a `debt.jsonl` line naming who owes the
+  answer is itself a finding.
+- Work that ran no test, build or recorded manual check is filed as `unverified`, not passed off as
+  built.
 
 ## FAQ
 
 **Does it work without a requirements document?**
-Yes. `/clio-setup` offers *Lite* mode: no spec register, every record uses `req: []` and joins on
+Yes. `/clio-setup` offers Lite mode: no spec register, every record uses `req: []` and joins on
 domain, keywords and files. You still get the task docs, the debt ledger and the hooks.
 
 **Why JSONL instead of a database?**
-`>>` of one line is atomic, diffs are readable, `jq` is the whole query language, and `git log` is
-the audit trail. A database would add a dependency to buy nothing the ledger needs.
+Appending one line with `>>` is atomic, diffs are readable, `jq` is the whole query language, and
+`git log` is the audit trail. A database would add a dependency without giving the ledger anything it
+needs.
 
-**Why not just a big `CLAUDE.md`?**
+**Why not one big `CLAUDE.md`?**
 `CLAUDE.md` loads every session, so everything in it is paid for on every task. Clio keeps that file
-under ~150 lines and pushes history into files that are loaded only when a query says they are
+under about 150 lines and moves history into files that load only when a query says they are
 relevant.
 
 **I set this up with the old copy-into-project skeleton. Now what?**
-Run `/clio-setup`; it detects `.claude/database/` and runs `scripts/migrate.sh`, which renames the
-directories and the `est`/`folder` fields and rewrites references. It tells you what to delete by hand.
+Run `/clio-setup`. It detects `.claude/database/`, runs `scripts/migrate.sh` to rename the
+directories and the `est` / `folder` fields and rewrite references, then tells you what to delete by
+hand.
 
 **Which stacks have rule starters?**
-PHP, Go, Java/Kotlin, Dart/Flutter. Others are one small PR away — see [CONTRIBUTING.md](CONTRIBUTING.md).
+PHP, Go, Java/Kotlin, Dart/Flutter. Others need one small PR; see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 **Is this only for Claude Code?**
-Yes, for now. The skills are plain Markdown, but the hooks, `${CLAUDE_PLUGIN_ROOT}` paths and the
-install flow are Claude Code's.
+Yes, for now. The skills are plain Markdown, but the hooks, the `${CLAUDE_PLUGIN_ROOT}` paths and the
+install flow belong to Claude Code.
 
 ## Contributing
 
-Stack rule files and skill fixes are the two contributions that matter most; both are small.
-See [CONTRIBUTING.md](CONTRIBUTING.md). Run `tests/selftest.sh` before opening a PR — it must end
-with `fail 0`.
+Stack rule files and skill fixes are the two contributions that help most, and both are small. See
+[CONTRIBUTING.md](CONTRIBUTING.md). Run `tests/selftest.sh` before opening a PR; it has to end with
+`fail 0`.
 
 ## License
 
