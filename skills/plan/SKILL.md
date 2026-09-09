@@ -30,6 +30,17 @@ spec file in full. Existing `.claude/docs/plans/<area>.md` → read it in full; 
 - Every number, limit and default in a task is **copied verbatim from `## Decisions`** and appears in
   its test. A value the spec does not state → no task; it is a ⚠️ (file it via `/clio:memo`, or note
   the existing debt `id`).
+- **Row 0 — foundation, before any spec row, any stack.** No index record for the area and the
+  toolchain, scaffold or build is not proven on disk → emit `0.n` tasks first, always the same
+  four: (1) toolchain on PATH at a named version, (2) scaffold run, (3) empty build exits 0,
+  (4) test runner exits 0 on the scaffold. The stack and its commands come from, in order:
+  `.claude/rules/<stack>.md` · the greenfield ADR · `CONTEXT.md` § Dev Environment · the manifest
+  on disk (`go.mod`, `package.json`, …). None of those names a stack → **ASK**: propose 2–3
+  stacks that fit the spec (each with the four commands and why it fits), let the user pick or
+  name their own, then record the choice as an ADR before writing the plan. Never pick a stack
+  silently. Skip a `0.n` whose proof already exists (manifest committed, `## Testing Done` names
+  the build). `req` = `0`. `/clio:memo` records the scaffold as `files:["scaffold:<command>"]`,
+  `req:[]`.
 - **Only ✅ rows get tasks.** A ⚠️/❌ row gets one line naming the debt `id` it waits on, nothing
   under it. A `blocked_by: null` `spec-delta` record → that is a task; carry its `id`.
 - Order by dependency. `Needs` names task ids, never prose.
@@ -44,7 +55,11 @@ Spec: memory/<area>.md · rows <n>–<m> · Planned: YYYY-MM-DD · Re-planned: �
 
 | # | Task | req | Test that proves it | Needs | Done |
 |---|------|-----|---------------------|-------|------|
-| 3.1 | `GET /orders` returns 200 for an authenticated user | 3 | `go test ./orders -run TestListOK` | – | [ ] |
+| 0.1 | Toolchain on PATH (example stack: Go 1.22+, Wails v2) | 0 | `go version && wails doctor` exit 0, Go ≥ 1.22 | – | [ ] |
+| 0.2 | Scaffold run | 0 | `wails init -n app -t svelte-ts` exits 0, `go.mod` present | 0.1 | [ ] |
+| 0.3 | Empty build passes | 0 | `wails build` exits 0 | 0.2 | [ ] |
+| 0.4 | Test runner runs on the scaffold | 0 | `go test ./...` exits 0 | 0.3 | [ ] |
+| 3.1 | `GET /orders` returns 200 for an authenticated user | 3 | `go test ./orders -run TestListOK` | 0.4 | [ ] |
 | 3.2 | `GET /orders` returns 401 without a session | 3 | `go test ./orders -run TestListAuth` | 3.1 | [ ] |
 | 3.3 | List paginates at 50 per page (spec: "50 items") | 3 | `go test ./orders -run TestListPage` | 3.1 | [ ] |
 | 7.1 | — waits on `ocr-dpi-open` (⚠️ row) | 7.1 | – | – | – |
