@@ -30,6 +30,6 @@ Validate — never declare done on a line it rejects:
 ```bash
 "${CLAUDE_PLUGIN_ROOT}"/skills/memo/scripts/validate.sh index
 ```
-`FAIL` → `sed -i '$d' .claude/clio/index.jsonl`, fix, re-append.
+`FAIL` → `sed -i.bak '$d' .claude/clio/index.jsonl && rm .claude/clio/index.jsonl.bak`, fix, re-append.
 
 Next: `DEBT-IT.md`.

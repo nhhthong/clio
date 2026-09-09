@@ -83,4 +83,5 @@ Fix every `FAIL` and every "no open debt record tracks it" before reporting.
 ## 5. Report
 
 Files written, row count, how many ✅ / ⚠️ / ❌, debt records filed, and — most useful — **the list
-of questions the user now owes an answer to**, in one block they can act on.
+of questions the user now owes an answer to**, in one block they can act on. Close with: run
+`/clio:plan <area>` for each area to split its ✅ rows into testable tasks.

@@ -16,7 +16,8 @@ the one command to remember, nothing reminds you.*
 |---|---|---|
 | `/clio:setup` | scaffold `.claude/`, fill CLAUDE.md / CONTEXT.md by asking | once per repo |
 | `/clio:ingest <doc>` | distil a requirement document into `docs/specs/memory/*.md` + `requirements.md` | once, and when a new source arrives |
-| `clio:context` (auto) | before coding: the governing spec, what was built, what is owed | Claude triggers it |
+| `/clio:plan <area>` | split a spec area into the smallest testable tasks → `docs/plans/<area>.md` | after ingest, and when a row moves |
+| `/clio:context [x]` | no arg: where are we (plans done/open, debt queue) · with area/row/id/question: spec, what was built, what is owed, quoted from the docs | Claude triggers it before work; you, when asking "where are we?" or "why?" |
 | `/clio:memo` | record finished work: task doc, `index.jsonl`, `debt.jsonl` | after each feature / fix |
 | `/clio:update` | a spec changed: record the delta vs. existing code, move the row marker | when requirements change |
 | `/clio:debt [filter]` | what is still owed, actionable vs. blocked | any time |

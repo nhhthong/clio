@@ -10,16 +10,16 @@ continuing an existing feature never gets a second file, no matter how much time
 
 Target doc passed in (may be empty): $ARGUMENTS
 
-Step files live in `${CLAUDE_SKILL_DIR}/steps/`. Read each when you reach it, not before.
+Step files live in `${CLAUDE_PLUGIN_ROOT}/skills/memo/steps/`. Read each when you reach it, not before.
 
-1. **Resolve the target doc** → `${CLAUDE_SKILL_DIR}/steps/RESOLVE-DOC.md`. Creating at the wrong
+1. **Resolve the target doc** → `${CLAUDE_PLUGIN_ROOT}/skills/memo/steps/RESOLVE-DOC.md`. Creating at the wrong
    path forks a feature's history.
-2. **Gather facts** → `${CLAUDE_SKILL_DIR}/steps/GATHER-FACTS.md`. Verified file list, and which
+2. **Gather facts** → `${CLAUDE_PLUGIN_ROOT}/skills/memo/steps/GATHER-FACTS.md`. Verified file list, and which
    `requirements.md` row this work serves.
-3. **Write the doc** → `${CLAUDE_SKILL_DIR}/steps/WRITE-DOC.md`. UPDATE, or CREATE when step 1
+3. **Write the doc** → `${CLAUDE_PLUGIN_ROOT}/skills/memo/steps/WRITE-DOC.md`. UPDATE, or CREATE when step 1
    found nothing.
-4. **Index it** → `${CLAUDE_SKILL_DIR}/steps/INDEX-IT.md`. One line in `index.jsonl`, every run.
-5. **Log open items** → `${CLAUDE_SKILL_DIR}/steps/DEBT-IT.md`. Close what this run finished,
+4. **Index it** → `${CLAUDE_PLUGIN_ROOT}/skills/memo/steps/INDEX-IT.md`. One line in `index.jsonl`, every run.
+5. **Log open items** → `${CLAUDE_PLUGIN_ROOT}/skills/memo/steps/DEBT-IT.md`. Close what this run finished,
    record what is still owed.
-6. **Wrap up** → `${CLAUDE_SKILL_DIR}/steps/WRAP-UP.md`. CONTEXT.md diff (needs a yes), ADR if
+6. **Wrap up** → `${CLAUDE_PLUGIN_ROOT}/skills/memo/steps/WRAP-UP.md`. CONTEXT.md diff (needs a yes), ADR if
    applicable, report.

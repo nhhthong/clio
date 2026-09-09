@@ -25,3 +25,7 @@ full — they're short and already distilled.
   not a reason to stop.
 
 Note the row number(s) (`req`) — reused in [HOP2.md](HOP2.md), and `/clio:memo` needs them.
+
+`.claude/docs/plans/<area>.md` exists → read it. The first row with `Done` empty and every `Needs`
+ticked is the next task; its `Test` column is the success criterion for this session. No plan file
+for a ✅ row you are about to build → say `/clio:plan <area>` has not been run, continue.

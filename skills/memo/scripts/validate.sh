@@ -18,10 +18,7 @@ fail(){ echo "FAIL: $*"; fails=$((fails+1)); }
 warn(){ echo "WARN: $*"; }
 info(){ echo "INFO: $*"; }
 
-req_rows(){
-  [ -f "$REQ" ] || return 0
-  awk -F'|' '/^\|/{gsub(/[ \t]/,"",$2); if($2 ~ /^[0-9]+(\.[0-9]+)*$/) print $2}' "$REQ"
-}
+rows=$([ -f "$REQ" ] && awk -F'|' '/^\|/{gsub(/[ \t]/,"",$2); if($2 ~ /^[0-9]+(\.[0-9]+)*$/) print $2}' "$REQ")
 
 check_index_line(){
   local line=$1
@@ -32,12 +29,10 @@ check_index_line(){
   [ -f "$doc" ] || fail "index .doc points at a missing file: $doc"
   while read -r p; do [ -z "$p" ] || [ -f "$p" ] || fail "index .specs missing: $p"; done \
     < <(jq -r '.specs[]?' <<<"$line")
-  local rows; rows=$(req_rows)
   while read -r n; do
     [ -z "$n" ] && continue
     printf '%s\n' "$rows" | grep -qx "$n" || fail "index .req $n has no requirements.md row"
   done < <(jq -r '.req[]?' <<<"$line")
-  [ "$(jq -r '(.files|length) // 0' <<<"$line")" -eq 0 ] && warn "index .files is empty — docs-only run?"
   return 0
 }
 
@@ -54,7 +49,9 @@ check_debt_line(){
 
 mode=${1:-all}
 case $mode in
-  index) [ -s "$IDX" ]  || { echo "FAIL: $IDX is empty"; exit 1; }; check_index_line "$(tail -1 "$IDX")" ;;
+  index) [ -s "$IDX" ]  || { echo "FAIL: $IDX is empty"; exit 1; }
+    last=$(tail -1 "$IDX"); check_index_line "$last"
+    [ "$(jq -r '(.files|length) // 0' <<<"$last")" -eq 0 ] && warn "index .files is empty — docs-only run?" ;;
   debt)  [ -s "$DEBT" ] || { echo "FAIL: $DEBT is empty"; exit 1; }; check_debt_line "$(tail -1 "$DEBT")" ;;
   all)
     for f in "$IDX" "$DEBT"; do
@@ -94,7 +91,7 @@ case $mode in
               | group_by(.id)[] | last | select((.req[]?|tostring) == $n and .status!="done")' \
               >/dev/null 2>&1 < "$DEBT" || warn "requirements.md row $num is ⚠️/❌ but no open debt record tracks it" ;;
           *✅*)
-            grep -q "\"req\":\[[^]]*$num" "$IDX" 2>/dev/null \
+            jq -s -e --arg n "$num" 'any(.[]; (.req[]?|tostring) == $n)' >/dev/null 2>&1 < "$IDX" \
               || info "requirements.md row $num is ✅ (decided) with no index record — decided but not built" ;;
         esac
       done < "$REQ"

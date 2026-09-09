@@ -1,9 +1,21 @@
 ---
 name: context
-description: Load the context needed before working in an area — the requirement spec that governs it, the past task/decision docs that built it, and the open debt still attached to it. Use before starting non-trivial work in a domain area (e.g. account, checkout, billing, infra) — whenever you'd otherwise ask "has this been touched before?", "what did the customer actually ask for?", or "was there a reason it's built this way?". Triggers on starting a new task, opening files in an unfamiliar area, or the user asking "any history on this?" / "check past decisions".
+description: Load the context needed before working in an area — the requirement spec that governs it, the past task/decision docs that built it, and the open debt still attached to it. Use before starting non-trivial work in a domain area (e.g. account, checkout, billing, infra) — whenever you'd otherwise ask "has this been touched before?", "what did the customer actually ask for?", or "was there a reason it's built this way?". Triggers on starting a new task, opening files in an unfamiliar area, the user asking "where are we?" / "what's next?" / "continue", or "any history on this?" / "why was X decided?" / "what is debt Y?".
+argument-hint: "[area | requirements row | debt id | question — omit for the overview]"
 ---
 
 # Related Context
+
+Target (may be empty): $ARGUMENTS
+
+**Two depths.** The *user* asked "where are we / what's next / continue" with no area named →
+[HOP0.md](HOP0.md): counts from the plans and ledgers, nothing opened, ≤ 10 lines, stop. Anything
+else — a target (area, row, debt `id`, file), a "why is X like this?" question, or **you triggered
+this yourself before a task** (then the target is that task's area; an empty `$ARGUMENTS` is not a
+reason for hop 0) → hops 1–3 below, then open **only** the docs those records point at and answer
+with `file:line` quotes. A follow-up question in the same session
+digs from where the last hop stopped; never re-run hop 0, never fall back to reading `.claude/docs/`
+whole. Nothing on record → say so; do not reconstruct an answer from the code.
 
 Three things decide whether a change is correct: what the customer asked for (`.claude/docs/specs/`),
 what was already built and why (`.claude/docs/tasks/`, `.claude/docs/decisions/`), and what is known
@@ -31,7 +43,10 @@ Each hop feeds the next — don't skip ahead, and don't stop after hop 1 just be
 
 ## Report — including what looks wrong
 
-Summarise: governing spec + status, prior docs worth knowing, open debt in this area. Then flag
+Summarise: governing spec + status, prior docs worth knowing, open debt in this area, the plan's
+next task and its test. A question ("why X?", "what is `<id>`?") is answered from the section the
+record names — task doc `## Decisions` / `## Side Effects` / `## Follow-up`, ADR `## Decision` /
+`## Consequences`, debt `what` / `action` / `blocked_by` — quoted, with the path. Then flag
 plainly, without fixing:
 - a debt item whose `blocked_by` names a spec that hop 1 shows is already decided — should be
   unblocked or closed;

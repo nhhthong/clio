@@ -83,4 +83,5 @@ fixed.
 Report each delta as `id` · `status` · `blocked_by` · row · one-line action, queue (`blocked_by:
 null`) first. Then: deltas you could not date, what is blocked on exactly what, records you
 unblocked, every row moved (old → new, and the source that justified it), rows deliberately left
-⚠️, and any `index.jsonl` record this delta shows to be wrong.
+⚠️, and any `index.jsonl` record this delta shows to be wrong. A moved row that has a
+`.claude/docs/plans/<area>.md` → say to re-run `/clio:plan <area>`; its tasks may be superseded.

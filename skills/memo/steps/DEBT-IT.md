@@ -21,6 +21,10 @@ A test, a build, or a manual check recorded with today's date in `## Testing Don
 write an `unverified` record for it before anything else. `index.jsonl` says what was claimed; only
 a dated `## Testing Done` entry or an `unverified` record says whether anyone looked.
 
+Plan task noted in step 2 → its `Test` ran and is in `## Testing Done` → tick `[x] YYYY-MM-DD
+<commit>` in `.claude/docs/plans/<area>.md`, in place. Did not run → leave `[ ]`; the `unverified`
+record above covers it. Never tick on the strength of the code alone.
+
 ## 3. New records
 
 One per `## Follow-up` bullet that outlives this session. Existing `id` for the same problem →
@@ -58,7 +62,7 @@ All 14 fields, always present (`null` / `[]`, never omitted):
 echo '{"date":"YYYY-MM-DD","id":"<kebab-key>","kind":"code-debt","status":"pending","domain":"cart","what":["<what is wrong>"],"req":[15],"specs":[".claude/docs/specs/memory/products-pricing.md"],"docs":[".claude/docs/tasks/YYYY-MM-DD_<doc>.md"],"code":["app/Services/CartService.php:52"],"action":"<fix>","source":null,"blocked_by":null,"issue":null}' >> .claude/clio/debt.jsonl
 "${CLAUDE_PLUGIN_ROOT}"/skills/memo/scripts/validate.sh debt
 ```
-`FAIL` → `sed -i '$d' .claude/clio/debt.jsonl`, fix, re-append.
+`FAIL` → `sed -i.bak '$d' .claude/clio/debt.jsonl && rm .claude/clio/debt.jsonl.bak`, fix, re-append.
 
 ## 4. Ledger honesty, scoped to this area only
 

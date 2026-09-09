@@ -9,7 +9,7 @@
 1. List the files you edited this run, then verify each on disk: `git status --porcelain <file>`
    or `git show --name-only --format= <hash>`. Reverted mid-session → drop it.
 2. Anything in `git status --porcelain` that is not on your list → show the user, ask.
-3. No session memory (compacted or fresh session) → `git diff --name-only HEAD` (uncommitted) or
+3. No session memory (compacted or fresh session) → `git status --porcelain` (uncommitted, incl. untracked) or
    `git show --name-only --format= <hash>` (committed), and say in the report that the list came
    from git rather than the run itself.
 4. Files a subagent edited never appear in your tool calls — take them from its report, verify the
@@ -32,5 +32,7 @@ grep -in "<feature keyword>" .claude/docs/specs/requirements.md
   sessions worse than `[]`.
 - Row marked ⚠️/❌ → note it, DEBT-IT.md may need a record. ✅ means decided, not built — still write
   the record.
+- `.claude/docs/plans/<area>.md` has a task for this work → note its id; its `Test` column is what
+  `## Testing Done` must record. DEBT-IT.md § 2 ticks it or files it `unverified`.
 
 Next: `WRITE-DOC.md`.

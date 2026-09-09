@@ -6,7 +6,8 @@ disable-model-invocation: true
 
 Install Clio's project memory into the repository at the current working directory. Do every step
 yourself with Bash, in order. The user answers three `AskUserQuestion` batches (steps 0, 2, 5) and
-nothing else — never guess, never ask permission for an action listed here.
+approves the two drafted files (step 2) — nothing else. Never guess, never ask permission for an
+action listed here, never write `CLAUDE.md` or the context file without the step-2 yes.
 
 ## 0. Take stock, then ASK batch 1
 
@@ -22,25 +23,28 @@ ls CLAUDE.md .claude/CLAUDE.md .claude/CONTEXT.md 2>/dev/null
 - `NOT A GIT REPO` → `git init`? Never without a yes.
 - Does the repo already have code, or is it empty (spec only)? Empty = **greenfield**.
 - Requirements: **Full** (a requirement document exists — which file?) or **Lite** (none)?
-- `.claude/CONTEXT.md` already exists → is it domain context Clio may keep filling, or something
-  else? Something else → Clio writes `.claude/CLIO-CONTEXT.md` instead; use that name below.
+- `CLAUDE.md` / `.claude/CONTEXT.md` / `.claude/rules/` already exist → they are the user's; Clio
+  adds only the `@` import and the `## Project memory` block. One extra question: **bring them to
+  Clio's format?** — the layout of `${CLAUDE_PLUGIN_ROOT}/skills/setup/templates/CLAUDE.md` and
+  `CONTEXT.md`, trimmed to the ~150-line budget, path-specific bullets moved to `rules/`. Yes →
+  step 2 shows the diff and asks again before writing. No (default) → nothing else is touched.
 
 ## 1. Scaffold
 
 ```bash
-T="${CLAUDE_SKILL_DIR}/templates"; CTX=.claude/CONTEXT.md    # or .claude/CLIO-CONTEXT.md per batch 1
-mkdir -p .claude/rules .claude/clio .claude/docs/specs/memory .claude/docs/tasks .claude/docs/decisions
+T="${CLAUDE_PLUGIN_ROOT}/skills/setup/templates"; CTX=.claude/CONTEXT.md
+mkdir -p .claude/rules .claude/clio .claude/docs/specs/memory .claude/docs/tasks .claude/docs/decisions .claude/docs/plans
 [ -f "$CTX" ]                             || cp "$T/CONTEXT.md"      "$CTX"
 [ -f .claude/docs/specs/requirements.md ] || cp "$T/requirements.md" .claude/docs/specs/requirements.md
 touch .claude/clio/index.jsonl .claude/clio/debt.jsonl
 ls composer.json go.mod pom.xml build.gradle* pubspec.yaml 2>/dev/null    # php · go · java · java · dart
 ```
 For each stack the last line lists: `[ -f .claude/rules/<stack>.md ] || cp
-"${CLAUDE_SKILL_DIR}/rules/<stack>.md" .claude/rules/`.
+"${CLAUDE_PLUGIN_ROOT}/skills/setup/rules/<stack>.md" .claude/rules/`.
 
 `CLAUDE.md` — no existing one → `cp "$T/CLAUDE.md" .claude/CLAUDE.md`. One exists (root
-`CLAUDE.md` wins over `.claude/CLAUDE.md`) → keep it and append what Clio needs; the import path
-is relative to the file that holds it:
+`CLAUDE.md` wins over `.claude/CLAUDE.md`) → keep it, append only; the import path is relative to
+the file that holds it:
 ```bash
 C=.claude/CLAUDE.md; [ -f CLAUDE.md ] && C=CLAUDE.md
 IMP="@${CTX#.claude/}"; [ "$C" = CLAUDE.md ] && IMP="@$CTX"
@@ -71,10 +75,20 @@ Each fill-in is an HTML comment holding its own instructions.
   truth empty. Add to batch 2: stack + versions, storage, the architectural seam; write them as the
   opening paragraph plus a one-line § Architecture, and record the decision as an ADR (template:
   `${CLAUDE_PLUGIN_ROOT}/skills/memo/steps/WRAP-UP.md`).
+- **Draft, show, ASK — then write.** Both files are drafted in full from the batch-2 answers and
+  what the repo verifiably shows (`ls`, manifests, existing docs; nothing inferred). Print each
+  draft whole, then one `AskUserQuestion`: approve as-is · edit (which lines) · leave that file's
+  section empty. Write only what was approved. These two files load every session; a wrong line is
+  paid on every future task, so a guess here is the one thing this skill must never do.
+- **Existing files, batch 1 said yes to the format:** re-lay each file on the template's headings,
+  keep every bullet the user wrote (move path-specific ones to `.claude/rules/<stack>.md` with
+  `paths:`), cut nothing without naming it in the diff. Show the diff, ASK, write on a yes. Batch 1
+  said no → step 1's append is all that happens; skip this step for those files.
 
 ## 3. Requirements
 
-- **Full** → tell the user to run `/clio:ingest <file>` when this setup finishes.
+- **Full** → tell the user to run `/clio:ingest <file>` when this setup finishes, then
+  `/clio:plan <area>` per area to get the testable task list.
 - **Lite** → replace everything below the title in `requirements.md` with one line:
   `Lite mode — no requirement source; every record uses req: [] and joins on domain/keywords/files.`
 
@@ -103,7 +117,7 @@ claude mcp list; jq '.enabledPlugins' ~/.claude/settings.json; claude plugin mar
 | global plugin | [`ponytail`](https://github.com/DietrichGebert/ponytail) (laziest working solution, YAGNI), [`caveman`](https://github.com/JuliusBrussee/caveman) (terse replies, fewer tokens) | taste — offer, never pre-select |
 | project MCP | Playwright, only if the repo has a browser UI | verify in a real browser |
 | project MCP | a DB MCP, only if the repo owns a database — ask which server and connection string | read the real schema |
-| global permissions | the strict deny/ask list in `${CLAUDE_SKILL_DIR}/permissions.json` — blocks `rm -rf`, `git push/reset/rebase`, reading `.env`/keys; also denies `git commit` and asks before every `Write` | offer, say what it blocks |
+| global permissions | the strict deny/ask list in `${CLAUDE_PLUGIN_ROOT}/skills/setup/permissions.json` — blocks `rm -rf`, `git push/reset/rebase`, reading `.env`/keys; also denies `git commit` and asks before every `Write` | offer, say what it blocks |
 | this repo | formatter hook (step 6), if step 4's rules name a formatter | |
 | this repo | commit `.claude/` (recommended: the ledgers are history) or ignore `.claude/clio/` and `.claude/docs/` | |
 | this repo | `ponytail` / `caveman` already installed → keep them on here? | they are always-on everywhere via a SessionStart hook |
@@ -121,7 +135,7 @@ claude mcp add -s project playwright -- npx -y @playwright/mcp@latest
 Permissions — union into `~/.claude/settings.json`, existing entries first, backup taken:
 ```bash
 S=~/.claude/settings.json; cp "$S" "$S.bak"
-jq --slurpfile p "${CLAUDE_SKILL_DIR}/permissions.json" '
+jq --slurpfile p "${CLAUDE_PLUGIN_ROOT}/skills/setup/permissions.json" '
   .permissions.deny = ((.permissions.deny // []) as $e | $e + ($p[0].permissions.deny - $e))
   | .permissions.ask = ((.permissions.ask // []) as $e | $e + ($p[0].permissions.ask - $e))' "$S" > "$S.new" && mv "$S.new" "$S"
 ```

@@ -14,7 +14,7 @@
       "Bash(xargs rm:*)",
       "Bash(dd:*)",
       "Bash(mkfs:*)",
-      "Bash(mv /* :*)",
+      "Bash(mv /*:*)",
       "Bash(> /dev:*)",
       "Bash(curl * | bash:*)",
       "Bash(curl * | sh:*)",

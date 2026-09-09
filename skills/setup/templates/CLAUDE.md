@@ -34,6 +34,8 @@ Domains — the only values allowed in the `domain` field of both ledgers, by bu
 never by directory: <!-- fill at setup, e.g. `account` `checkout` `billing` `infra` `all` -->
 
 - Before non-trivial work in an area → run the `clio:context` skill.
+- Building a spec area → `/clio:plan <area>` first; one task at a time, its `Test` column is the
+  success criterion.
 - After finishing a piece of work → `/clio:memo`. What is owed → `/clio:debt`.
 - A spec changed but the code hasn't → `/clio:update`. It is the only writer of `docs/specs/`.
 - Keep the `@CONTEXT.md` line above; keep CONTEXT.md free of HTML comments.
