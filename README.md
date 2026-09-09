@@ -30,7 +30,7 @@ back to disk before the session ends.
 │   ├── index.jsonl           # what was BUILT — one line per documented run, append-only
 │   └── debt.jsonl            # what is OWED — bugs, unverified work, open questions, append-only
 └── docs/
-    ├── specs/requirements.md # what was DECIDED — row → spec file → ✅ ⚠️ ❌
+    ├── specs/requirements.md # what was DECIDED — row → spec file → decided / open / blocked
     ├── specs/memory/*.md     # distilled decisions per area, each quoting its source verbatim
     ├── plans/<area>.md       # decided rows split into the smallest testable tasks
     ├── tasks/*.md            # one doc per feature, forever — updated, never forked
@@ -53,7 +53,7 @@ session and stay short; everything else is loaded on demand, by query, never by 
 
 ```
   new task ──► clio:context (auto)  governing spec → what was built → what is owed → next plan task
-      │                             ⚠️ row with no record? stop and ask, don't guess
+      │                             open row with no record? stop and ask, don't guess
       ▼
   work, one plan task at a time — its Test column is the success criterion
       │
@@ -68,8 +68,8 @@ without that work in its memory.
 
 - Not verified by reading, grepping, querying or running → say "unverified" and ask. Never fill a
   gap with a plausible answer.
-- **Decided ≠ built.** ✅ in the spec register means a decision exists; build state lives only in
-  the ledgers. Nobody writes progress into a spec, or a decision into a ledger.
+- **Decided ≠ built.** A decided row in the spec register means a decision exists; build state
+  lives only in the ledgers. Nobody writes progress into a spec, or a decision into a ledger.
 - Ledger lines are never edited, reordered or deleted. One feature, one doc, forever.
 - A task is done when its named test ran, not when the code looks right.
 - `blocked_by: null` is the work queue; anything else waits. Every open spec point has a debt record.
@@ -113,7 +113,7 @@ diff shown, nothing written without a second yes. No → nothing else is touched
 ```
 
 With a requirements document: distil it into `specs/memory/<area>.md` + the row table, every
-undecided point marked ⚠️ with the name of whoever owes the answer. Then split an area's decided
+undecided point marked open with the name of whoever owes the answer. Then split an area's decided
 rows into tasks small enough that each names the test proving it.
 
 ## Commands
