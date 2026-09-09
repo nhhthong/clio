@@ -133,6 +133,16 @@ Add to the project's `.claude/settings.json`; members get the plugin when they t
 
 ---
 
+## Star History
+
+<a href="https://www.star-history.com/?repos=clio%2Fclio%2Cnhhthong%2Fclio&type=date&legend=top-left">
+ <picture>
+   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=clio/clio%2Cnhhthong/clio&type=date&theme=dark&legend=top-left" />
+   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=clio/clio%2Cnhhthong/clio&type=date&legend=top-left" />
+   <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=clio/clio%2Cnhhthong/clio&type=date&legend=top-left" />
+ </picture>
+</a>
+
 <div align="center">
   <sub><a href="CONTRIBUTING.md">Contributing</a> · <a href="CHANGELOG.md">Changelog</a> · MIT © 2026 nhhthong</sub>
 </div>
