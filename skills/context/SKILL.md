@@ -1,6 +1,6 @@
 ---
 name: context
-description: Load the context needed before working in an area — the requirement spec that governs it, the past task/decision docs that built it, and the open debt still attached to it. Use before starting non-trivial work in a domain area (e.g. account, checkout, billing, infra) — whenever you'd otherwise ask "has this been touched before?", "what did the customer actually ask for?", or "was there a reason it's built this way?". Triggers on starting a new task, opening files in an unfamiliar area, the user asking "where are we?" / "what's next?" / "continue", or "any history on this?" / "why was X decided?" / "what is debt Y?".
+description: Load the spec, prior task docs and open debt for an area before working in it. Use before any non-trivial task, and when the user asks "where are we", "what's next", "why is X like this" or "any history on this".
 argument-hint: "[area | requirements row | debt id | question — omit for the overview]"
 ---
 
@@ -34,7 +34,7 @@ Each hop feeds the next — don't skip ahead, and don't stop after hop 1 just be
    row. ⚠️/❌ defaults to stop-and-ask; a specific `debt.jsonl` record (hop 3) can override that for
    the exact piece it covers.
 2. **What was already built** → [HOP2.md](HOP2.md). Query `index.jsonl` for prior docs on this row/
-   file/area — most fields union across a doc's records, `req`/`specs` take the last value only.
+   file/area — the last record per doc is its full current state, earlier ones are the timeline.
 3. **What's still open** → [HOP3.md](HOP3.md). Query `debt.jsonl`. `blocked_by` is the only field
    that decides whether you may act on it.
 4. **Coverage** — nothing stores this, it's derived: hop 1's row number joined against hops 2 and 3

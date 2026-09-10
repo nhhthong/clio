@@ -1,6 +1,6 @@
 <!-- HOW TO FILL THIS FILE
-     These HTML comments are stripped before the file enters a session's context, but stay visible
-     when the file is opened with Read. Fill the sections, leave the comments where they are.
+     This file loads every session. Fill each section from its comment, then DELETE every HTML
+     comment (this one included) — /clio:setup does this, validate.sh warns while any remain.
      Target under ~80 lines. Record only what the code cannot tell you. -->
 
 # CLAUDE.md
@@ -38,7 +38,7 @@ never by directory: <!-- fill at setup, e.g. `account` `checkout` `billing` `inf
   success criterion.
 - After finishing a piece of work → `/clio:memo`. What is owed → `/clio:debt`.
 - A spec changed but the code hasn't → `/clio:update`. It is the only writer of `docs/specs/`.
-- Keep the `@CONTEXT.md` line above; keep CONTEXT.md free of HTML comments.
+- Keep the `@CONTEXT.md` line above; keep this file and CONTEXT.md free of HTML comments.
 - New file in `.claude/rules/` → start it with `paths:` frontmatter, or it loads in every session.
 
 ## Rules

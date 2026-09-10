@@ -12,7 +12,7 @@ Change a field in one place, update the other two in the same commit.
 
 ```bash
 claude plugin validate .
-bash -n skills/memo/scripts/validate.sh
+bash skills/memo/scripts/test.sh      # validate.sh fixtures: must print OK
 ```
 
 Try the working copy in a scratch repo:

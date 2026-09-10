@@ -1,5 +1,37 @@
 # Changelog
 
+## 2.0.0 — 2026-09-10
+
+**Breaking — `index.jsonl` is last-wins in every field.** A doc's last record is its full current
+state: `files`, `keywords` and the new `commits` array are restated in full every run, like `req`
+and `specs` already were. One read rule instead of two; `debt.jsonl` and `index.jsonl` now behave
+the same. Scalar `commit` is gone. Migrate a pre-2.0 ledger once (keeps a backup, collapses each
+doc's delta records into one full-state record):
+
+```bash
+cp .claude/clio/index.jsonl .claude/clio/index.jsonl.pre2
+jq -s -c 'group_by(.doc)[] | last + {files:(map(.files[]?)|unique), keywords:(map(.keywords[]?)|unique),
+  commits:([.[] | .commit, .commits[]?] | map(values) | unique)} | del(.commit)' \
+  .claude/clio/index.jsonl.pre2 > .claude/clio/index.jsonl
+```
+`validate.sh all` warns when a doc's last record drops files an earlier record named.
+
+- `validate.sh` now checks what the schema states: `kind` and `status` enums, `type` ∈ task/adr,
+  `spec-blocked` must carry a `blocked_by`, debt `req` rows must exist. Orphan and supersedes
+  checks use `jq`, not `grep` on formatting. `validate.sh index` no longer errors on an invalid last
+  line. Warns on HTML comments in `CLAUDE.md` as well as `CONTEXT.md`.
+- New `skills/memo/scripts/test.sh`: fixture-based check of the validator.
+- `permissions.json`: `Read`/`Edit` rules for keys, certs and `.env` now match nested paths
+  (`**/*.key`); dead `Bash(> /dev:*)` rule removed.
+- `/clio:setup` checks for `sed` (README already required it). Batch 3 names the Clio rule each tool
+  serves; `ponytail` / `caveman` sit in a separate "optional, taste" group.
+- `CLAUDE.md` template: dropped the claim that the harness strips HTML comments; both files are
+  filled from their comments and then stripped, same rule.
+- `clio:context` description cut to two sentences (it loads every session).
+- README: what Clio is (a project-memory kit: layout, ledgers, loop — and which layers stand alone), what it is not, how it differs from auto-memory and skills packs;
+  the loop diagram now shows the three ledgers and `/clio:update` → `/clio:plan`; star-history link
+  fixed.
+
 ## 1.1.0 — 2026-09-09
 
 - New `/clio:plan <area>`: splits a spec area's ✅ rows into the smallest tasks that each name the

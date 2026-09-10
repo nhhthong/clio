@@ -23,7 +23,7 @@ delta as new-rule-only and flag it in the report.
 
 Join the delta to prior work:
 ```bash
-jq -c 'select((.req[]? == <N>) or (.specs[]? | contains("<spec>")))' .claude/clio/index.jsonl
+jq -s -c 'group_by(.doc)[] | last | select((.req[]? == <N>) or (.specs[]? | contains("<spec>")))' .claude/clio/index.jsonl
 jq -s -c 'group_by(.id)[] | last
   | select(.status!="done" and ((.req[]? == <N>) or (.specs[]? | contains("<spec>"))))' .claude/clio/debt.jsonl
 ```

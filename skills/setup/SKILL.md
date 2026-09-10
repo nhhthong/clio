@@ -12,7 +12,7 @@ action listed here, never write `CLAUDE.md` or the context file without the step
 ## 0. Take stock, then ASK batch 1
 
 ```bash
-for t in bash jq git awk; do command -v $t >/dev/null || echo "MISSING: $t"; done
+for t in bash jq git awk sed; do command -v $t >/dev/null || echo "MISSING: $t"; done
 git rev-parse --git-dir >/dev/null 2>&1 || echo "NOT A GIT REPO"
 [ -d .claude/clio ] && echo "ALREADY SET UP"
 ls CLAUDE.md .claude/CLAUDE.md .claude/CONTEXT.md 2>/dev/null
@@ -58,12 +58,11 @@ area served, never a package.
 
 Each fill-in is an HTML comment holding its own instructions.
 
-- `CLAUDE.md`: the harness strips its comments — fill the sections, **keep the comments**. Inside
-  `## Project memory` change only the Domains line; never touch the import line or the existing
-  `## Rules` bullets.
-- `CONTEXT.md`: reaches context through the import, where comment stripping is not guaranteed —
-  fill from the comments, then **delete every comment**. Leave landmine sections empty; incidents
-  fill them later.
+- Both files load every session. Fill each section from its comment, then **delete every
+  comment**. `validate.sh all` warns while any remain.
+- `CLAUDE.md`: inside `## Project memory` change only the Domains line; never touch the import line
+  or the existing `## Rules` bullets.
+- `CONTEXT.md`: leave landmine sections empty; incidents fill them later.
 - Both ≤ ~150 non-blank lines combined; path-specific content → `.claude/rules/` with `paths:`
   frontmatter. A mechanical rule → a hook (step 6), not a bullet.
 - **ASK batch 2**, one call: the `domain` vocabulary (e.g. `account checkout admin infra all`) ·
@@ -107,20 +106,28 @@ Uncovered stack → write one, 10–20 lines, `paths:` frontmatter, verified fac
 ```bash
 claude mcp list; jq '.enabledPlugins' ~/.claude/settings.json; claude plugin marketplace list
 ```
-**ASK batch 3**, one multi-select call, nothing pre-selected, listing **only what is missing**:
+**ASK batch 3**, one multi-select call, nothing pre-selected, listing **only what is missing**.
+Say for each item which Clio rule it serves — the user is choosing tools for "unverified → ask",
+not a wishlist.
 
-| Scope | Item | Why |
+| Scope | Item | Clio rule it serves |
 |---|---|---|
-| global MCP | Context7 | library docs on demand instead of remembered APIs |
-| global MCP | codebase-memory-mcp | callers and impact from a code graph instead of guessed call chains |
-| global plugin | `feature-dev`, `code-review`, `security-guidance` | build / review loop |
-| global plugin | [`ponytail`](https://github.com/DietrichGebert/ponytail) (laziest working solution, YAGNI), [`caveman`](https://github.com/JuliusBrussee/caveman) (terse replies, fewer tokens) | taste — offer, never pre-select |
-| project MCP | Playwright, only if the repo has a browser UI | verify in a real browser |
-| project MCP | a DB MCP, only if the repo owns a database — ask which server and connection string | read the real schema |
-| global permissions | the strict deny/ask list in `${CLAUDE_PLUGIN_ROOT}/skills/setup/permissions.json` — blocks `rm -rf`, `git push/reset/rebase`, reading `.env`/keys; also denies `git commit` and asks before every `Write` | offer, say what it blocks |
-| this repo | formatter hook (step 6), if step 4's rules name a formatter | |
-| this repo | commit `.claude/` (recommended: the ledgers are history) or ignore `.claude/clio/` and `.claude/docs/` | |
-| this repo | `ponytail` / `caveman` already installed → keep them on here? | they are always-on everywhere via a SessionStart hook |
+| global MCP | Context7 | never state a library API from memory — read its docs |
+| global MCP | codebase-memory-mcp | never guess a call chain — query the code graph |
+| project MCP | Playwright, only if the repo has a browser UI | "done" means the test ran — in a real browser |
+| project MCP | a DB MCP, only if the repo owns a database — ask which server and connection string | never infer a column — read the real schema |
+| global plugin | `feature-dev`, `code-review`, `security-guidance` | the build / review loop around `/clio:memo` |
+| global permissions | the deny/ask list in `${CLAUDE_PLUGIN_ROOT}/skills/setup/permissions.json` — blocks `rm -rf`, `git push/reset/rebase`, reading `.env`/keys; also denies `git commit` and asks before every `Write` | nothing irreversible without a human |
+| this repo | formatter hook (step 6), if step 4's rules name a formatter | mechanical rules are hooks, not bullets |
+| this repo | commit `.claude/` (recommended: the ledgers are history) or ignore `.claude/clio/` and `.claude/docs/` | the ledgers outlive the session |
+
+**Optional, taste** — same call, a separate group, never pre-selected:
+
+| Item | What it changes |
+|---|---|
+| [`ponytail`](https://github.com/DietrichGebert/ponytail) | laziest working solution, YAGNI enforced on every edit |
+| [`caveman`](https://github.com/JuliusBrussee/caveman) | terse replies, fewer output tokens |
+| either already installed → keep on in this repo? | both are always-on everywhere via a SessionStart hook |
 
 Run what was approved, then `claude mcp list` to verify:
 ```bash

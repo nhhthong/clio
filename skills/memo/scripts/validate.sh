@@ -20,38 +20,46 @@ info(){ echo "INFO: $*"; }
 
 rows=$([ -f "$REQ" ] && awk -F'|' '/^\|/{gsub(/[ \t]/,"",$2); if($2 ~ /^[0-9]+(\.[0-9]+)*$/) print $2}' "$REQ")
 
-check_index_line(){
-  local line=$1
-  jq -e '.date and .type and .doc and ((.keywords|length)>0)
-         and (.req|type=="array") and (.specs|type=="array")' >/dev/null 2>&1 <<<"$line" \
-    || { fail "index line missing a required field or not valid JSON"; return; }
-  local doc; doc=$(jq -r .doc <<<"$line")
-  [ -f "$doc" ] || fail "index .doc points at a missing file: $doc"
-  while read -r p; do [ -z "$p" ] || [ -f "$p" ] || fail "index .specs missing: $p"; done \
-    < <(jq -r '.specs[]?' <<<"$line")
+check_req(){   # $1 ledger name, $2 line
   while read -r n; do
     [ -z "$n" ] && continue
-    printf '%s\n' "$rows" | grep -qx "$n" || fail "index .req $n has no requirements.md row"
-  done < <(jq -r '.req[]?' <<<"$line")
-  return 0
+    printf '%s\n' "$rows" | grep -qx "$n" || fail "$1 .req $n has no requirements.md row"
+  done < <(jq -r '.req[]?' <<<"$2")
+}
+check_specs(){ # $1 ledger name, $2 line
+  while read -r p; do [ -z "$p" ] || [ -f "$p" ] || fail "$1 .specs missing: $p"; done < <(jq -r '.specs[]?' <<<"$2")
+}
+
+check_index_line(){
+  local line=$1
+  jq -e '.date and .doc and ((.keywords|length)>0) and (.type|IN("task","adr"))
+         and (.files|type=="array") and (.req|type=="array") and (.specs|type=="array")' >/dev/null 2>&1 <<<"$line" \
+    || { fail "index line missing a required field, bad type, or not valid JSON"; return 1; }
+  local doc; doc=$(jq -r .doc <<<"$line")
+  [ -f "$doc" ] || fail "index .doc points at a missing file: $doc"
+  check_specs index "$line"; check_req index "$line"
 }
 
 check_debt_line(){
   local line=$1
-  jq -e '.id and .kind and .status and (.what|length>0)
+  jq -e '.id and (.what|length>0)
+         and (.kind|IN("code-debt","unverified","doc-stale","spec-delta","spec-blocked"))
+         and (.status|IN("pending","in-process","done"))
          and (.req|type=="array") and (.specs|type=="array") and (.code|type=="array")
          and has("blocked_by")' >/dev/null 2>&1 <<<"$line" \
-    || { fail "debt line missing a required field or not valid JSON"; return; }
-  while read -r p; do [ -z "$p" ] || [ -f "$p" ] || fail "debt .specs missing: $p"; done \
-    < <(jq -r '.specs[]?' <<<"$line")
-  return 0
+    || { fail "debt line missing a required field, bad kind/status, or not valid JSON"; return 1; }
+  jq -e '.status=="done" or .kind!="spec-blocked" or .blocked_by!=null' >/dev/null 2>&1 <<<"$line" \
+    || fail "debt $(jq -r .id <<<"$line"): spec-blocked needs a non-null blocked_by"
+  check_specs debt "$line"; check_req debt "$line"
 }
 
 mode=${1:-all}
 case $mode in
   index) [ -s "$IDX" ]  || { echo "FAIL: $IDX is empty"; exit 1; }
-    last=$(tail -1 "$IDX"); check_index_line "$last"
-    [ "$(jq -r '(.files|length) // 0' <<<"$last")" -eq 0 ] && warn "index .files is empty — docs-only run?" ;;
+    last=$(tail -1 "$IDX")
+    if check_index_line "$last"; then
+      jq -e '.type=="task" and (.files|length)==0' >/dev/null 2>&1 <<<"$last" && warn "index .files is empty — a task doc with no source files?"
+    fi ;;
   debt)  [ -s "$DEBT" ] || { echo "FAIL: $DEBT is empty"; exit 1; }; check_debt_line "$(tail -1 "$DEBT")" ;;
   all)
     for f in "$IDX" "$DEBT"; do
@@ -66,20 +74,28 @@ case $mode in
     [ -s "$DEBT" ] && while IFS= read -r l; do [ -n "$l" ] && check_debt_line "$l"; done \
       < <(jq -s -c 'group_by(.id)[] | last' "$DEBT" 2>/dev/null)
 
+    # 2.0: a doc's last record is its full state — it must still name every file an earlier record had
+    [ -s "$IDX" ] && while read -r d; do
+      [ -n "$d" ] && warn "index: last record of $d drops files earlier records had — pre-2.0 delta ledger? migrate per CHANGELOG 2.0.0"
+    done < <(jq -s -r 'group_by(.doc)[] | select(length>1)
+      | select((((map(.files[]?))|unique) - (last|.files // [])) | length>0) | .[0].doc' "$IDX" 2>/dev/null)
+
     # orphan docs — on disk, never indexed
     for d in .claude/docs/tasks/*.md .claude/docs/decisions/*.md; do
       [ -e "$d" ] || continue
-      grep -qF "\"doc\":\"$d\"" "$IDX" 2>/dev/null || warn "orphan doc, no index record: $d — /clio:memo was skipped"
+      jq -e --arg d "$d" 'select(.doc==$d)' "$IDX" >/dev/null 2>&1 || warn "orphan doc, no index record: $d — /clio:memo was skipped"
     done
     # index records pointing at docs that no longer exist without a supersedes trail
     while read -r doc; do
       [ -z "$doc" ] && continue
       [ -f "$doc" ] && continue
-      grep -qF "\"supersedes\":\"$doc\"" "$IDX" 2>/dev/null \
+      jq -e --arg d "$doc" 'select(.supersedes==$d)' "$IDX" >/dev/null 2>&1 \
         && info "renamed doc, superseded: $doc" \
         || fail "index record points at a missing doc and nothing supersedes it: $doc"
     done < <(jq -r '.doc' "$IDX" 2>/dev/null | sort -u)
-    grep -q '<!--' .claude/CONTEXT.md 2>/dev/null && warn "CONTEXT.md still has HTML comments — they are imported into context, delete them"
+    for f in .claude/CONTEXT.md .claude/CLAUDE.md CLAUDE.md; do
+      grep -q '<!--' "$f" 2>/dev/null && warn "$f still has HTML comments — it loads every session, delete them"
+    done
     # requirements.md markers vs the ledgers
     if [ -f "$REQ" ]; then
       while IFS='|' read -r _ num _ _ status _; do

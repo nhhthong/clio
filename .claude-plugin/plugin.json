@@ -1,8 +1,8 @@
 {
   "name": "clio",
   "displayName": "Clio",
-  "version": "1.1.0",
-  "description": "A standard layout for .claude/ — so Claude Code remembers across sessions and asks instead of guessing. Decided / built / owed, each in its own place.",
+  "version": "2.0.0",
+  "description": "A project-memory kit for .claude/ — layout, ledgers, and the loop that keeps them true. Claude reads decided / built / owed before work and asks instead of guessing.",
   "author": {
     "name": "nhhthong",
     "url": "https://github.com/nhhthong"
