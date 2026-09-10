@@ -9,7 +9,7 @@
       "name": "clio",
       "source": "./",
       "description": "A project-memory kit for .claude/ — layout, ledgers, and the loop that keeps them true. Claude reads decided / built / owed before work and asks instead of guessing.",
-      "version": "2.0.0"
+      "version": "2.0.1"
     }
   ],
   "description": "Plugins by nhhthong. Clio: a project-memory kit for .claude/ — layout, ledgers, loop."

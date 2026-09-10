@@ -33,7 +33,8 @@ check_specs(){ # $1 ledger name, $2 line
 check_index_line(){
   local line=$1
   jq -e '.date and .doc and ((.keywords|length)>0) and (.type|IN("task","adr"))
-         and (.files|type=="array") and (.req|type=="array") and (.specs|type=="array")' >/dev/null 2>&1 <<<"$line" \
+         and (.files|type=="array") and (.commits|type=="array")
+         and (.req|type=="array") and (.specs|type=="array")' >/dev/null 2>&1 <<<"$line" \
     || { fail "index line missing a required field, bad type, or not valid JSON"; return 1; }
   local doc; doc=$(jq -r .doc <<<"$line")
   [ -f "$doc" ] || fail "index .doc points at a missing file: $doc"
@@ -74,25 +75,32 @@ case $mode in
     [ -s "$DEBT" ] && while IFS= read -r l; do [ -n "$l" ] && check_debt_line "$l"; done \
       < <(jq -s -c 'group_by(.id)[] | last' "$DEBT" 2>/dev/null)
 
-    # 2.0: a doc's last record is its full state — it must still name every file an earlier record had
-    [ -s "$IDX" ] && while read -r d; do
+    # jq reading the file whole aborts at the first malformed line (already FAILed above) and its
+    # non-zero exit then misfires every check below. ponytail: fromjson? keeps the parseable lines.
+    idxjson=$(jq -Rc 'fromjson? // empty' "$IDX" 2>/dev/null)
+
+    # 2.0: a doc's last record is its full state — it must still name every file an earlier record had.
+    # Only pre-2.0 records (scalar `commit`, or no `commits`) need migrating; a clean 2.0 doc may
+    # legitimately drop a reverted file (INDEX-IT.md § files), so don't nag about that.
+    while read -r d; do
       [ -n "$d" ] && warn "index: last record of $d drops files earlier records had — pre-2.0 delta ledger? migrate per CHANGELOG 2.0.0"
     done < <(jq -s -r 'group_by(.doc)[] | select(length>1)
-      | select((((map(.files[]?))|unique) - (last|.files // [])) | length>0) | .[0].doc' "$IDX" 2>/dev/null)
+      | select(any(.[]; has("commit") or (has("commits")|not)))
+      | select((((map(.files[]?))|unique) - (last|.files // [])) | length>0) | .[0].doc' <<<"$idxjson")
 
     # orphan docs — on disk, never indexed
     for d in .claude/docs/tasks/*.md .claude/docs/decisions/*.md; do
       [ -e "$d" ] || continue
-      jq -e --arg d "$d" 'select(.doc==$d)' "$IDX" >/dev/null 2>&1 || warn "orphan doc, no index record: $d — /clio:memo was skipped"
+      jq -e --arg d "$d" 'select(.doc==$d)' <<<"$idxjson" >/dev/null 2>&1 || warn "orphan doc, no index record: $d — /clio:memo was skipped"
     done
     # index records pointing at docs that no longer exist without a supersedes trail
     while read -r doc; do
       [ -z "$doc" ] && continue
       [ -f "$doc" ] && continue
-      jq -e --arg d "$doc" 'select(.supersedes==$d)' "$IDX" >/dev/null 2>&1 \
+      jq -e --arg d "$doc" 'select(.supersedes==$d)' <<<"$idxjson" >/dev/null 2>&1 \
         && info "renamed doc, superseded: $doc" \
         || fail "index record points at a missing doc and nothing supersedes it: $doc"
-    done < <(jq -r '.doc' "$IDX" 2>/dev/null | sort -u)
+    done < <(jq -r '.doc' <<<"$idxjson" 2>/dev/null | sort -u)
     for f in .claude/CONTEXT.md .claude/CLAUDE.md CLAUDE.md; do
       grep -q '<!--' "$f" 2>/dev/null && warn "$f still has HTML comments — it loads every session, delete them"
     done
@@ -107,7 +115,7 @@ case $mode in
               | group_by(.id)[] | last | select((.req[]?|tostring) == $n and .status!="done")' \
               >/dev/null 2>&1 < "$DEBT" || warn "requirements.md row $num is ⚠️/❌ but no open debt record tracks it" ;;
           *✅*)
-            jq -s -e --arg n "$num" 'any(.[]; (.req[]?|tostring) == $n)' >/dev/null 2>&1 < "$IDX" \
+            jq -s -e --arg n "$num" 'any(.[]; (.req[]?|tostring) == $n)' >/dev/null 2>&1 <<<"$idxjson" \
               || info "requirements.md row $num is ✅ (decided) with no index record — decided but not built" ;;
         esac
       done < "$REQ"

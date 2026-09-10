@@ -1,5 +1,16 @@
 # Changelog
 
+## 2.0.1 — 2026-09-10
+
+- `validate.sh`: the schema check now also requires `commits` to be an array, so a line still
+  carrying the removed scalar `commit` (or omitting `commits`) no longer passes.
+- `validate.sh all`: one malformed line in `index.jsonl` no longer makes `jq` abort and misfire
+  every downstream check (false "orphan doc" / "nothing supersedes it" / "decided but not built");
+  the parseable lines are used, the bad line is still its own FAIL.
+- `validate.sh all`: the "pre-2.0 delta ledger" warning fires only when a record actually looks
+  pre-2.0 (scalar `commit`, or no `commits`). A clean 2.0 doc that drops a reverted file from
+  `files` — allowed by `INDEX-IT.md` — is no longer nagged.
+
 ## 2.0.0 — 2026-09-10
 
 **Breaking — `index.jsonl` is last-wins in every field.** A doc's last record is its full current

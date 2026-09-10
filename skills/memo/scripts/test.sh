@@ -16,18 +16,24 @@ idx .claude/docs/tasks/a.md '["a.go"]' '[1]'       >  $I; ok index "valid index 
 idx .claude/docs/tasks/a.md '["a.go"]' '[9]'       >> $I; ko index "req 9 has no requirements row"
 idx .claude/docs/tasks/missing.md '[]' '[]'        >> $I; ko index "doc missing on disk"
 echo '{not json'                                   >> $I; ko index "invalid JSON"
+echo '{"date":"2026-01-01","type":"task","doc":".claude/docs/tasks/a.md","domain":"x","files":[],"keywords":["k"],"req":[],"specs":[]}' >> $I; ko index "no commits array"
 
 debt a spec-blocked '[2]' '"PO owes tax rule"'     >  $D; ok debt "valid spec-blocked"
 debt b spec-blocked '[]' null                      >> $D; ko debt "spec-blocked without blocked_by"
 debt c typo '[]' null                              >> $D; ko debt "unknown kind"
 debt d code-debt '[9]' null                        >> $D; ko debt "req 9 has no requirements row"
 
-# all: pre-2.0 delta ledger and orphan doc both warn, run still passes
-idx .claude/docs/tasks/a.md '["a.go"]' '[1]'       >  $I
-idx .claude/docs/tasks/a.md '["b.go"]' '[1]'       >> $I
-debt a spec-blocked '[2]' '"PO owes tax rule"'     >  $D
+# all: pre-2.0 delta ledger (scalar `commit`, shrinking files) and orphan doc both warn, run still
+# passes; a clean 2.0 doc that drops a reverted file must NOT be nagged as pre-2.0
+echo '{"date":"2026-01-01","type":"task","doc":".claude/docs/tasks/a.md","domain":"x","files":["a.go"],"commit":"abc","keywords":["k"],"req":[1],"specs":[]}' > $I
+idx .claude/docs/tasks/a.md '["b.go"]' '[1]'        >> $I
+idx .claude/docs/tasks/c.md '["c.go","d.go"]' '[1]' >> $I
+idx .claude/docs/tasks/c.md '["c.go"]' '[1]'        >> $I
+touch .claude/docs/tasks/c.md
+debt a spec-blocked '[2]' '"PO owes tax rule"'      >  $D
 touch .claude/docs/tasks/orphan.md
 out=$(bash "$V" all) || { echo "$out"; exit 1; }
-grep -q 'pre-2.0'    <<<"$out" || { echo "expected pre-2.0 warn"; echo "$out"; exit 1; }
-grep -q 'orphan doc' <<<"$out" || { echo "expected orphan warn"; echo "$out"; exit 1; }
+grep -q 'a.md.*pre-2.0' <<<"$out" || { echo "expected pre-2.0 warn for a.md"; echo "$out"; exit 1; }
+if grep -q 'c.md.*pre-2.0' <<<"$out"; then echo "clean 2.0 c.md wrongly nagged as pre-2.0"; echo "$out"; exit 1; fi
+grep -q 'orphan doc'    <<<"$out" || { echo "expected orphan warn"; echo "$out"; exit 1; }
 echo OK
