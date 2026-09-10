@@ -19,7 +19,6 @@ echo '{not json'                                   >> $I; ko index "invalid JSON
 echo '{"date":"2026-01-01","type":"task","doc":".claude/docs/tasks/a.md","domain":"x","files":[],"keywords":["k"],"req":[],"specs":[]}' >> $I; ko index "no commits array"
 
 debt a spec-blocked '[2]' '"PO owes tax rule"'     >  $D; ok debt "valid spec-blocked"
-debt b spec-blocked '[]' null                      >> $D; ko debt "spec-blocked without blocked_by"
 debt c typo '[]' null                              >> $D; ko debt "unknown kind"
 debt d code-debt '[9]' null                        >> $D; ko debt "req 9 has no requirements row"
 
@@ -36,4 +35,22 @@ out=$(bash "$V" all) || { echo "$out"; exit 1; }
 grep -q 'a.md.*pre-2.0' <<<"$out" || { echo "expected pre-2.0 warn for a.md"; echo "$out"; exit 1; }
 if grep -q 'c.md.*pre-2.0' <<<"$out"; then echo "clean 2.0 c.md wrongly nagged as pre-2.0"; echo "$out"; exit 1; fi
 grep -q 'orphan doc'    <<<"$out" || { echo "expected orphan warn"; echo "$out"; exit 1; }
+
+# all: a malformed line does not suppress schema checks on the other records (2.0.1)
+idx .claude/docs/tasks/a.md '["a.go"]' '[1]'        >  $I
+echo '{"date":"2026-01-01","type":"nope","doc":".claude/docs/tasks/a.md","domain":"x","files":[],"commits":[],"keywords":["k"],"req":[1],"specs":[]}' >> $I
+echo '{broken'                                      >> $I
+debt a spec-blocked '[2]' '"PO owes tax rule"'      >  $D
+out=$(bash "$V" all) && { echo "expected FAIL behind a malformed line"; echo "$out"; exit 1; }
+grep -q 'not valid JSON'           <<<"$out" || { echo "expected malformed-line FAIL"; echo "$out"; exit 1; }
+grep -q 'required field, bad type' <<<"$out" || { echo "bad-type record not checked past malformed line"; echo "$out"; exit 1; }
+
+# all: spec-blocked names its blocker when filed; a later line may null it once unblocked (DEBT-IT § 1)
+idx .claude/docs/tasks/a.md '["a.go"]' '[1]'        >  $I
+debt f spec-blocked '[2]' '"PO owes a rule"'        >  $D
+echo '{"date":"2026-01-01","id":"f","kind":"spec-blocked","status":"pending","domain":"x","what":["w"],"req":[2],"specs":[],"docs":[],"code":[],"action":"","source":null,"blocked_by":null,"issue":null}' >> $D
+debt g spec-blocked '[2]' null                      >> $D
+out=$(bash "$V" all) && { echo "expected FAIL: spec-blocked g filed with null blocked_by"; echo "$out"; exit 1; }
+grep -q 'debt g' <<<"$out" || { echo "g not flagged"; echo "$out"; exit 1; }
+if grep -q 'debt f' <<<"$out"; then echo "unblocked spec-blocked f wrongly flagged"; echo "$out"; exit 1; fi
 echo OK

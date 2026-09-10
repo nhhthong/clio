@@ -9,7 +9,7 @@
   Not auto-memory, not a skills pack, not a code generator. Nothing is written unless you ran a command.
 
   [![Claude Code plugin](https://img.shields.io/badge/Claude_Code-plugin-D97757?logo=anthropic&logoColor=white)](https://code.claude.com/docs/en/plugins)
-  [![Version](https://img.shields.io/badge/version-2.0.0-blue)](CHANGELOG.md)
+  [![Version](https://img.shields.io/badge/version-2.0.1-blue)](CHANGELOG.md)
   [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 </div>
 

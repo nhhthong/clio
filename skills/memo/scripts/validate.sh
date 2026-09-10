@@ -49,8 +49,8 @@ check_debt_line(){
          and (.req|type=="array") and (.specs|type=="array") and (.code|type=="array")
          and has("blocked_by")' >/dev/null 2>&1 <<<"$line" \
     || { fail "debt line missing a required field, bad kind/status, or not valid JSON"; return 1; }
-  jq -e '.status=="done" or .kind!="spec-blocked" or .blocked_by!=null' >/dev/null 2>&1 <<<"$line" \
-    || fail "debt $(jq -r .id <<<"$line"): spec-blocked needs a non-null blocked_by"
+  # spec-blocked must name its blocker when filed, but a later line may null it once unblocked
+  # (DEBT-IT.md § 1) — so that check is group-aware and lives in `all`, not here.
   check_specs debt "$line"; check_req debt "$line"
 }
 
@@ -70,14 +70,21 @@ case $mode in
         jq -e . >/dev/null 2>&1 <<<"$l" || fail "$f line $n is not valid JSON"
       done < "$f"
     done
-    [ -s "$IDX" ] && while IFS= read -r l; do [ -n "$l" ] && check_index_line "$l"; done \
-      < <(jq -s -c 'group_by(.doc)[] | last' "$IDX" 2>/dev/null)
-    [ -s "$DEBT" ] && while IFS= read -r l; do [ -n "$l" ] && check_debt_line "$l"; done \
-      < <(jq -s -c 'group_by(.id)[] | last' "$DEBT" 2>/dev/null)
-
-    # jq reading the file whole aborts at the first malformed line (already FAILed above) and its
+    # jq reading a file whole aborts at the first malformed line (already FAILed above) and its
     # non-zero exit then misfires every check below. ponytail: fromjson? keeps the parseable lines.
     idxjson=$(jq -Rc 'fromjson? // empty' "$IDX" 2>/dev/null)
+    debtjson=$(jq -Rc 'fromjson? // empty' "$DEBT" 2>/dev/null)
+
+    [ -n "$idxjson" ] && while IFS= read -r l; do [ -n "$l" ] && check_index_line "$l"; done \
+      < <(jq -s -c 'group_by(.doc)[] | last' <<<"$idxjson")
+    [ -n "$debtjson" ] && while IFS= read -r l; do [ -n "$l" ] && check_debt_line "$l"; done \
+      < <(jq -s -c 'group_by(.id)[] | last' <<<"$debtjson")
+
+    # a spec-blocked id must name its blocker on the record that FILES it; a later line legitimately
+    # nulls blocked_by once the answer lands (DEBT-IT.md § 1), so judge the first record, not the last
+    while read -r id; do
+      [ -n "$id" ] && fail "debt $id: first spec-blocked record has a null blocked_by"
+    done < <(jq -s -r 'group_by(.id)[] | select(.[0].kind=="spec-blocked" and .[0].blocked_by==null) | .[0].id' <<<"$debtjson")
 
     # 2.0: a doc's last record is its full state — it must still name every file an earlier record had.
     # Only pre-2.0 records (scalar `commit`, or no `commits`) need migrating; a clean 2.0 doc may

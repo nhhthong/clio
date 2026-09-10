@@ -37,7 +37,7 @@ Group by problem, never mix kinds in one record.
 | `unverified` | shipped, never verified by any test, build or recorded manual run |
 | `doc-stale` | a doc describes something untrue |
 | `spec-delta` | spec moved, code hasn't — `/clio:update` writes these |
-| `spec-blocked` | waiting on an outside answer — always carries a non-null `blocked_by` |
+| `spec-blocked` | waiting on an outside answer — the filing record names it in `blocked_by`; a later line nulls it once unblocked (§ 1) |
 
 All 14 fields, always present (`null` / `[]`, never omitted):
 

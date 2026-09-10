@@ -42,11 +42,12 @@ ls composer.json go.mod pom.xml build.gradle* pubspec.yaml 2>/dev/null    # php 
 For each stack the last line lists: `[ -f .claude/rules/<stack>.md ] || cp
 "${CLAUDE_PLUGIN_ROOT}/skills/setup/rules/<stack>.md" .claude/rules/`.
 
-`CLAUDE.md` — no existing one → `cp "$T/CLAUDE.md" .claude/CLAUDE.md`. One exists (root
-`CLAUDE.md` wins over `.claude/CLAUDE.md`) → keep it, append only; the import path is relative to
-the file that holds it:
+`CLAUDE.md` — the block below copies the template when there is none, else keeps the existing file
+(root `CLAUDE.md` wins over `.claude/CLAUDE.md`) and appends only what is missing; the import path
+is relative to the file that holds it:
 ```bash
 C=.claude/CLAUDE.md; [ -f CLAUDE.md ] && C=CLAUDE.md
+[ -f "$C" ] || cp "$T/CLAUDE.md" "$C"
 IMP="@${CTX#.claude/}"; [ "$C" = CLAUDE.md ] && IMP="@$CTX"
 grep -q '^@.*CONTEXT.md' "$C" || printf '\n%s\n\n' "$IMP" >> "$C"
 grep -q '^## Project memory' "$C" || awk '/^## Project memory/,0' "$T/CLAUDE.md" >> "$C"
