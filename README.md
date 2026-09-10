@@ -57,8 +57,21 @@ From there the loop runs itself: Claude runs `clio:context` before non-trivial w
 `/clio:memo` after it. Nothing reminds you.
 
 Requires `bash`, `jq`, `git`, `awk`, `sed`. Plugin updates never touch your `.claude/`. Setup also
-offers optional tooling (Context7, codebase-memory, Playwright, a DB MCP), one item per Clio rule
-it serves. Nothing is pre-selected.
+offers the [recommended tooling](#recommended-tooling) below; nothing is pre-selected.
+
+## Recommended tooling
+
+Clio works without any of these. `/clio:setup` offers them once, lists only what is missing, and
+installs only what you pick. Each one exists for a rule Clio enforces.
+
+| Tool | Scope | Clio rule it serves |
+|---|---|---|
+| [Context7](https://github.com/upstash/context7) | global MCP | never state a library API from memory; read its docs |
+| [codebase-memory-mcp](https://github.com/DeusData/codebase-memory-mcp) | global MCP | never guess a call chain; query the code graph |
+| `feature-dev`, `code-review`, `security-guidance` | global plugins | the build / review loop around `/clio:memo` |
+| deny / ask permissions list ([permissions.json](skills/setup/permissions.json)) | global settings | nothing irreversible without a human |
+| [caveman](https://github.com/JuliusBrussee/caveman) | global plugin | terse replies, fewer output tokens; the ledgers are terse for the same reason |
+| [ponytail](https://github.com/DietrichGebert/ponytail) | global plugin | laziest working solution, YAGNI; fewer lines for `/clio:memo` to account for |
 
 ## What is in the kit
 

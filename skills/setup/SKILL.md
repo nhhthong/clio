@@ -114,7 +114,6 @@ not a wishlist.
 |---|---|---|
 | global MCP | Context7 | never state a library API from memory — read its docs |
 | global MCP | codebase-memory-mcp | never guess a call chain — query the code graph |
-| project MCP | Playwright, only if the repo has a browser UI | "done" means the test ran — in a real browser |
 | project MCP | a DB MCP, only if the repo owns a database — ask which server and connection string | never infer a column — read the real schema |
 | global plugin | `feature-dev`, `code-review`, `security-guidance` | the build / review loop around `/clio:memo` |
 | global permissions | the deny/ask list in `${CLAUDE_PLUGIN_ROOT}/skills/setup/permissions.json` — blocks `rm -rf`, `git push/reset/rebase`, reading `.env`/keys; also denies `git commit` and asks before every `Write` | nothing irreversible without a human |
@@ -137,7 +136,6 @@ command -v codebase-memory-mcp >/dev/null && claude mcp add -s user codebase-mem
 claude plugin install feature-dev@claude-plugins-official      # confirm names via `claude plugin marketplace list`
 claude plugin marketplace add DietrichGebert/ponytail && claude plugin install ponytail@ponytail
 claude plugin marketplace add JuliusBrussee/caveman  && claude plugin install caveman@caveman
-claude mcp add -s project playwright -- npx -y @playwright/mcp@latest
 ```
 Permissions — union into `~/.claude/settings.json`, existing entries first, backup taken:
 ```bash
