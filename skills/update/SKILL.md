@@ -69,6 +69,12 @@ future sessions to ask about a settled point.
 | ✅ | a settled point was re-opened or reversed | flip to ⚠️, say what re-opened it and where |
 | ✅ | refinement of a decided point | keep ✅, append the new decision + date |
 
+**Flipping toward ✅ removes a stop, so it is the one move that asks first.** Collect every
+⚠️/❌ → ✅ row from the table, show each as `row · old reason → new decision · source that decides
+it`, and ask once (`AskUserQuestion`, all rows in one call); write only the rows approved. The
+other three moves keep or add a stop — write them without asking. Declined → keep the marker, and
+name in the report which delta now sits under a marker that still says open.
+
 Decisions only, never build state. Never flip ⚠️→✅ off a low-priority source; marker and
 `blocked_by` must tell the same story — say so in the report if you cannot reconcile them.
 

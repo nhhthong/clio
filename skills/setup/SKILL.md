@@ -97,57 +97,30 @@ Each fill-in is an HTML comment holding its own instructions.
 For each `.claude/rules/<stack>.md` step 1 copied: verify every bullet against the repo (formatter
 present? generated paths exist?), fix or drop what does not hold, delete the leading comment.
 Uncovered stack → write one, 10–20 lines, `paths:` frontmatter, verified facts only — or none.
-**Greenfield:** keep the file unverified and append one `debt.jsonl` record (`kind:"doc-stale"`,
-`domain:"all"`, `what:["rules/<stack>.md unverified — written before the scaffold"]`,
-`code:[".claude/rules/<stack>.md"]`, `blocked_by:null`; full schema in
-`${CLAUDE_PLUGIN_ROOT}/skills/memo/steps/DEBT-IT.md`).
-
-## 5. Tooling, then ASK batch 3
-
+**Greenfield:** keep the file unverified and append one `debt.jsonl` record, all 14 fields (schema:
+`${CLAUDE_PLUGIN_ROOT}/skills/memo/steps/DEBT-IT.md`), then validate it:
 ```bash
-claude mcp list; jq '.enabledPlugins' ~/.claude/settings.json; claude plugin marketplace list
+echo '{"date":"YYYY-MM-DD","id":"rules-<stack>-unverified","kind":"doc-stale","status":"pending","domain":"all","what":["rules/<stack>.md unverified — written before the scaffold"],"req":[],"specs":[],"docs":[],"code":[".claude/rules/<stack>.md"],"action":"verify every bullet once the scaffold exists, then append status done","source":null,"blocked_by":null,"issue":null}' >> .claude/clio/debt.jsonl
+"${CLAUDE_PLUGIN_ROOT}"/skills/memo/scripts/validate.sh debt
 ```
-**ASK batch 3**, one multi-select call, nothing pre-selected, listing **only what is missing**.
-Say for each item which Clio rule it serves — the user is choosing tools for "unverified → ask",
-not a wishlist.
 
-| Scope | Item | Clio rule it serves |
-|---|---|---|
-| global MCP | Context7 | never state a library API from memory — read its docs |
-| global MCP | codebase-memory-mcp | never guess a call chain — query the code graph |
-| project MCP | a DB MCP, only if the repo owns a database — ask which server and connection string | never infer a column — read the real schema |
-| global plugin | `feature-dev`, `code-review`, `security-guidance` | the build / review loop around `/clio:memo` |
-| global permissions | the deny/ask list in `${CLAUDE_PLUGIN_ROOT}/skills/setup/permissions.json` — blocks `rm -rf`, `git push/reset/rebase`, reading `.env`/keys; also denies `git commit` and asks before every `Write` | nothing irreversible without a human |
-| this repo | formatter hook (step 6), if step 4's rules name a formatter | mechanical rules are hooks, not bullets |
-| this repo | commit `.claude/` (recommended: the ledgers are history) or ignore `.claude/clio/` and `.claude/docs/` | the ledgers outlive the session |
+## 5. ASK batch 3 — two choices inside `.claude/`
 
-**Optional, taste** — same call, a separate group, never pre-selected:
+Setup writes only under `.claude/`. Nothing is installed, no file outside this repository is
+touched; the tools that pair well with Clio are listed in the README for the user to add
+themselves. One call, nothing pre-selected:
 
-| Item | What it changes |
+| Choice | Clio rule it serves |
 |---|---|
-| [`ponytail`](https://github.com/DietrichGebert/ponytail) | laziest working solution, YAGNI enforced on every edit |
-| [`caveman`](https://github.com/JuliusBrussee/caveman) | terse replies, fewer output tokens |
-| either already installed → keep on in this repo? | both are always-on everywhere via a SessionStart hook |
+| commit `.claude/` (recommended: the ledgers are history) or ignore `.claude/clio/` and `.claude/docs/` | the ledgers outlive the session |
+| formatter hook (step 6), only if step 4's rules name a formatter | mechanical rules are hooks, not bullets |
 
-Run what was approved, then `claude mcp list` to verify:
-```bash
-claude mcp add -s user context7 -- npx -y @upstash/context7-mcp
-command -v codebase-memory-mcp >/dev/null && claude mcp add -s user codebase-memory-mcp -- codebase-memory-mcp \
-  || echo "codebase-memory-mcp binary missing — ask the user to install it first"
-claude plugin install feature-dev@claude-plugins-official      # confirm names via `claude plugin marketplace list`
-claude plugin marketplace add DietrichGebert/ponytail && claude plugin install ponytail@ponytail
-claude plugin marketplace add JuliusBrussee/caveman  && claude plugin install caveman@caveman
+Commit → nothing to write; `git add .claude` is the user's move. Ignore → `.gitignore` sits outside
+`.claude/`, so print the two lines and let the user add them:
 ```
-Permissions — union into `~/.claude/settings.json`, existing entries first, backup taken:
-```bash
-S=~/.claude/settings.json; cp "$S" "$S.bak"
-jq --slurpfile p "${CLAUDE_PLUGIN_ROOT}/skills/setup/permissions.json" '
-  .permissions.deny = ((.permissions.deny // []) as $e | $e + ($p[0].permissions.deny - $e))
-  | .permissions.ask = ((.permissions.ask // []) as $e | $e + ($p[0].permissions.ask - $e))' "$S" > "$S.new" && mv "$S.new" "$S"
+.claude/clio/
+.claude/docs/
 ```
-Turn `ponytail` / `caveman` off for this repo only — `jq`-merge into `.claude/settings.json`:
-`{ "env": { "PONYTAIL_DEFAULT_MODE": "off", "CAVEMAN_DEFAULT_MODE": "off" } }` (caveman also reads
-a committed `.caveman.json` with `{"defaultMode":"off"}`). Mid-session: `/ponytail off`, `/caveman off`.
 
 ## 6. Formatter hook
 
@@ -165,4 +138,6 @@ this repo's branch; command from step 4's rules file. Greenfield: skip.
 ```
 Ask the user to run `/context`: `CLAUDE.md` and the context file must both appear under **Memory
 files**. Do not seed the ledgers beyond what steps 2–4 wrote. From here the loop runs itself:
-`clio:context` before non-trivial work, `/clio:memo` after. Nothing reminds the user; say that once.
+`clio:context` before non-trivial work, `/clio:memo` after. The only nudge is Clio's
+`UserPromptSubmit` hook, which says once per session when git has work `index.jsonl` does not —
+nothing else reminds the user, and nothing writes on its own; say that once.

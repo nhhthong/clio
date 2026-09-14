@@ -1,0 +1,30 @@
+name: test
+on: [push, pull_request]
+
+permissions:
+  contents: read          # the whole job only reads; nothing here needs write
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5    # every step is a shell test; a hang is a bug, not a long build
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Ledger validator
+        run: bash skills/memo/scripts/test.sh
+
+      - name: Drift nudge hook
+        run: bash hooks/test-nudge.sh
+
+      - name: Manifests parse, and the hooks file they name exists
+        run: |
+          jq -e . .claude-plugin/plugin.json .claude-plugin/marketplace.json > /dev/null
+          test -f "$(jq -r .hooks .claude-plugin/plugin.json)"
+
+      - name: One version in all four places
+        run: |
+          v=$(jq -r .version .claude-plugin/plugin.json)
+          test "$(jq -r '.plugins[0].version' .claude-plugin/marketplace.json)" = "$v"
+          grep -q "version-$v-blue" README.md
+          grep -q "^## $v[^0-9]" CHANGELOG.md

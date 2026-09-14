@@ -9,7 +9,7 @@
   Not auto-memory, not a skills pack, not a code generator. Nothing is written unless you ran a command.
 
   [![Claude Code plugin](https://img.shields.io/badge/Claude_Code-plugin-D97757?logo=anthropic&logoColor=white)](https://code.claude.com/docs/en/plugins)
-  [![Version](https://img.shields.io/badge/version-2.0.1-blue)](CHANGELOG.md)
+  [![Version](https://img.shields.io/badge/version-2.1.0-blue)](CHANGELOG.md)
   [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 </div>
 
@@ -54,24 +54,26 @@ Then, once per repository:
 ```
 
 From there the loop runs itself: Claude runs `clio:context` before non-trivial work, you run
-`/clio:memo` after it. Nothing reminds you.
+`/clio:memo` after it. One hook watches for drift: when git shows work that `index.jsonl` has no
+record of — an uncommitted new file included — it tells Claude once per session to mention that `/clio:memo` is owed. It writes
+nothing, and it cannot run `/clio:memo` for you.
 
-Requires `bash`, `jq`, `git`, `awk`, `sed`. Plugin updates never touch your `.claude/`. Setup also
-offers the [recommended tooling](#recommended-tooling) below; nothing is pre-selected.
+Requires `bash`, `jq`, `git`, `awk`, `sed`. Plugin updates never touch your `.claude/`, and setup
+never touches anything outside it.
 
-## Recommended tooling
+## Tooling that pairs well
 
-Clio works without any of these. `/clio:setup` offers them once, lists only what is missing, and
-installs only what you pick. Each one exists for a rule Clio enforces.
+Clio needs none of these and `/clio:setup` installs none of them — setup writes only under
+`.claude/`. They exist for rules the template `CLAUDE.md` states, so they are worth adding by hand:
 
-| Tool | Scope | Clio rule it serves |
+| Tool | Add with | Rule it serves |
 |---|---|---|
-| [Context7](https://github.com/upstash/context7) | global MCP | never state a library API from memory; read its docs |
-| [codebase-memory-mcp](https://github.com/DeusData/codebase-memory-mcp) | global MCP | never guess a call chain; query the code graph |
-| `feature-dev`, `code-review`, `security-guidance` | global plugins | the build / review loop around `/clio:memo` |
-| deny / ask permissions list ([permissions.json](skills/setup/permissions.json)) | global settings | nothing irreversible without a human |
-| [caveman](https://github.com/JuliusBrussee/caveman) | global plugin | terse replies, fewer output tokens; the ledgers are terse for the same reason |
-| [ponytail](https://github.com/DietrichGebert/ponytail) | global plugin | laziest working solution, YAGNI; fewer lines for `/clio:memo` to account for |
+| [Context7](https://github.com/upstash/context7) | `claude mcp add -s user context7 -- npx -y @upstash/context7-mcp` | never state a library API from memory; read its docs |
+| [codebase-memory-mcp](https://github.com/DeusData/codebase-memory-mcp) | `claude mcp add -s user codebase-memory-mcp -- codebase-memory-mcp` | never guess a call chain; query the code graph |
+| deny / ask list — [permissions.json](skills/setup/permissions.json) | merge into `~/.claude/settings.json` (all repos) or `.claude/settings.json` (this one) | nothing irreversible without a human |
+| `feature-dev`, `code-review`, `security-guidance` | `claude plugin install <name>@claude-plugins-official` | the build / review loop around `/clio:memo` |
+| [caveman](https://github.com/JuliusBrussee/caveman) | `claude plugin marketplace add JuliusBrussee/caveman && claude plugin install caveman@caveman` | terse replies; the ledgers are terse for the same reason |
+| [ponytail](https://github.com/DietrichGebert/ponytail) | `claude plugin marketplace add DietrichGebert/ponytail && claude plugin install ponytail@ponytail` | laziest working solution; fewer lines for `/clio:memo` to account for |
 
 ## What is in the kit
 
@@ -81,7 +83,7 @@ Three layers. The lower two stand on their own; the loop needs both.
 |---|---|---|
 | **Layout** | `CLAUDE.md` / `CONTEXT.md` templates, `rules/<stack>.md` starters, a deny/ask permissions list, a formatter hook | yes, copy the files |
 | **Ledgers** | `index.jsonl` (built), `debt.jsonl` (owed), the `requirements.md` register (decided), their schema and `validate.sh` | yes, if you write the schema by hand |
-| **Loop** | the eight `clio:*` skills that read and write the layers above | no |
+| **Loop** | the eight `clio:*` skills that read and write the layers above, and the drift nudge that notices when you skipped one | no |
 
 `/clio:setup` installs the first two layers into your repo once. The skills and the validator stay
 in the plugin, so an update never touches your `.claude/`.
@@ -150,8 +152,11 @@ flowchart LR
     U --> P["/clio:plan"] -.-> C
 ```
 
-Dotted lines are reads and writes. There is no hook and no reminder: skip `/clio:memo` and the
-next session starts without it.
+Dotted lines are reads and writes. Skip `/clio:memo` and the next session starts without it — the
+one thing that notices is `hooks/clio-nudge.sh`, a `UserPromptSubmit` hook that compares git
+against `index.jsonl` and, at most once per session, tells Claude to say the memo is owed. It is a
+reminder and nothing more: it never writes a ledger, never invokes a skill, and stays silent when
+the working tree is clean of anything but `.claude/` and `HEAD` already appears in an index record.
 
 ## Rules the layout enforces
 

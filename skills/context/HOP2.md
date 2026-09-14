@@ -21,6 +21,9 @@ jq -s -c 'group_by(.doc)[] | last | select(.domain=="account" or (.keywords[]? =
 # what one run changed: diff a doc's last two records
 jq -s -c 'map(select(.doc=="<doc>")) | {date:.[-1].date, added:(.[-1].files - (.[-2].files // [])), removed:((.[-2].files // []) - .[-1].files)}' .claude/clio/index.jsonl
 ```
+`jq: error … Invalid …` on either ledger → a malformed line, not an empty ledger. Say so, point at
+`validate.sh all` (it names the line), and never report "nothing on record" off a query that errored.
+
 `req`/`specs` are the join to the requirement but not infallible — `req` the weaker of the two:
 inherited bugs, RBAC, infra structurally map to no requirement row, so `req:[]` can be legitimate.
 Prefer `specs`, fall back to `domain`/`keywords`/`files`.

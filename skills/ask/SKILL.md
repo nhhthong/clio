@@ -10,7 +10,8 @@ No `.claude/clio/` in this project → say so first, point at `/clio:setup`.
 Question (may be empty): $ARGUMENTS
 
 **No argument** → print this, then one line: *`clio:context` runs before work; `/clio:memo` after is
-the one command to remember, nothing reminds you.*
+the one command to remember — the only reminder is a once-per-session nudge when git has work the
+ledger does not.*
 
 | Command | Does | Run when |
 |---|---|---|

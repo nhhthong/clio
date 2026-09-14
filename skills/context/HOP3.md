@@ -10,7 +10,7 @@ jq -s -c --argjson n $N 'group_by(.id)[] | last
   | select((.req[]?==$n) and .status!="done")
   | {id, kind, blocked:(.blocked_by!=null), action}' .claude/clio/debt.jsonl
 
-# widen by area — pair domain with specs/req, never filter on domain alone (some records lack it)
+# widen by area — pair domain with specs/req, never filter on domain alone (a pre-2.1 record may lack it; `validate.sh all` names those)
 jq -s -c 'group_by(.id)[] | last | select(.status!="done")
   | select(.domain=="account" or (.specs[]? | contains("order-flow")) or (.req[]? == 20))' \
   .claude/clio/debt.jsonl

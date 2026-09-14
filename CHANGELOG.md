@@ -1,5 +1,55 @@
 # Changelog
 
+## 2.1.0 — 2026-09-14
+
+- **New: a drift nudge.** `hooks/clio-nudge.sh` runs on `UserPromptSubmit` and, at most once per
+  session, tells Claude to mention that `/clio:memo` is owed — when the working tree has
+  uncommitted changes (a never-added new file counts), or `HEAD` appears in no `index.jsonl` record. It reads git and `index.jsonl` only:
+  it writes no ledger, invokes no skill, and stays silent in a repo with no `.claude/clio/`, in one
+  whose `index.jsonl` is still empty, and whose only changes are under `.claude/` (memo's own
+  output). Covered by `hooks/test-nudge.sh`. Skipping `/clio:memo` is still allowed — it is now
+  visible instead of silent.
+- **`/clio:setup` writes only under `.claude/`.** Step 5 no longer installs anything: the MCP
+  servers, the plugins and the permissions merge into `~/.claude/settings.json` are gone from
+  setup, along with the per-repo ponytail/caveman switches. None of them is something Clio needs;
+  they serve rules the template `CLAUDE.md` states, and the README now lists each with the one
+  command that adds it. Batch 3 keeps its two in-repo choices — commit `.claude/` or ignore the
+  ledgers, and the formatter hook. Two gaps that predate 2.1: the "ignore `.claude/`" choice
+  now says what happens (setup prints the two `.gitignore` lines — the file is outside `.claude/`,
+  so the user adds them), and the greenfield `doc-stale` record is given as a full 14-field line
+  with a `validate.sh debt` after it, where the old five-field sketch produced a line step 7
+  rejected for missing `id` and `status`.
+- **`skills/memo/scripts/test.sh` is back in the repository** — 2.0.1 deleted it and added it to
+  `.gitignore` while `CONTRIBUTING.md` still told contributors to run it, so nobody outside this
+  machine could verify `validate.sh`. It now also covers the group-aware `spec-blocked` check in
+  `debt` mode, which shipped in 2.0.1 untested.
+- **CI.** `.github/workflows/ci.yml` runs both test scripts on every push and PR, checks the
+  manifests parse and that the hooks file they name exists, and fails when `plugin.json`,
+  `marketplace.json`, the README badge and the `CHANGELOG.md` heading disagree about the version.
+- **`validate.sh`: the `spec-blocked` rule is one check in one place again.** 2.0.1 added a
+  second, approximate copy inside `check_debt_line`, so `all` reported a wrongly-filed record
+  twice while `debt` mode still missed the case where a later record supplies the blocker the
+  filing record lacked. Both modes now run the same group-aware check — `debt` for the id it just
+  appended, `all` for every id — and `debt` reads the ledger with `fromjson?`, so one malformed
+  line no longer aborts it.
+- `/clio:memo` step 1 finds the existing doc with `git diff --name-only HEAD`: without `HEAD`, a
+  staged edit was invisible, so a feature with staged files got a second doc and a forked history.
+- `clio:context` hop 2: a `jq: error` on a ledger is a malformed line, not an empty ledger — the
+  hop now says so and points at `validate.sh all` instead of reporting "nothing on record".
+- `/clio:ask` no longer says "nothing reminds you"; the nudge does, once per session.
+- **`validate.sh` now checks every field the schema calls always-present** — all 14 of a debt
+  record, all 9 of an index record — where before it checked 8 and 8, so a record without
+  `domain` passed and then fell out of every `clio:context` query that filters on it. The write
+  path (`index` / `debt` mode) refuses such a line; `all` only warns on one, naming the fields,
+  because the fix under append-only is to append a full record, never to edit the old one.
+- `permissions.json`: `git commit` moves from deny to ask (a human can undo a commit; a denied
+  one only pushed Claude into leaving work uncommitted), and `git restore` joins the ask list — it
+  discards uncommitted work and was not listed at all.
+- `/clio:update` step 4 asks before flipping a row ⚠️/❌ → ✅. That flip is the one move that
+  removes a stop — `clio:context` stops asking about the point — so it is now shown per row with
+  its source and written only on a yes; the three moves that keep or add a stop still write
+  without asking.
+
 ## 2.0.1 — 2026-09-10
 
 - `validate.sh`: the schema check now also requires `commits` to be an array, so a line still

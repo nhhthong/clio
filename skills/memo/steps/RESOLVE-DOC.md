@@ -9,7 +9,7 @@ Do this FIRST, before writing anything.
 
 **Case B — nothing passed:** find the existing doc before assuming there isn't one.
 ```bash
-git diff --name-only | while read -r f; do
+git diff --name-only HEAD | while read -r f; do    # HEAD: staged edits count too
   jq -c --arg f "$f" 'select(.files[]? | contains($f))' .claude/clio/index.jsonl
 done | sort -u
 ls -1t .claude/docs/tasks/ | head -20

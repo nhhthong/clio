@@ -18,6 +18,19 @@ fail(){ echo "FAIL: $*"; fails=$((fails+1)); }
 warn(){ echo "WARN: $*"; }
 info(){ echo "INFO: $*"; }
 
+# Every field the schema files say is always present (null / [] allowed, absence is not).
+IDX_FIELDS='date type doc domain files commits keywords req specs'                                 # INDEX-IT.md
+DEBT_FIELDS='date id kind status domain what req specs docs code action source blocked_by issue'  # DEBT-IT.md, all 14
+# ponytail: one global the `all` mode flips to warn. A record written before 2.1 may lack a field;
+# the fix is appending a full record under the same key (readers take the last line), so an audit
+# names it and moves on, while the write path (`index` / `debt` mode) refuses the line outright.
+sev=fail
+check_fields(){ # $1 ledger name, $2 field list, $3 line
+  local missing
+  missing=$(jq -r --arg f "$2" '(($f | split(" ")) - keys) | join(" ")' <<<"$3" 2>/dev/null)
+  [ -z "$missing" ] || "$sev" "$1 record is missing: $missing — append a full record, readers take the last line"
+}
+
 rows=$([ -f "$REQ" ] && awk -F'|' '/^\|/{gsub(/[ \t]/,"",$2); if($2 ~ /^[0-9]+(\.[0-9]+)*$/) print $2}' "$REQ")
 
 check_req(){   # $1 ledger name, $2 line
@@ -36,6 +49,7 @@ check_index_line(){
          and (.files|type=="array") and (.commits|type=="array")
          and (.req|type=="array") and (.specs|type=="array")' >/dev/null 2>&1 <<<"$line" \
     || { fail "index line missing a required field, bad type, or not valid JSON"; return 1; }
+  check_fields index "$IDX_FIELDS" "$line"
   local doc; doc=$(jq -r .doc <<<"$line")
   [ -f "$doc" ] || fail "index .doc points at a missing file: $doc"
   check_specs index "$line"; check_req index "$line"
@@ -49,19 +63,19 @@ check_debt_line(){
          and (.req|type=="array") and (.specs|type=="array") and (.code|type=="array")
          and has("blocked_by")' >/dev/null 2>&1 <<<"$line" \
     || { fail "debt line missing a required field, bad kind/status, or not valid JSON"; return 1; }
-  # spec-blocked must name its blocker on the record that files it, but a later record may
-  # legitimately null it once unblocked (DEBT-IT.md § 1) — so only enforce when $line is the
-  # sole record filed so far for its id (works from `debt` mode's single tail -1 line too,
-  # since $DEBT holds the full history either way).
-  if [ "$(jq -r '.kind' <<<"$line")" = "spec-blocked" ] \
-     && [ "$(jq -r '.status' <<<"$line")" != "done" ] \
-     && [ "$(jq -r '.blocked_by' <<<"$line")" = "null" ]; then
-    local id n
-    id=$(jq -r '.id' <<<"$line")
-    n=$(jq -Rc --arg id "$id" 'fromjson? | select(.id==$id)' "$DEBT" 2>/dev/null | wc -l)
-    [ "$n" -gt 1 ] || fail "debt $id: spec-blocked needs a non-null blocked_by when filed"
-  fi
+  check_fields debt "$DEBT_FIELDS" "$line"
   check_specs debt "$line"; check_req debt "$line"
+}
+
+# The record that FILES a spec-blocked must name its blocker; a later record may legitimately null
+# it once the answer lands (DEBT-IT.md § 1). So the rule is judged on each id's FIRST record, never
+# its last — one jq, called by both modes, so `all` cannot report the same id twice.
+check_filed_blocked(){   # $1 debt json stream, $2 a single id, or "" for every id
+  while read -r id; do
+    [ -n "$id" ] && fail "debt $id: the record that files a spec-blocked needs a non-null blocked_by"
+  done < <(jq -s -r --arg only "${2:-}" 'group_by(.id)[]
+    | select($only == "" or .[0].id == $only)
+    | select(.[0].kind == "spec-blocked" and .[0].blocked_by == null) | .[0].id' <<<"$1")
 }
 
 mode=${1:-all}
@@ -71,7 +85,10 @@ case $mode in
     if check_index_line "$last"; then
       jq -e '.type=="task" and (.files|length)==0' >/dev/null 2>&1 <<<"$last" && warn "index .files is empty — a task doc with no source files?"
     fi ;;
-  debt)  [ -s "$DEBT" ] || { echo "FAIL: $DEBT is empty"; exit 1; }; check_debt_line "$(tail -1 "$DEBT")" ;;
+  debt) [ -s "$DEBT" ] || { echo "FAIL: $DEBT is empty"; exit 1; }
+    last=$(tail -1 "$DEBT")
+    check_debt_line "$last"
+    check_filed_blocked "$(jq -Rc 'fromjson? // empty' "$DEBT" 2>/dev/null)" "$(jq -r '.id // empty' <<<"$last" 2>/dev/null)" ;;
   all)
     for f in "$IDX" "$DEBT"; do
       [ -f "$f" ] || { fail "missing $f"; continue; }
@@ -85,16 +102,13 @@ case $mode in
     idxjson=$(jq -Rc 'fromjson? // empty' "$IDX" 2>/dev/null)
     debtjson=$(jq -Rc 'fromjson? // empty' "$DEBT" 2>/dev/null)
 
+    sev=warn    # audit: a pre-2.1 record missing a field is named, not failed (see check_fields)
     [ -n "$idxjson" ] && while IFS= read -r l; do [ -n "$l" ] && check_index_line "$l"; done \
       < <(jq -s -c 'group_by(.doc)[] | last' <<<"$idxjson")
     [ -n "$debtjson" ] && while IFS= read -r l; do [ -n "$l" ] && check_debt_line "$l"; done \
       < <(jq -s -c 'group_by(.id)[] | last' <<<"$debtjson")
 
-    # a spec-blocked id must name its blocker on the record that FILES it; a later line legitimately
-    # nulls blocked_by once the answer lands (DEBT-IT.md § 1), so judge the first record, not the last
-    while read -r id; do
-      [ -n "$id" ] && fail "debt $id: first spec-blocked record has a null blocked_by"
-    done < <(jq -s -r 'group_by(.id)[] | select(.[0].kind=="spec-blocked" and .[0].blocked_by==null) | .[0].id' <<<"$debtjson")
+    check_filed_blocked "$debtjson"
 
     # 2.0: a doc's last record is its full state — it must still name every file an earlier record had.
     # Only pre-2.0 records (scalar `commit`, or no `commits`) need migrating; a clean 2.0 doc may
