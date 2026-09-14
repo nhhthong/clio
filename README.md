@@ -10,6 +10,7 @@
 
   [![Claude Code plugin](https://img.shields.io/badge/Claude_Code-plugin-D97757?logo=anthropic&logoColor=white)](https://code.claude.com/docs/en/plugins)
   [![Version](https://img.shields.io/badge/version-2.1.0-blue)](CHANGELOG.md)
+  [![test](https://github.com/nhhthong/clio/actions/workflows/ci.yml/badge.svg)](https://github.com/nhhthong/clio/actions/workflows/ci.yml)
   [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 </div>
 
@@ -54,26 +55,49 @@ Then, once per repository:
 ```
 
 From there the loop runs itself: Claude runs `clio:context` before non-trivial work, you run
-`/clio:memo` after it. One hook watches for drift: when git shows work that `index.jsonl` has no
-record of — an uncommitted new file included — it tells Claude once per session to mention that `/clio:memo` is owed. It writes
-nothing, and it cannot run `/clio:memo` for you.
+`/clio:memo` after it. One hook watches for drift — when git holds work that `index.jsonl` has no
+record of, it tells Claude once per session to say that `/clio:memo` is owed. It writes nothing
+and cannot run the memo for you.
 
-Requires `bash`, `jq`, `git`, `awk`, `sed`. Plugin updates never touch your `.claude/`, and setup
-never touches anything outside it.
+Requires `bash`, `jq`, `git`, `awk`, `sed` — nothing else. Plugin updates never touch your
+`.claude/`; setup never touches anything outside it.
 
-## Tooling that pairs well
+## Suggested tooling
 
-Clio needs none of these and `/clio:setup` installs none of them — setup writes only under
-`.claude/`. They exist for rules the template `CLAUDE.md` states, so they are worth adding by hand:
+Clio needs none of this, and `/clio:setup` installs none of it. Each item below exists because
+the template `CLAUDE.md` states a rule — *never state a library API from memory*, *nothing
+irreversible without a human* — that a tool enforces better than a bullet. Add what you want, by
+hand, at the scope you want (`-s user` for every repo, `-s project` for this one, committed).
 
-| Tool | Add with | Rule it serves |
+**MCP servers — so "unverified" becomes "let me look"**
+
+| Server | Rule it serves | Add |
 |---|---|---|
-| [Context7](https://github.com/upstash/context7) | `claude mcp add -s user context7 -- npx -y @upstash/context7-mcp` | never state a library API from memory; read its docs |
-| [codebase-memory-mcp](https://github.com/DeusData/codebase-memory-mcp) | `claude mcp add -s user codebase-memory-mcp -- codebase-memory-mcp` | never guess a call chain; query the code graph |
-| deny / ask list — [permissions.json](skills/setup/permissions.json) | merge into `~/.claude/settings.json` (all repos) or `.claude/settings.json` (this one) | nothing irreversible without a human |
-| `feature-dev`, `code-review`, `security-guidance` | `claude plugin install <name>@claude-plugins-official` | the build / review loop around `/clio:memo` |
-| [caveman](https://github.com/JuliusBrussee/caveman) | `claude plugin marketplace add JuliusBrussee/caveman && claude plugin install caveman@caveman` | terse replies; the ledgers are terse for the same reason |
-| [ponytail](https://github.com/DietrichGebert/ponytail) | `claude plugin marketplace add DietrichGebert/ponytail && claude plugin install ponytail@ponytail` | laziest working solution; fewer lines for `/clio:memo` to account for |
+| [Context7](https://github.com/upstash/context7) | never state a library API from memory; read its current docs | `claude mcp add -s user context7 -- npx -y @upstash/context7-mcp` |
+| [codebase-memory-mcp](https://github.com/DeusData/codebase-memory-mcp) | never guess a call chain; query the code graph | `claude mcp add -s user codebase-memory-mcp -- codebase-memory-mcp` |
+| a DB server for your database | never infer a column; read the real schema | whichever server fits your database, `-s project` |
+
+**Plugins — the build / review loop around `/clio:memo`**
+
+| Plugin | What it adds | Add |
+|---|---|---|
+| `feature-dev`, `code-review`, `security-guidance` | structured build → review → memo, from Anthropic's own marketplace | `claude plugin install <name>@claude-plugins-official` |
+| [caveman](https://github.com/JuliusBrussee/caveman) | terse replies, fewer output tokens — the ledgers are terse for the same reason | `claude plugin marketplace add JuliusBrussee/caveman && claude plugin install caveman@caveman` |
+| [ponytail](https://github.com/DietrichGebert/ponytail) | the laziest working solution, YAGNI enforced — fewer lines for `/clio:memo` to account for | `claude plugin marketplace add DietrichGebert/ponytail && claude plugin install ponytail@ponytail` |
+
+**Permissions — nothing irreversible without a human**
+
+[`skills/setup/permissions.json`](skills/setup/permissions.json) ships with Clio: a deny list
+(`rm -rf`, `git push` / `reset` / `rebase`, reading `.env` and keys) and an ask list (`git commit`,
+`git checkout` / `restore` / `stash`, package installs, every `Write`). Merge it into
+`~/.claude/settings.json` for every repo, or `.claude/settings.json` to commit it for the team:
+
+```bash
+S=~/.claude/settings.json; [ -f "$S" ] || echo '{}' > "$S"; cp "$S" "$S.bak"
+jq --slurpfile p ~/.claude/plugins/marketplaces/nhhthong/skills/setup/permissions.json '   # the clone `marketplace add` made
+  .permissions.deny = ((.permissions.deny // []) as $e | $e + ($p[0].permissions.deny - $e))
+  | .permissions.ask = ((.permissions.ask // []) as $e | $e + ($p[0].permissions.ask - $e))' "$S" > "$S.new" && mv "$S.new" "$S"
+```
 
 ## What is in the kit
 
@@ -81,7 +105,7 @@ Three layers. The lower two stand on their own; the loop needs both.
 
 | Layer | Holds | Use without the plugin? |
 |---|---|---|
-| **Layout** | `CLAUDE.md` / `CONTEXT.md` templates, `rules/<stack>.md` starters, a deny/ask permissions list, a formatter hook | yes, copy the files |
+| **Layout** | `CLAUDE.md` / `CONTEXT.md` templates, `rules/<stack>.md` starters, a formatter hook | yes, copy the files |
 | **Ledgers** | `index.jsonl` (built), `debt.jsonl` (owed), the `requirements.md` register (decided), their schema and `validate.sh` | yes, if you write the schema by hand |
 | **Loop** | the eight `clio:*` skills that read and write the layers above, and the drift nudge that notices when you skipped one | no |
 
@@ -175,7 +199,7 @@ the working tree is clean of anything but `.claude/` and `HEAD` already appears 
 | `/clio:plan <area>` | decided rows → smallest testable tasks | after ingest, when a row moves |
 | `/clio:context [x]` | no arg: where are we · with area / row / id / question: spec, built, owed, quoted | Claude, before work; you, to ask "why?" |
 | `/clio:memo [doc]` | record finished work: task doc, ledgers, plan tick, ADR | after each feature or fix |
-| `/clio:update [spec]` | a spec changed: what it invalidates, move the row marker | requirements change |
+| `/clio:update [spec]` | a spec changed: what it invalidates, move the row marker (asks before ⚠️ → ✅) | requirements change |
 | `/clio:debt [filter]` | what is still owed, actionable vs. blocked | any time |
 | `/clio:ask [x]` | explain any of the above | when unsure |
 
@@ -198,8 +222,9 @@ Add to the project's `.claude/settings.json`; members get the plugin when they t
 
 Bugs and questions go to [Issues](https://github.com/nhhthong/clio/issues). Schema, validator and
 read-side queries are kept in sync by hand; [CONTRIBUTING.md](CONTRIBUTING.md) says where each
-lives and what to run before a PR. Every user-visible change gets a line in
-[CHANGELOG.md](CHANGELOG.md).
+lives. CI runs the validator and hook tests on every push and rejects a version that disagrees
+across the manifests, this README and [CHANGELOG.md](CHANGELOG.md) — every user-visible change
+gets a line there.
 
 ## License
 
