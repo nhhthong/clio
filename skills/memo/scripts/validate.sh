@@ -49,8 +49,18 @@ check_debt_line(){
          and (.req|type=="array") and (.specs|type=="array") and (.code|type=="array")
          and has("blocked_by")' >/dev/null 2>&1 <<<"$line" \
     || { fail "debt line missing a required field, bad kind/status, or not valid JSON"; return 1; }
-  # spec-blocked must name its blocker when filed, but a later line may null it once unblocked
-  # (DEBT-IT.md § 1) — so that check is group-aware and lives in `all`, not here.
+  # spec-blocked must name its blocker on the record that files it, but a later record may
+  # legitimately null it once unblocked (DEBT-IT.md § 1) — so only enforce when $line is the
+  # sole record filed so far for its id (works from `debt` mode's single tail -1 line too,
+  # since $DEBT holds the full history either way).
+  if [ "$(jq -r '.kind' <<<"$line")" = "spec-blocked" ] \
+     && [ "$(jq -r '.status' <<<"$line")" != "done" ] \
+     && [ "$(jq -r '.blocked_by' <<<"$line")" = "null" ]; then
+    local id n
+    id=$(jq -r '.id' <<<"$line")
+    n=$(jq -Rc --arg id "$id" 'fromjson? | select(.id==$id)' "$DEBT" 2>/dev/null | wc -l)
+    [ "$n" -gt 1 ] || fail "debt $id: spec-blocked needs a non-null blocked_by when filed"
+  fi
   check_specs debt "$line"; check_req debt "$line"
 }
 
@@ -120,7 +130,7 @@ case $mode in
           *⚠*|*❌*)
             jq -s -e --arg n "$num" 'map(select(.req != null))
               | group_by(.id)[] | last | select((.req[]?|tostring) == $n and .status!="done")' \
-              >/dev/null 2>&1 < "$DEBT" || warn "requirements.md row $num is ⚠️/❌ but no open debt record tracks it" ;;
+              >/dev/null 2>&1 <<< "$debtjson" || warn "requirements.md row $num is ⚠️/❌ but no open debt record tracks it" ;;
           *✅*)
             jq -s -e --arg n "$num" 'any(.[]; (.req[]?|tostring) == $n)' >/dev/null 2>&1 <<<"$idxjson" \
               || info "requirements.md row $num is ✅ (decided) with no index record — decided but not built" ;;
