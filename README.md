@@ -75,29 +75,13 @@ hand, at the scope you want (`-s user` for every repo, `-s project` for this one
 |---|---|---|
 | [Context7](https://github.com/upstash/context7) | never state a library API from memory; read its current docs | `claude mcp add -s user context7 -- npx -y @upstash/context7-mcp` |
 | [codebase-memory-mcp](https://github.com/DeusData/codebase-memory-mcp) | never guess a call chain; query the code graph | `claude mcp add -s user codebase-memory-mcp -- codebase-memory-mcp` |
-| a DB server for your database | never infer a column; read the real schema | whichever server fits your database, `-s project` |
 
 **Plugins — the build / review loop around `/clio:memo`**
 
 | Plugin | What it adds | Add |
 |---|---|---|
-| `feature-dev`, `code-review`, `security-guidance` | structured build → review → memo, from Anthropic's own marketplace | `claude plugin install <name>@claude-plugins-official` |
 | [caveman](https://github.com/JuliusBrussee/caveman) | terse replies, fewer output tokens — the ledgers are terse for the same reason | `claude plugin marketplace add JuliusBrussee/caveman && claude plugin install caveman@caveman` |
 | [ponytail](https://github.com/DietrichGebert/ponytail) | the laziest working solution, YAGNI enforced — fewer lines for `/clio:memo` to account for | `claude plugin marketplace add DietrichGebert/ponytail && claude plugin install ponytail@ponytail` |
-
-**Permissions — nothing irreversible without a human**
-
-[`skills/setup/permissions.json`](skills/setup/permissions.json) ships with Clio: a deny list
-(`rm -rf`, `git push` / `reset` / `rebase`, reading `.env` and keys) and an ask list (`git commit`,
-`git checkout` / `restore` / `stash`, package installs, every `Write`). Merge it into
-`~/.claude/settings.json` for every repo, or `.claude/settings.json` to commit it for the team:
-
-```bash
-S=~/.claude/settings.json; [ -f "$S" ] || echo '{}' > "$S"; cp "$S" "$S.bak"
-jq --slurpfile p ~/.claude/plugins/marketplaces/nhhthong/skills/setup/permissions.json '   # the clone `marketplace add` made
-  .permissions.deny = ((.permissions.deny // []) as $e | $e + ($p[0].permissions.deny - $e))
-  | .permissions.ask = ((.permissions.ask // []) as $e | $e + ($p[0].permissions.ask - $e))' "$S" > "$S.new" && mv "$S.new" "$S"
-```
 
 ## What is in the kit
 
