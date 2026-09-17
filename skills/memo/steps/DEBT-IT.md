@@ -21,9 +21,11 @@ A test, a build, or a manual check recorded with today's date in `## Testing Don
 write an `unverified` record for it before anything else. `index.jsonl` says what was claimed; only
 a dated `## Testing Done` entry or an `unverified` record says whether anyone looked.
 
-Plan task noted in step 2 → its `Test` ran and is in `## Testing Done` → tick `[x] YYYY-MM-DD
-<commit>` in `.claude/docs/plans/<area>.md`, in place. Did not run → leave `[ ]`; the `unverified`
-record above covers it. Never tick on the strength of the code alone.
+For each id in `plan_tasks` (step 2 found them, step 4 recorded them): its `Test` ran and is in
+`## Testing Done` → tick `[x] YYYY-MM-DD <commit>` on that exact row in
+`.claude/docs/plans/<area>.md`, in place. `plan_tasks` empty, or that test did not run → leave
+`[ ]`; the `unverified` record above covers it. Never tick on the strength of the code alone, and
+never tick a row step 2 was unsure about.
 
 ## 3. New records
 
@@ -59,7 +61,7 @@ All 14 fields, always present (`null` / `[]`, never omitted):
 | `issue` | related `id` in this file, else `null` |
 
 ```bash
-echo '{"date":"YYYY-MM-DD","id":"<kebab-key>","kind":"code-debt","status":"pending","domain":"cart","what":["<what is wrong>"],"req":[15],"specs":[".claude/docs/specs/memory/products-pricing.md"],"docs":[".claude/docs/tasks/YYYY-MM-DD_<doc>.md"],"code":["app/Services/CartService.php:52"],"action":"<fix>","source":null,"blocked_by":null,"issue":null}' >> .claude/clio/debt.jsonl
+echo '{"date":"YYYY-MM-DD","id":"<kebab-key>","kind":"code-debt","status":"pending","domain":"cart","what":["<what is wrong>"],"req":[15],"specs":[".claude/docs/specs/memory/products-pricing.md"],"docs":[".claude/docs/tasks/<feature>/<id>_<name>.md"],"code":["app/Services/CartService.php:52"],"action":"<fix>","source":null,"blocked_by":null,"issue":null}' >> .claude/clio/debt.jsonl
 "${CLAUDE_PLUGIN_ROOT}"/skills/memo/scripts/validate.sh debt
 ```
 `FAIL` → `sed -i.bak '$d' .claude/clio/debt.jsonl && rm .claude/clio/debt.jsonl.bak`, fix, re-append.

@@ -1,5 +1,115 @@
 # Changelog
 
+## 3.0.0 — 2026-09-17
+
+**Breaking: task docs move into a directory per feature, and `index.jsonl` keys on `id`.**
+`/clio:audit` migrates an existing `.claude/`; nothing forces you to — a flat pre-3.0 doc still
+resolves, and `validate.sh` names it without failing on it.
+
+- **One directory per feature, one doc per sub-task.** `.claude/docs/tasks/<feature>/<id>_<name>.md`,
+  plus an optional `summary.md` holding only what `ls` cannot say. A long-lived feature used to be
+  one doc that grew every run, and `HOP2.md` told the reader to "read the load-bearing sections"
+  without giving a command for it — so the whole file got opened. Now `ls` on either level is a free
+  table of contents, and hop 2 ships the `sed` range that reads `## Decisions` / `## Side Effects` /
+  `## Follow-up` alone.
+- **`id` replaces `doc` as the ledger's key.** `id` is the doc's creation timestamp (`date +%s`) and
+  its filename prefix; it never changes, so a moved or renamed doc keeps its history without the
+  `supersedes` chain a path key needed. `validate.sh` enforces the binding — an `id` that is not the
+  filename prefix is a FAIL, which is what keeps one id bound to one doc — under `docs/tasks/` and
+  `docs/decisions/` only, since a ledger also indexes spec and `rules/` files, which are named by
+  content and which `/clio:audit` gives an id without moving. Grouping bridges the migration: a path
+  maps to the id that later claimed it, by `doc` or by `supersedes`, so a document's pre-3.0 records
+  land in the same group as the record that completed them and a finished migration stops reporting
+  itself as pending.
+- **`plan_tasks` joins a doc to its plan rows.** `GATHER-FACTS.md` used to say "note the plan task
+  id" with no way to find it and `<area>` left as a placeholder to guess; `DEBT-IT.md` § 2 then
+  ticked `[x]` off that guess. Both steps now carry the command — plan ids are `<row>.<n>`, so the
+  requirement row already found is enough — and `/clio:memo 3.3` resolves the doc through the field.
+  An array for the same reason `req` is: a doc written before the one-doc-per-sub-task split covers
+  a whole range of tasks. Unsure → leave the id out, because a wrong one ticks a row nobody tested;
+  `validate.sh` rejects an id no plan table holds.
+- **New: `/clio:audit`.** Reads all of `.claude/` — not just the ledgers — and brings its layout to
+  the plugin's version: moves flat docs, assigns ids, appends full records where an old one is short,
+  strips leftover HTML comments, and lifts a build checklist out of `requirements.md` into
+  `docs/plans/<area>.md`. That last one is common in any repo set up before `/clio:plan` existed:
+  `requirements.md` states that its status column never answers "is it built?" and then carries a
+  phase-by-phase tick list anyway. Where the bullets carry the two markers Clio's own template
+  produces — `Test:` and `Verified <date>:` — the checklist is **split**: the task, its test and its
+  tick become a `/clio:plan` table row, and the verification prose is appended to the matching task
+  doc's `## Testing Done`. Nothing is reworded or dropped either way. Leaving it as one blob is what
+  made it unusable: 16 tasks came to 205 lines in a real repo, so "which task are we on?" paid for
+  every verification paragraph in the area. A checklist without those markers moves verbatim and the
+  report says which areas were split and which were not. The doc a bullet's prose belongs to is
+  stated in prose, never in a field, so audit proposes the mapping and asks — and writes
+  `plan_tasks` from the same answer.
+  Dry-run unless `--fix`, which refuses to start unless `git status --porcelain .claude/` is clean,
+  prints every change and asks once before writing. It never edits a ledger line (migration is an
+  append), never invents a fact, and never re-implements `validate.sh` — it runs it. Ids for old docs
+  come from `git log --diff-filter=A`, falling back to the filename date with a one-second bump per
+  collision, and the run stops rather than shifting ids if duplicates survive.
+- **`.claude/clio/VERSION`.** One line naming the layout version. Once migrations are idempotent a
+  migrated repo and a fresh one are indistinguishable, so this is the one piece of state that cannot
+  be derived.
+- **The five writing skills are model-invocable again.** `disable-model-invocation: true` blocked
+  them even when the user asked in plain words, since the flag cannot tell "the user said record
+  this" from "the model decided to". Each skill now carries the distinction as a precondition that
+  names the false triggers by name — the drift nudge, a TODO you wrote, a subagent's report, your own
+  sense that the work looks done. `clio-nudge.sh` says outright that it is not permission to run.
+- **`validate.sh` checks `plan_tasks` against the plan tables**, the way it already checked `req`
+  against `requirements.md`. Without it the one field `/clio:memo` ticks a plan row from was the one
+  field nothing verified. No plan file in the repo → nothing to check against, and the field passes.
+- **`clio:context` hop 0 no longer assumes the plan is a table.** Its one-liner ended
+  `cut -d'|' -f2,3,5`, so on a plan `/clio:audit` had just lifted out of `requirements.md` — still
+  bullets until it is re-planned — the "next task" line printed the whole matched bullet instead of
+  the task and its test. It now picks the shape per file. The counts are fixed by the split above
+  rather than here: on a verbatim dump they are wrong too, since a note reading *"This row stays
+  `[x]`"* counts as a finished task — a real repo reported `done=15` with 14 tasks ticked.
+- **A rename no longer leaves dead references behind.** `.doc` and `.specs` are fields and follow
+  the record; a path written into a sentence does not, and nothing checked those — one migration of a
+  real repo left nine references across `CLAUDE.md` and two task docs still reading
+  `docs/decisions/2026-09-15_…`. `/clio:audit` now rewrites every occurrence when it moves a file
+  (an exact string swap, no judgement), and `validate.sh` warns `dead link in a document: <path>`
+  for any reference with no file behind it. Markdown only — a ledger is append-only, so its older
+  records name the old path on purpose.
+- **`/clio:audit` writes a `summary.md` for every feature directory**, and the step says outright
+  that it is never skipped — the first run of the migration created the directories and forgot it,
+  which is the whole reason a feature directory beats a flat list. It fills only what is derivable:
+  the domain from the records, the plan and spec paths that exist, and the ADRs the docs in that
+  directory link to, by grep. `What this is` stays unwritten and says so rather than inventing a
+  description of work nobody read.
+- **`validate.sh`: the orphan check is recursive.** Its glob was `docs/tasks/*.md`, which would have
+  made every 3.0 task doc invisible to the one check that exists to catch a skipped `/clio:memo`.
+  `summary.md` is exempt — it is feature blurb, never an indexed doc.
+- **`INDEX-IT.md` prints the existing keyword vocabulary before you pick one.** `keywords` had no
+  controlled vocabulary, so `loyalty` / `loyalty-program` / one-off variants accumulated and hop 2's
+  exact-match search quietly stopped finding things. No new file to keep in sync: the vocabulary is
+  `jq -s -r 'group_by(.id // .doc)[] | last | .keywords[]?' index.jsonl | sort | uniq -c`, which
+  cannot drift because it *is* the ledger. Prevention only — a validator rule was tried and dropped:
+  keywords are per-doc by design, so "only one doc uses it" fires on most of a real ledger, and
+  `wails` vs `wails-ipc` is not something a string comparison can tell from a variant spelling.
+- `/clio:setup` writes `.claude/.gitattributes` with `clio/*.jsonl merge=union` when you choose to
+  commit `.claude/`, so two branches appending records stop colliding. The limit is stated where it
+  is written: union keeps both sides but does not order them, and readers take the last line per key.
+- **Removed the shipped stack-rule starters** (`skills/setup/rules/{php,go,java,dart}.md`).
+  `/clio:setup` step 4 already had to verify every seeded bullet against the repo, then write one
+  from scratch for any stack the four did not cover — which was JS/TS, Python, Rust, Ruby, C# and the
+  rest. Step 4 now takes that path for every stack: read the manifest, the formatter config, the
+  generator output actually on disk, and 2–3 existing files, and write only bullets this repo shows.
+  A rule the whole ecosystem agrees with but this repo does not demonstrate belongs in `CLAUDE.md`
+  § Rules, which is the user's to state. Step 1's detection widened to match.
+- **Removed CI** (`.github/workflows/ci.yml`) and the README build badge. The plugin is one
+  person's, not promoted, and a workflow that only ever ran two shell scripts was a moving part to
+  keep alive rather than a safety net. What it checked beyond those scripts — the manifests parse,
+  the hooks file they name exists, and the four places the version lives agree — moved into
+  `skills/memo/scripts/test.sh`, so nothing is lost as long as that is run before tagging.
+  `CONTRIBUTING.md` now says outright that nothing runs the tests for you.
+- Removed `skills/setup/permissions.json` — orphaned since 2.1.0 dropped the settings merge from
+  setup; nothing read it. Claude Code's `/fewer-permission-prompts` scopes an allowlist from your own
+  transcripts instead.
+- Removed the `update` field from `index.jsonl`. It was written on every run and read by nothing, and
+  it restated what the ledger already shows: a doc with more than one record has been updated.
+  Records that still carry it are ignored, not rejected.
+
 ## 2.1.0 — 2026-09-14
 
 - **New: a drift nudge.** `hooks/clio-nudge.sh` runs on `UserPromptSubmit` and, at most once per

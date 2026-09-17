@@ -11,8 +11,12 @@ HTML comments. Declined → say so in the report, don't ask again this session.
 
 Condition: a significant architectural decision was made this run. Check `.claude/docs/decisions/`
 for an existing ADR first (UPDATE before CREATE, as in `RESOLVE-DOC.md`). Else create
-`.claude/docs/decisions/YYYY-MM-DD_<keywords>.md`, index it per `INDEX-IT.md` with `"type":"adr"`,
-and link it from the task doc's `## Related`.
+`.claude/docs/decisions/${ts}_<keywords>.md` with `ts=$(date +%s)`, index it per `INDEX-IT.md` with
+`"type":"adr"` and that same `ts` as its `id`, and link it from the task doc's `## Related`.
+
+ADRs stay in this one flat directory, never inside a feature's folder — an architectural decision is
+read by the features it constrains, and `ls .claude/docs/decisions/` has to keep answering "what has
+this project already committed to?".
 
 ```markdown
 # <Decision title>

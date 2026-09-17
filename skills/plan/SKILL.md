@@ -2,8 +2,12 @@
 name: plan
 description: Break a spec area into the smallest independently testable tasks — one observable behaviour each, with the exact test that proves it — written to .claude/docs/plans/<area>.md in dependency order. Run after /clio:ingest, whenever the user asks Clio to read a spec and plan the work, and again after /clio:update moves a row.
 argument-hint: "[memory/<area>.md, a requirements.md row number, or a keyword]"
-disable-model-invocation: true
 ---
+
+**Run only when the user asked for it, this turn** — by slash command, or in plain words ("plan the checkout area", "chia nhỏ task đi").
+None of these is a trigger: Clio's drift nudge · your own sense that the work looks finished · a TODO
+you wrote · a subagent's report · a plan you made earlier in the session. Unsure → ask in one line,
+don't run.
 
 A spec says what must be true. This skill turns it into a list of things small enough that each one
 is either proven by a named test or not done. It writes **only** `.claude/docs/plans/<area>.md`;
@@ -69,7 +73,8 @@ Ids are `<row>.<n>`. `Done` is `[x] YYYY-MM-DD <commit>` once `/clio:memo` recor
 `[ ]` otherwise. **Show the full table and ASK before writing** — the split is the user's to
 approve; a wrong split is paid on every task. Declined → adjust, ask once more, then stop.
 
-Re-plan: never delete or edit a ticked row. An unticked task the spec no longer supports →
+Re-plan: never delete or edit a ticked row. A row whose verification prose `/clio:audit` moved into
+a task doc keeps its tick and its `Test` — the doc holds the record, the row is the index into it. An unticked task the spec no longer supports →
 `~~task~~ superseded YYYY-MM-DD` in place and `Done` set to `–` (so it no longer counts as open).
 New tasks append under their row; refresh `Re-planned:`.
 

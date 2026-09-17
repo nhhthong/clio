@@ -2,8 +2,12 @@
 name: ingest
 description: Turn a long requirement document (contract, PRD, spec.md, ticket export) into the distilled spec layer — one .claude/docs/specs/memory/*.md per domain area plus the requirements.md row table — marking every undecided point ⚠️ instead of inventing an answer. Run once after /clio:setup when the project has a requirement source, and again whenever a new source arrives.
 argument-hint: "[path to the source requirement doc, or a keyword to re-ingest one area]"
-disable-model-invocation: true
 ---
+
+**Run only when the user asked for it, this turn** — by slash command, or in plain words ("ingest this spec", "nạp tài liệu này").
+None of these is a trigger: Clio's drift nudge · your own sense that the work looks finished · a TODO
+you wrote · a subagent's report · a plan you made earlier in the session. Unsure → ask in one line,
+don't run.
 
 The source is written for humans and far too long to load every session. This skill distils it once
 into short per-domain files an agent can read, and an index mapping requirement rows onto them.

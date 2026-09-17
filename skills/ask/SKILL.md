@@ -22,11 +22,13 @@ ledger does not.*
 | `/clio:memo` | record finished work: task doc, `index.jsonl`, `debt.jsonl` | after each feature / fix |
 | `/clio:update` | a spec changed: record the delta vs. existing code, move the row marker | when requirements change |
 | `/clio:debt [filter]` | what is still owed, actionable vs. blocked | any time |
+| `/clio:audit [--fix]` | sweep `.claude/`, bring its layout to this plugin version; dry-run unless `--fix` | after upgrading the plugin |
 | `/clio:ask [x]` | this | when unsure |
 
 Three questions, three files: decided? → `.claude/docs/specs/requirements.md` · built? →
 `.claude/clio/index.jsonl` · owed? → `.claude/clio/debt.jsonl`. The `.jsonl` files are append-only;
-the last line per `id` / `doc` is current state.
+the last line per `id` is current state. A task doc's `id` is its creation timestamp and its
+filename prefix, so it survives the doc being moved or renamed.
 
 **Argument names a command** → read `${CLAUDE_PLUGIN_ROOT}/skills/<name>/SKILL.md` (its
 `steps/` or `HOP*.md` only if needed). ≤ 15 lines: purpose · files read · files written · one

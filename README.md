@@ -6,11 +6,10 @@
   **A project-memory kit for `.claude/`: layout, ledgers, and the loop that keeps them true.**
   Claude reads what was decided, built and owed before it works, and asks instead of guessing.
 
-  Not auto-memory, not a skills pack, not a code generator. Nothing is written unless you ran a command.
+  Not auto-memory, not a skills pack, not a code generator. Nothing is written unless you asked for it.
 
   [![Claude Code plugin](https://img.shields.io/badge/Claude_Code-plugin-D97757?logo=anthropic&logoColor=white)](https://code.claude.com/docs/en/plugins)
-  [![Version](https://img.shields.io/badge/version-2.1.0-blue)](CHANGELOG.md)
-  [![test](https://github.com/nhhthong/clio/actions/workflows/ci.yml/badge.svg)](https://github.com/nhhthong/clio/actions/workflows/ci.yml)
+  [![Version](https://img.shields.io/badge/version-3.0.0-blue)](CHANGELOG.md)
   [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 </div>
 
@@ -60,7 +59,9 @@ record of, it tells Claude once per session to say that `/clio:memo` is owed. It
 and cannot run the memo for you.
 
 Requires `bash`, `jq`, `git`, `awk`, `sed` — nothing else. Plugin updates never touch your
-`.claude/`; setup never touches anything outside it.
+`.claude/`; setup never touches anything outside it. After an upgrade that moves the layout,
+`/clio:audit` migrates it — dry-run by default, and `--fix` refuses to start on a dirty `.claude/`
+so `git checkout .claude/` always undoes it.
 
 ## Suggested tooling
 
@@ -89,9 +90,9 @@ Three layers. The lower two stand on their own; the loop needs both.
 
 | Layer | Holds | Use without the plugin? |
 |---|---|---|
-| **Layout** | `CLAUDE.md` / `CONTEXT.md` templates, `rules/<stack>.md` starters, a formatter hook | yes, copy the files |
+| **Layout** | `CLAUDE.md` / `CONTEXT.md` templates, path-scoped `rules/`, a formatter hook | yes, copy the files |
 | **Ledgers** | `index.jsonl` (built), `debt.jsonl` (owed), the `requirements.md` register (decided), their schema and `validate.sh` | yes, if you write the schema by hand |
-| **Loop** | the eight `clio:*` skills that read and write the layers above, and the drift nudge that notices when you skipped one | no |
+| **Loop** | the nine `clio:*` skills that read and write the layers above, and the drift nudge that notices when you skipped one | no |
 
 `/clio:setup` installs the first two layers into your repo once. The skills and the validator stay
 in the plugin, so an update never touches your `.claude/`.
@@ -100,7 +101,7 @@ in the plugin, so an update never touches your `.claude/`.
 
 | | Clio | Auto-memory (claude-mem, mem0…) | Skills packs (mattpocock/skills, superpowers…) |
 |---|---|---|---|
-| Writes | only via `/clio:memo`, `/clio:update` | automatically, every session | CONTEXT.md / ADRs at most; no ledger |
+| Writes | only when you ask — by command or in plain words; never on the agent's own initiative | automatically, every session | CONTEXT.md / ADRs at most; no ledger |
 | Installs into your repo | a layout you keep even if you drop the plugin | nothing | nothing |
 | Format | append-only JSONL, validated | vector store / summaries | one `SKILL.md` per technique |
 | Answers | decided? built? owed? joined on the requirement row | "what did we talk about" | how to do X well |
@@ -121,17 +122,20 @@ Everything lives under `.claude/`. Three questions, one home each.
 | **Decided** | `docs/specs/requirements.md` | one row per requirement → spec file → decided / open / blocked | humans, `/clio:update` |
 | | `docs/specs/memory/*.md` | distilled decisions per area, each quoting its source | `/clio:ingest` |
 | | `docs/plans/<area>.md` | decided rows split into the smallest testable tasks | `/clio:plan` |
-| **Built** | `clio/index.jsonl` | one line per documented run, append-only; last line per doc is its current state | `/clio:memo` |
-| | `docs/tasks/*.md` | one doc per feature, for life; updated, never forked | `/clio:memo` |
-| | `docs/decisions/*.md` | ADRs | `/clio:memo` |
+| **Built** | `clio/index.jsonl` | one line per documented run, append-only; last line per `id` is its current state | `/clio:memo` |
+| | `docs/tasks/<feature>/<id>_<name>.md` | one doc per sub-task, for life; updated, never forked | `/clio:memo` |
+| | `docs/decisions/*.md` | ADRs, flat — read by the features they constrain | `/clio:memo` |
 | **Owed** | `clio/debt.jsonl` | bugs, unverified work, open questions, append-only | `/clio:memo`, `/clio:update` |
 | **Always loaded** | `CLAUDE.md` | rules only, ~80 lines; imports `CONTEXT.md`; domain vocabulary | you, `/clio:setup` |
 | | `CONTEXT.md` | stable facts: entities, colliding terms, key flows, landmines | you, `/clio:memo` (with a yes) |
-| | `rules/<stack>.md` | path-scoped, loads only for the files it names | you, `/clio:setup` |
+| | `rules/<stack>.md` | path-scoped, loads only for the files it names; written from what this repo shows, never from a template | you, `/clio:setup` |
 
 The three ledgers join on `req`, the requirement row number. `.jsonl` files are append-only: an
-update is a new line with the same `id`, and readers take the last. Only `CLAUDE.md` and
-`CONTEXT.md` load every session; the rest is queried on demand, never read whole.
+update is a new line with the same `id`, and readers take the last. A task doc's `id` is its creation
+timestamp and its filename prefix, so moving or renaming the doc never breaks its history. Only
+`CLAUDE.md` and `CONTEXT.md` load every session; the rest is queried on demand, never read whole —
+`ls docs/tasks/` names the features, `ls docs/tasks/<feature>/` names its sub-tasks, and hop 2 reads
+one `## Decisions` block rather than a whole file.
 
 Already have a `.claude/`? Clio appends its import and one `## Project memory` block, then asks
 whether to bring `CLAUDE.md`, `CONTEXT.md` and `rules/` to this layout. Yes: the diff is shown and
@@ -182,9 +186,10 @@ the working tree is clean of anything but `.claude/` and `HEAD` already appears 
 | `/clio:ingest <doc>` | requirement document → spec files + row table | new source arrives |
 | `/clio:plan <area>` | decided rows → smallest testable tasks | after ingest, when a row moves |
 | `/clio:context [x]` | no arg: where are we · with area / row / id / question: spec, built, owed, quoted | Claude, before work; you, to ask "why?" |
-| `/clio:memo [doc]` | record finished work: task doc, ledgers, plan tick, ADR | after each feature or fix |
+| `/clio:memo [doc\|task id]` | record finished work: sub-task doc, ledgers, plan tick, ADR | after each feature or fix |
 | `/clio:update [spec]` | a spec changed: what it invalidates, move the row marker (asks before ⚠️ → ✅) | requirements change |
 | `/clio:debt [filter]` | what is still owed, actionable vs. blocked | any time |
+| `/clio:audit [--fix]` | sweep `.claude/`, bring its layout to this plugin version; dry-run unless `--fix` | after upgrading the plugin |
 | `/clio:ask [x]` | explain any of the above | when unsure |
 
 Nothing outside `.claude/` is touched. Without `.claude/clio/` the skills say so and stop.
@@ -206,9 +211,9 @@ Add to the project's `.claude/settings.json`; members get the plugin when they t
 
 Bugs and questions go to [Issues](https://github.com/nhhthong/clio/issues). Schema, validator and
 read-side queries are kept in sync by hand; [CONTRIBUTING.md](CONTRIBUTING.md) says where each
-lives. CI runs the validator and hook tests on every push and rejects a version that disagrees
-across the manifests, this README and [CHANGELOG.md](CHANGELOG.md) — every user-visible change
-gets a line there.
+lives. `bash skills/memo/scripts/test.sh` and `bash hooks/test-nudge.sh` cover the validator and the
+drift hook, and the first also rejects a version that disagrees across the manifests, this README and
+[CHANGELOG.md](CHANGELOG.md) — every user-visible change gets a line there.
 
 ## License
 

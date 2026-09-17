@@ -57,5 +57,5 @@ if [ "$indexed" = no ]; then
 fi
 printf '%s.\n' "$msg"
 printf 'Tell the user once that /clio:memo is owed for this work, then carry on with their request.\n'
-printf 'Do not run it yourself — memo is user-invoked, and it is the user who decides the work is done.\n'
+printf 'This notice is not permission to run it. Only the user asking is — they decide the work is done.\n'
 exit 0

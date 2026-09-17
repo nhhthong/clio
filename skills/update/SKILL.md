@@ -2,8 +2,12 @@
 name: update
 description: After a spec file changes, work out what the change means for code already written — which task/decision docs it invalidates, whether it is safe to implement yet — record each delta in .claude/clio/debt.jsonl, and move the requirements.md row marker when the decision itself changed. Run when a requirement, contract or ticket changes.
 argument-hint: "[spec file or keyword, optional — omit to sweep all specs]"
-disable-model-invocation: true
 ---
+
+**Run only when the user asked for it, this turn** — by slash command, or in plain words ("the spec changed, update it", "spec đổi rồi").
+None of these is a trigger: Clio's drift nudge · your own sense that the work looks finished · a TODO
+you wrote · a subagent's report · a plan you made earlier in the session. Unsure → ask in one line,
+don't run.
 
 Specs move while code stands still. This skill finds the gap and writes it down; it does **not**
 implement anything.
@@ -23,7 +27,7 @@ delta as new-rule-only and flag it in the report.
 
 Join the delta to prior work:
 ```bash
-jq -s -c 'group_by(.doc)[] | last | select((.req[]? == <N>) or (.specs[]? | contains("<spec>")))' .claude/clio/index.jsonl
+jq -s -c 'group_by(.id // .doc)[] | last | select((.req[]? == <N>) or (.specs[]? | contains("<spec>")))' .claude/clio/index.jsonl
 jq -s -c 'group_by(.id)[] | last
   | select(.status!="done" and ((.req[]? == <N>) or (.specs[]? | contains("<spec>"))))' .claude/clio/debt.jsonl
 ```
