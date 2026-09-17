@@ -55,6 +55,18 @@ resolves, and `validate.sh` names it without failing on it.
   this" from "the model decided to". Each skill now carries the distinction as a precondition that
   names the false triggers by name — the drift nudge, a TODO you wrote, a subagent's report, your own
   sense that the work looks done. `clio-nudge.sh` says outright that it is not permission to run.
+- **Readers group with the bridge, never on `.id` alone.** `group_by(.id)` drops every pre-3.0
+  record into one `null` bucket whose `last` names a path that no longer exists — on a migrated repo
+  hop 2 answered "which doc touched this file?" with a ghost. `HOP2.md` and `RESOLVE-DOC.md` § Case B
+  carry the bridge now, and it is correct on a never-migrated ledger too.
+- **The plan lookup matches the `req` column, not the task id.** `GATHER-FACTS.md` assumed ids are
+  `<row>.<n>`; a plan `/clio:audit` lifts out of an old `requirements.md` keeps that project's own
+  numbering, so `1.14` can serve req `10` and the old grep found nothing. The column holds the join
+  either way.
+- **`/clio:audit` may write `CLAUDE.md` and `CONTEXT.md`** — a path it moved, silently; a passage the
+  move made false, after showing the diff and asking. Never the `## Rules` bullets, the domain
+  vocabulary, the import line or the project description: audit's licence covers what describes
+  Clio's layout, because audit is what moved it.
 - **`validate.sh` checks `plan_tasks` against the plan tables**, the way it already checked `req`
   against `requirements.md`. Without it the one field `/clio:memo` ticks a plan row from was the one
   field nothing verified. No plan file in the repo → nothing to check against, and the field passes.
