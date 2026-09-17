@@ -175,6 +175,28 @@ case $mode in
         && info "renamed doc, superseded: $doc" \
         || fail "index record points at a missing doc and nothing supersedes it: $doc"
     done < <(jq -r '.doc' <<<"$idxjson" 2>/dev/null | sort -u)
+    # One id, one row. A re-plan supersedes an unticked row *in place*; appending a second row with
+    # the same id instead leaves two, and `Done` then depends on which one a reader hits first.
+    for pl in .claude/docs/plans/*.md; do
+      [ -e "$pl" ] || continue
+      while read -r dup; do
+        [ -n "$dup" ] && fail "$pl has task id $dup twice — supersede a row in place, never append a copy"
+      done < <(awk -F'|' 'NF>5 && $2 ~ /^ *[0-9]+(\.[0-9]+)* *$/ {gsub(/^ +| +$/,"",$2); print $2}' "$pl" | sort | uniq -d)
+    done
+
+    # A spec-delta says the spec moved and the code has not followed. /clio:plan turns one into a
+    # task carrying its id, so an open delta named in no plan means no plan absorbed it — and that
+    # is silent: every later session reads a plan that no longer matches the decision.
+    shopt -s nullglob
+    if compgen -G '.claude/docs/plans/*.md' >/dev/null; then
+      while read -r id; do
+        [ -z "$id" ] && continue
+        grep -qrF -- "$id" .claude/docs/plans/ \
+          || warn "spec-delta $id is in no plan — /clio:audit, then /clio:plan <area>"
+      done < <(jq -s -r 'group_by(.id)[] | last
+        | select(.kind=="spec-delta" and .status!="done" and .blocked_by==null) | .id' <<<"$debtjson")
+    fi
+
     # Links inside a document's prose. `.doc` and `.specs` are fields and already checked; a path
     # written into a sentence is not, and /clio:audit renaming a doc is exactly what breaks those.
     # Markdown only: a ledger is append-only, so its older records name the old path on purpose and

@@ -178,6 +178,19 @@ grep -q 'dead link in a document: .claude/docs/decisions/1700000099_gone.md' <<<
 grep -q 'dead link.*<feature>' <<<"$out" && { echo "template placeholder wrongly reported as a path"; echo "$out"; exit 1; }
 : > "$A"
 
+# A spec-delta names a change the code has not followed. /clio:plan absorbs one by writing a task
+# that carries its id, so an open, unblocked delta in no plan means the plan still matches the old
+# decision — silently, until someone reads it. Blocked or done deltas are not the plan's to absorb.
+idx 1700000001 "$A" '["a.go"]' '[1]' '["1.1"]'      >  $I
+debt sd spec-delta '[1]' null                       >  $D
+out=$(bash "$V" all) || { echo "an unabsorbed spec-delta must warn, not fail"; echo "$out"; exit 1; }
+grep -q 'spec-delta sd is in no plan' <<<"$out" || { echo "unabsorbed spec-delta not reported"; echo "$out"; exit 1; }
+echo '| 9.9 | absorbs sd | 1 | t | - | [ ] |' >> .claude/docs/plans/acct.md
+out=$(bash "$V" all); grep -q 'spec-delta sd is in no plan' <<<"$out" && { echo "delta named in a plan still reported"; echo "$out"; exit 1; }
+debt sd spec-delta '[1]' '"PO owes the rule"'       >  $D          # blocked: not the plan's to absorb
+out=$(bash "$V" all); grep -q 'is in no plan' <<<"$out" && { echo "blocked delta wrongly reported"; echo "$out"; exit 1; }
+sed -i '$d' .claude/docs/plans/acct.md
+
 # The manifests and the four places the version lives. There is no CI, so this is the only thing
 # that catches a release naming two different builds — run it before you tag.
 cd "$(dirname "$V")/../../.."

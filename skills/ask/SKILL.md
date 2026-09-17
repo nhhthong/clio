@@ -15,14 +15,15 @@ ledger does not.*
 
 | Command | Does | Run when |
 |---|---|---|
-| `/clio:setup` | scaffold `.claude/`, fill CLAUDE.md / CONTEXT.md by asking | once per repo |
+| `/clio:setup` | scaffold `.claude/`, fill CLAUDE.md / CONTEXT.md by asking. Never touches the stack | once per repo |
 | `/clio:ingest <doc>` | distil a requirement document into `docs/specs/memory/*.md` + `requirements.md` | once, and when a new source arrives |
-| `/clio:plan <area>` | split a spec area into the smallest testable tasks → `docs/plans/<area>.md` | after ingest, and when a row moves |
+| `/clio:plan <area>` | split a spec area into the smallest testable tasks → `docs/plans/<area>.md`. `infra` is the foundation: it settles the stack, writes `docs/plans/infra.md` and `rules/<stack>.md`, and needs no spec | `infra` right after setup; an area after ingest, and when a row moves |
 | `/clio:context [x]` | no arg: where are we (plans done/open, debt queue) · with area/row/id/question: spec, what was built, what is owed, quoted from the docs | Claude triggers it before work; you, when asking "where are we?" or "why?" |
 | `/clio:memo` | record finished work: task doc, `index.jsonl`, `debt.jsonl` | after each feature / fix |
 | `/clio:update` | a spec changed: record the delta vs. existing code, move the row marker | when requirements change |
 | `/clio:debt [filter]` | what is still owed, actionable vs. blocked | any time |
-| `/clio:audit [--fix]` | sweep `.claude/`, bring its layout to this plugin version; dry-run unless `--fix` | after upgrading the plugin |
+| `/clio:audit [--fix]` | check requirement rows, plan tasks and the ledgers against each other; `--fix` re-plans the areas that drifted | after a spec changes |
+| `/clio:migrate [--fix]` | move `.claude/` onto this plugin version's layout; dry-run unless `--fix` | after upgrading the plugin |
 | `/clio:ask [x]` | this | when unsure |
 
 Three questions, three files: decided? → `.claude/docs/specs/requirements.md` · built? →

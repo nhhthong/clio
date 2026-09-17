@@ -8,7 +8,7 @@ writes leftover business from a completed run. Keyed by `id`, one line per `id`.
 N=18
 jq -s -c --argjson n $N 'group_by(.id)[] | last
   | select((.req[]?==$n) and .status!="done")
-  | {id, kind, blocked:(.blocked_by!=null), action}' .claude/clio/debt.jsonl
+  | {id, kind, blocked:(.blocked_by!=null), action, docs}' .claude/clio/debt.jsonl
 
 # widen by area — pair domain with specs/req, never filter on domain alone (a pre-2.1 record may lack it; `validate.sh all` names those)
 jq -s -c 'group_by(.id)[] | last | select(.status!="done")
@@ -27,5 +27,10 @@ Read two fields first:
 
 `code-debt` or `spec-delta` with `blocked_by: null` in your area is a live landmine and your work
 queue simultaneously — surface it before you start.
+
+`docs` on a `spec-delta` names the task docs the change invalidated. Hop 2 will hand you those same
+docs as current state, and until the rework lands they *are* current — the code they describe is
+still there. Say which ones a delta targets, so nobody reads a doc's `## Decisions` as the pattern to
+follow when a plan task exists to undo it.
 
 Then hop 4 (coverage) and Report, back in `SKILL.md`.

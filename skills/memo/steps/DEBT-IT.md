@@ -9,11 +9,22 @@ line.
 
 ```bash
 jq -s -c --argjson n <req> 'group_by(.id)[] | last
-  | select((.req[]? == $n) and .status!="done") | {id, kind, status, what, code}' .claude/clio/debt.jsonl
+  | select((.req[]? == $n) and .status!="done") | {id, kind, status, what, code, docs}' .claude/clio/debt.jsonl
 ```
 Fully resolved → append with `status:"done"`, commit hash in `action`. Partly → `status:"in-process"`,
 narrow `what` to what is left. Unblocked but not finished → `blocked_by:null`, keep `status`. Include
 the items `clio:context` flagged for this area, not only your diff.
+
+**A `spec-delta` also names the docs it invalidated, in `docs[]`.** `/clio:update` put them there
+because it read them to work out the delta. Closing or narrowing one, open every doc in that list
+that is **not** the doc this run wrote, and relabel the section the change made untrue —
+`## [SUPERSEDED YYYY-MM-DD] <heading>`, plus `— REVERTED, DO NOT RE-IMPLEMENT` when the code is gone
+(`WRITE-DOC.md` § UPDATE). Keep the body; it is still the record of what was built and why.
+
+Skip this and hop 2 keeps returning that doc as current state, because nothing in a ledger record
+says its subject was replaced — a reader asking how the feature works opens a doc describing code
+this run just removed. Cannot tell which section went stale → file a `doc-stale` record naming the
+doc rather than guessing, and say so in the report.
 
 ## 2. Was this run verified?
 

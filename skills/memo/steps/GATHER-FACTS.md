@@ -36,7 +36,7 @@ grep -in "<feature keyword>" .claude/docs/specs/requirements.md
 ## Which plan task this work is
 
 Match on the plan table's **`req` column**, not on the task id. `/clio:plan` numbers its ids
-`<row>.<n>`, but a plan `/clio:audit` lifted out of an old `requirements.md` keeps that project's own
+`<row>.<n>`, but a plan `/clio:migrate` lifted out of an old `requirements.md` keeps that project's own
 numbering — phases, epics, whatever it used — so `1.14` can serve req `10`. The `req` column holds
 the join either way, and it means you never have to guess the area:
 ```bash

@@ -31,8 +31,10 @@ jq -s -c 'group_by(.id // .doc)[] | last | select((.req[]? == <N>) or (.specs[]?
 jq -s -c 'group_by(.id)[] | last
   | select(.status!="done" and ((.req[]? == <N>) or (.specs[]? | contains("<spec>"))))' .claude/clio/debt.jsonl
 ```
-Open the matching docs and read `## Decisions`, `## Side Effects`, `## Follow-up` — that is what a
-spec change invalidates. Note the code paths named there for `code[]`.
+Open the matching docs and read `## Decisions`, `## Side Effects`, `## Follow-up`; that is what a
+spec change invalidates. Note the code paths named there for `code[]`, **and the docs themselves for
+`docs[]`** — that list is how `/clio:memo` knows which older doc to mark superseded once the rework
+lands, and it is the only thing that stops hop 2 serving a doc the change made untrue.
 
 ## 2. Decide the status
 

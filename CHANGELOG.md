@@ -1,10 +1,68 @@
 # Changelog
 
+## 3.1.0 — 2026-09-17
+
+- **New: `/clio:audit`, and the old `audit` is now `/clio:migrate`.** The skill that moves a
+  `.claude/` onto a new layout writes across the whole memory layer, so calling it an audit oversold
+  the inspection and undersold the write; `CONTRIBUTING.md` was already calling it a migration. The
+  name is free for what was missing: a check of the three layers against each other. `requirements.md`
+  says what was decided, `docs/plans/*.md` how it gets built, the ledgers what was built — each
+  written by a different command at a different time, so they drift, and a spec row that moves months
+  after its area was planned is silent. `/clio:audit` reports five drifts, the expensive two being an
+  open `spec-delta` no plan absorbed and a ticked task whose row has moved since. It **writes no
+  plan**: `/clio:plan` stays the only writer of `docs/plans/*.md`, and `--fix` runs it for the
+  drifted areas, which still show their table and ask before writing.
+- **A reworked doc gets marked superseded, so hop 2 stops serving it as current.** `WRITE-DOC.md`
+  already had the mechanism — relabel the stale section `## [SUPERSEDED YYYY-MM-DD]`, add
+  `— REVERTED, DO NOT RE-IMPLEMENT` when the code is gone — but nothing triggered it, because
+  `/clio:memo` resolves one doc and that is the doc it just wrote. A `spec-delta` names the docs it
+  invalidated in `docs[]`; `/clio:update` fills that list because it read them to find the delta, and
+  `DEBT-IT.md` § 1 now walks it when the delta is closed or narrowed. Without this, a query for how a
+  feature works returns a doc describing code the same session removed.
+- **`validate.sh` FAILs on the same task id twice in one plan file.** A re-plan strikes an unticked
+  row *in place*; appending a superseded copy instead leaves two rows with one id, and `Done` then
+  depends on which one a reader hits first.
+- **`validate.sh` warns when an open `spec-delta` appears in no plan.** `/clio:update` writes the
+  record, `/clio:plan` absorbs it into a task carrying its `id`, and until then every session reads a
+  plan that matches the old decision. Blocked and done deltas are not the plan's to absorb and are
+  not reported.
+- **`/clio:plan` § 3 says what to do with a *ticked* row whose spec moved.** The rule covered
+  unticked rows only, so work already built had no path: the spec changes, the code is there, and
+  nothing in the plan says whether to change it or take it out. A ticked row is still never edited or
+  unticked — it records that something once ran. What changes is what gets written under it: a task
+  proving the new behaviour, or a **revert** task whose `Test` proves the old one is gone. A revert
+  without a test that fails while the old behaviour is still there is a claim, not a revert.
+- **`/clio:plan` owns the stack; `/clio:setup` no longer touches it.** Setup used to detect the
+  stack, ask an empty repo to choose one *before `/clio:ingest` had run*, then write an unverified
+  `rules/<stack>.md` and a `debt.jsonl` record apologising for it. The split is Clio's own rule,
+  decided ≠ built: a stack you can read off `go.mod` and a stack nobody has picked are different
+  questions, and neither belongs in a step that runs before the spec exists.
+- **New: `docs/plans/infra.md`.** The foundation was "Row 0", emitted into whichever `plans/<area>.md`
+  ran first and skipped afterwards, so a repo-wide concern was owned by run order. It is now its own
+  plan file with `req: 0` and `domain: infra`, which `HOP0.md` counts like any other area. It needs
+  no spec, so `/clio:plan infra` runs straight after setup — the one plan command a Lite repo still
+  needs. A repo with code gets one row per fact read off its manifests and config, **ticked by
+  running the command, not by seeing the file**: `go.mod` existing is not proof that `go build`
+  passes. An empty repo gets 2–3 researched candidates instead, Context7 first where it is available
+  since the point is the current documented command rather than a recalled one, each with its real
+  scaffold, build and test commands and the layout its own docs recommend; the user picks, and an ADR
+  records the choice. Research stops at what the scaffold needs — a library for a domain is chosen
+  when that domain is planned, because choosing it here guesses phases ahead of a spec row that is
+  usually still ⚠️. Every researched fact carries its source and the date.
+- `rules/<stack>.md` and the formatter hook moved to `/clio:plan` with the stack, and `/clio:setup`
+  stopped asking batch 2 for the formatter command and the generated paths. Both are read off the
+  repo's own config now; a recalled command is worse than a read one.
+- **`clio:context` hop 3 surfaces a `spec-delta`'s `docs[]`.** The documented query projected
+  `{id, kind, blocked, action}` and dropped the one field naming the task docs the change invalidated
+  — the same docs hop 2 hands back as current state. Without it nobody connects "this doc describes
+  the pattern to follow" with "a plan task exists to undo it".
+
 ## 3.0.0 — 2026-09-17
 
 **Breaking: task docs move into a directory per feature, and `index.jsonl` keys on `id`.**
-`/clio:audit` migrates an existing `.claude/`; nothing forces you to — a flat pre-3.0 doc still
+`/clio:audit` migrates an existing `.claude/` (renamed `/clio:migrate` in 3.1.0); nothing forces you to — a flat pre-3.0 doc still
 resolves, and `validate.sh` names it without failing on it.
+
 
 - **One directory per feature, one doc per sub-task.** `.claude/docs/tasks/<feature>/<id>_<name>.md`,
   plus an optional `summary.md` holding only what `ls` cannot say. A long-lived feature used to be

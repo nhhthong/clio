@@ -6,8 +6,11 @@
 - Validation: `skills/memo/scripts/validate.sh`. Every rule the schema states, the validator checks.
 - Read-side queries: `skills/context/HOP*.md`. Status semantics: `skills/update/SKILL.md` § 2.
 - `hooks/clio-nudge.sh` reads `index.jsonl` `.commits[]` as well, so that field lives in four files.
-- Layout migrations: `skills/audit/SKILL.md`. A field or path that changes shape needs the step that
+- Layout migrations: `skills/migrate/SKILL.md`. A field or path that changes shape needs the step that
   moves an existing `.claude/` onto it, or upgrading the plugin silently strands every old repo.
+- Drift between the layers: `skills/audit/SKILL.md` reports it, `validate.sh` warns on the one case
+  that is derivable, and `skills/plan/SKILL.md` § 3 holds the rules for re-planning around a ticked
+  row. Audit never writes a plan; `/clio:plan` is the only writer of `docs/plans/*.md`.
 
 Change a field in one place, update the others in the same commit. Two invariants span files the
 same way and are easy to miss:

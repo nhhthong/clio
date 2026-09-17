@@ -1,6 +1,6 @@
 ---
 name: setup
-description: Set up Clio in the current project — scaffold .claude/ (CLAUDE.md, CONTEXT.md, requirements.md, the two ledgers, stack rules), then fill them by asking the user, never guessing. Run once per repository, before any other clio:* skill.
+description: Set up Clio in the current project — scaffold .claude/ (CLAUDE.md, CONTEXT.md, requirements.md, the two ledgers), then fill them by asking the user what nothing on disk can tell you. Never guesses, and never touches the stack; /clio:plan infra settles that next. Run once per repository, before any other clio:* skill.
 ---
 
 **Run only when the user asked for it, this turn** — by slash command, or in plain words ("set Clio up here", "cài clio vào repo này").
@@ -9,7 +9,7 @@ you wrote · a subagent's report · a plan you made earlier in the session. Unsu
 don't run.
 
 Install Clio's project memory into the repository at the current working directory. Do every step
-yourself with Bash, in order. The user answers three `AskUserQuestion` batches (steps 0, 2, 5) and
+yourself with Bash, in order. The user answers three `AskUserQuestion` batches (steps 0, 2, 4) and
 approves the two drafted files (step 2) — nothing else. Never guess, never ask permission for an
 action listed here, never write `CLAUDE.md` or the context file without the step-2 yes.
 
@@ -41,13 +41,11 @@ mkdir -p .claude/rules .claude/clio .claude/docs/specs/memory .claude/docs/tasks
 [ -f "$CTX" ]                             || cp "$T/CONTEXT.md"      "$CTX"
 [ -f .claude/docs/specs/requirements.md ] || cp "$T/requirements.md" .claude/docs/specs/requirements.md
 touch .claude/clio/index.jsonl .claude/clio/debt.jsonl
-echo 3.0 > .claude/clio/VERSION          # layout version; /clio:audit reads it to know what to migrate
-ls package.json pyproject.toml requirements.txt composer.json go.mod Cargo.toml Gemfile \
-   pom.xml build.gradle* pubspec.yaml *.csproj 2>/dev/null
+echo 3.0 > .claude/clio/VERSION          # layout version; /clio:migrate reads it to know what to migrate
 ```
-Whatever that lists is the stack. Nothing listed → look once more (`git ls-files | sed 's/.*\.//' |
-sort | uniq -c | sort -rn | head`) before concluding the repo has no code. `.claude/rules/` stays
-empty until step 4 writes it.
+`.claude/rules/` stays empty. What the code is built with is `/clio:plan`'s job — it writes
+`docs/plans/infra.md` and `rules/<stack>.md` from what the repo shows, or from researched docs when
+there is no repo yet. This skill never guesses at a stack.
 
 `CLAUDE.md` — the block below copies the template when there is none, else keeps the existing file
 (root `CLAUDE.md` wins over `.claude/CLAUDE.md`) and appends only what is missing; the import path
@@ -72,16 +70,15 @@ Each fill-in is an HTML comment holding its own instructions.
   or the existing `## Rules` bullets.
 - `CONTEXT.md`: leave landmine sections empty; incidents fill them later.
 - Both ≤ ~150 non-blank lines combined; path-specific content → `.claude/rules/` with `paths:`
-  frontmatter. A mechanical rule → a hook (step 6), not a bullet.
-- **ASK batch 2**, one call: the `domain` vocabulary (e.g. `account checkout admin infra all`) ·
-  i18n · timezone · money representation · generated files and their real source · formatter
-  command · anything expensive to get wrong (payment, auth, deletion, PII). Vocabulary → the
-  Domains line; generated paths → `CONTEXT.md` § Source of truth; the rest → `## Rules` bullets.
+  frontmatter. A mechanical rule → a hook, which `/clio:plan` offers once `rules/` names the command.
+- **ASK batch 2**, one call, and only for what nothing on disk can tell you: the `domain`
+  vocabulary (e.g. `account checkout admin infra all`) · i18n · timezone · money representation ·
+  anything expensive to get wrong (payment, auth, deletion, PII). Vocabulary → the Domains line; the
+  rest → `## Rules` bullets. Don't ask for the formatter command or the generated paths: `/clio:plan`
+  reads both off the repo's own config, and a recalled command is worse than a read one.
 - **Greenfield:** fill `CONTEXT.md` § Entities/Terms/Key Flows straight from the requirement
-  document named in batch 1 (nothing else exists yet); leave § Dev Environment and § Source of
-  truth empty. Add to batch 2: stack + versions, storage, the architectural seam; write them as the
-  opening paragraph plus a one-line § Architecture, and record the decision as an ADR (template:
-  `${CLAUDE_PLUGIN_ROOT}/skills/memo/steps/WRAP-UP.md`).
+  document named in batch 1 (nothing else exists yet); leave § Dev Environment, § Architecture and
+  § Source of truth empty. `/clio:plan` fills them once the stack is settled and the scaffold exists.
 - **Draft, show, ASK — then write.** Both files are drafted in full from the batch-2 answers and
   what the repo verifiably shows (`ls`, manifests, existing docs; nothing inferred). Print each
   draft whole, then one `AskUserQuestion`: approve as-is · edit (which lines) · leave that file's
@@ -94,41 +91,14 @@ Each fill-in is an HTML comment holding its own instructions.
 
 ## 3. Requirements
 
-- **Full** → tell the user to run `/clio:ingest <file>` when this setup finishes, then
-  `/clio:plan <area>` per area to get the testable task list.
+- **Full** → tell the user to run `/clio:plan infra` first, then `/clio:ingest <file>`, then
+  `/clio:plan <area>` per area for the testable task list.
 - **Lite** → replace everything below the title in `requirements.md` with one line:
   `Lite mode — no requirement source; every record uses req: [] and joins on domain/keywords/files.`
+  Lite skips `/clio:ingest`, so `/clio:plan infra` is the one plan command it still needs: it reads
+  the stack off the repo and writes `rules/`, neither of which this skill does.
 
-## 4. Stack rules
-
-One `.claude/rules/<stack>.md` per stack step 1 found, 10–20 lines, `paths:` frontmatter naming that
-stack's extensions — **or none at all**. Nothing is copied in: every bullet is read off this repo, so
-a rule is true here or it is not written.
-
-Read, don't recall. For each bullet, the repo has to show it:
-- **Formatter / linter / test runner** — the exact command, from the manifest's script block, the
-  lockfile, or the config on disk (`.prettierrc`, `pint.json`, `.golangci.yml`, `pyproject.toml`).
-  Not present → no bullet about formatting.
-- **Generated vs source** — only pairs you can point at: the generator config, the output directory,
-  and the command that regenerates it. A path that merely looks generated is not a bullet.
-- **Frozen artefacts** — applied migrations, committed lockfiles, vendored directories.
-- **The one convention this repo already follows** and a new file must match — read 2–3 existing
-  files in that stack rather than stating the language's general advice.
-
-Never write a bullet the whole ecosystem would agree with but this repo does not show (`use
-BigDecimal for money`, `never edit vendor/`) unless you saw it here — `CLAUDE.md` § Rules is where a
-project-wide rule the user *states* belongs. A short file is a correct file; no verifiable bullet →
-no file.
-
-**Greenfield:** nothing exists to read yet, so write the file from the stack chosen in step 2 and
-mark it unverified — append one `debt.jsonl` record, all 14 fields (schema:
-`${CLAUDE_PLUGIN_ROOT}/skills/memo/steps/DEBT-IT.md`), then validate it:
-```bash
-echo '{"date":"YYYY-MM-DD","id":"rules-<stack>-unverified","kind":"doc-stale","status":"pending","domain":"all","what":["rules/<stack>.md unverified — written before the scaffold"],"req":[],"specs":[],"docs":[],"code":[".claude/rules/<stack>.md"],"action":"verify every bullet once the scaffold exists, then append status done","source":null,"blocked_by":null,"issue":null}' >> .claude/clio/debt.jsonl
-"${CLAUDE_PLUGIN_ROOT}"/skills/memo/scripts/validate.sh debt
-```
-
-## 5. ASK batch 3 — two choices inside `.claude/`
+## 4. ASK batch 3 — two choices inside `.claude/`
 
 Setup writes only under `.claude/`. Nothing is installed, no file outside this repository is
 touched; the tools that pair well with Clio are listed in the README for the user to add
@@ -137,7 +107,7 @@ themselves. One call, nothing pre-selected:
 | Choice | Clio rule it serves |
 |---|---|
 | commit `.claude/` (recommended: the ledgers are history) or ignore `.claude/clio/` and `.claude/docs/` | the ledgers outlive the session |
-| formatter hook (step 6), only if step 4's rules name a formatter | mechanical rules are hooks, not bullets |
+| formatter hook — skip it here; `/clio:plan` offers it once `rules/*.md` names a real command | mechanical rules are hooks, not bullets |
 
 Commit → write `.claude/.gitattributes`, one line. The ledgers are append-only, so two branches
 adding records is not a conflict — union merge keeps both sides instead of stopping the merge:
@@ -155,23 +125,16 @@ Ignore → `.gitignore` sits outside `.claude/`, so print the two lines and let 
 .claude/docs/
 ```
 
-## 6. Formatter hook
-
-Only if chosen in batch 3. `jq`-merge into `.claude/settings.local.json`, never overwrite; keep only
-this repo's branch; command from step 4's rules file. Greenfield: skip.
-```json
-{ "hooks": { "PostToolUse": [ { "matcher": "Edit|Write", "hooks": [ { "type": "command", "timeout": 30,
-  "command": "f=$(jq -r '.tool_input.file_path // empty'); case \"$f\" in *.php) vendor/bin/pint \"$f\" ;; *.go) gofmt -w \"$f\" ;; *.dart) dart format \"$f\" ;; esac" } ] } ] } }
-```
-
-## 7. Verify and stop
+## 5. Verify and stop
 
 ```bash
 "${CLAUDE_PLUGIN_ROOT}"/skills/memo/scripts/validate.sh all    # open-row notes are expected; a FAIL is not
 ```
 Ask the user to run `/context`: `CLAUDE.md` and the context file must both appear under **Memory
-files**. Do not seed the ledgers beyond what steps 2–4 wrote. From here the loop runs itself:
+files**. Do not seed the ledgers beyond what steps 2–4 wrote. **Next is `/clio:plan infra`** — it
+settles the stack, writes `docs/plans/infra.md` and `rules/<stack>.md`, and offers the formatter
+hook; none of that is this skill's to guess. From there the loop runs itself:
 `clio:context` before non-trivial work, `/clio:memo` after. The only nudge is Clio's
 `UserPromptSubmit` hook, which says once per session when git has work `index.jsonl` does not —
 nothing else reminds the user, and nothing writes on its own; say that once. After a plugin upgrade,
-`/clio:audit` brings this `.claude/` to the new layout; it is dry-run by default.
+`/clio:migrate` brings this `.claude/` to the new layout; it is dry-run by default.
