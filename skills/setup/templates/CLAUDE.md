@@ -36,33 +36,27 @@ never by directory: <!-- fill at setup, e.g. `account` `checkout` `billing` `inf
 - Before non-trivial work in an area → run the `clio:context` skill.
 - Building a spec area → `/clio:plan <area>` first; one task at a time, its `Test` column is the
   success criterion.
-- After finishing a piece of work → `/clio:memo`. What is owed → `/clio:debt`.
-- A spec changed but the code hasn't → `/clio:update`. It is the only writer of `docs/specs/`.
+- After finishing a piece of work → `/clio:memo`. What is owed → `clio:context`, which reads it.
+- A spec changed but the code hasn't → `/clio:update`; it records the delta and names the plans built
+  against the old decision. `/clio:ingest` and `/clio:update` are the only writers of `docs/specs/`.
 - Keep the `@CONTEXT.md` line above; keep this file and CONTEXT.md free of HTML comments.
 - New file in `.claude/rules/` → start it with `paths:` frontmatter, or it loads in every session.
 
 ## Rules
 
-- IMPORTANT: **No speculation, no hallucination.** Never fill a gap with a plausible-sounding
-  answer — code behavior, file/route/column existence, business rules, spec intent, config values.
-  Not verified (Read/Grep/DB query/actual run) → say "unverified" and **ask the user**. Ambiguous
-  requirement → ask, don't invent; wrong-per-spec is worse than incomplete. Verify before stating:
-  routes, config keys, method signatures, translation keys, numeric values, and any field of a
-  schema or contract (DB column, protobuf message, OpenAPI/GraphQL field, event payload) — read the
-  migration/`DESCRIBE`/`.proto`/schema first, never infer a field from a similar one. Multiple valid
-  interpretations → present them, never pick one silently.
-- Minimal scope, surgical edits: every changed line must trace to the request. No drive-by
-  refactors, no speculative abstractions. Match the surrounding style. Remove only what **your**
-  change orphaned; unrelated dead code gets mentioned, never deleted. A simpler approach exists →
-  say so before building the complex one.
-- Define the success criterion before starting: "add validation" → "tests for invalid inputs pass";
-  "fix the bug" → "a test reproduces it, then passes". That criterion is what `## Testing Done`
-  records; nothing ran → say so, and `/clio:memo` files it as `unverified`.
-- IMPORTANT: Do not add code comments unless the user explicitly asks for them.
+- IMPORTANT: **Verify, or say "unverified" and ask.** Anything a tool can check — a route, a config
+  key, a method signature, a column, a proto field, a number — gets checked before you state it.
+  Read the migration or the schema; never infer a field from a similar one. An ambiguous requirement
+  gets a question, not a guess: wrong-per-spec costs more than incomplete. Several readings → give
+  them all.
+- **Minimal scope.** Every changed line traces to the request. Match the surrounding style. Delete
+  only what your own change orphaned; mention other dead code. A simpler approach exists → say so
+  first.
+- **Name the success criterion before starting** — "tests for invalid inputs pass", "a test
+  reproduces the bug, then passes". That is what `## Testing Done` records; nothing ran → say so,
+  and `/clio:memo` files it `unverified`.
+- IMPORTANT: Write code comments only when the user asks for them.
 
-<!-- Project-specific hard rules go here, as bullets in the list above. Ask the user, don't guess:
-     - Anything touching <money / payment / auth / data deletion> → state assumptions and ask.
-     - i18n: never hardcode UI text, always `<translate call>`.
-     - Timezone: default `<TZ>` — confirm before changing time logic.
-     - Money: integer minor units only, never float.
-     - Generated files: `<path>` is build output — edit `<source path>` instead. -->
+<!-- Project rules go here, as bullets above. Ask, don't guess: money/payment/auth/deletion →
+     state assumptions and ask · i18n call · timezone · money representation · generated paths and
+     their real source. -->

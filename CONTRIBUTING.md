@@ -6,18 +6,20 @@
 - Validation: `skills/memo/scripts/validate.sh`. Every rule the schema states, the validator checks.
 - Read-side queries: `skills/context/HOP*.md`. Status semantics: `skills/update/SKILL.md` § 2.
 - `hooks/clio-nudge.sh` reads `index.jsonl` `.commits[]` as well, so that field lives in four files.
-- Layout migrations: `skills/migrate/SKILL.md`. A field or path that changes shape needs the step that
-  moves an existing `.claude/` onto it, or upgrading the plugin silently strands every old repo.
-- Drift between the layers: `skills/audit/SKILL.md` reports it, `validate.sh` warns on the one case
-  that is derivable, and `skills/plan/SKILL.md` § 3 holds the rules for re-planning around a ticked
-  row. Audit never writes a plan; `/clio:plan` is the only writer of `docs/plans/*.md`.
+- Reading an older `.claude/`: `validate.sh` groups on `.id // <the id that later claimed the path>`
+  and downgrades a missing field to a warning, so a pre-3.0 layout still resolves. A change that
+  breaks that has to say so in `CHANGELOG.md` with the steps to move a repo across by hand.
+- Drift between the layers: `validate.sh` detects it — requirement rows against plan tasks, an open
+  `spec-delta` in no plan, one task id twice — and `skills/update/SKILL.md` § 6 turns a detection into
+  the command that fixes it. `skills/plan/SKILL.md` § 3 holds the rules for re-planning around a
+  ticked row, and `/clio:plan` stays the only writer of `docs/plans/*.md`.
 
 Change a field in one place, update the others in the same commit. Two invariants span files the
 same way and are easy to miss:
 
 - A task doc's `id` is its filename prefix. `WRITE-DOC.md` sets the name, `INDEX-IT.md` sets the
   field, `validate.sh` enforces that they match, `audit/SKILL.md` assigns both when migrating.
-- `plan_tasks` names rows in `docs/plans/*.md`. `plan/SKILL.md` writes those ids, `GATHER-FACTS.md`
+- `plan_tasks` names rows in `docs/plans/*.md`. `plan/SKILL.md` writes those ids, `RESOLVE-AND-GATHER.md`
   finds them through the table's `req` column, `validate.sh` rejects an id no plan holds.
 
 ## Before opening a PR

@@ -14,6 +14,11 @@ jq -s -c --argjson n $N 'group_by(.id)[] | last
 jq -s -c 'group_by(.id)[] | last | select(.status!="done")
   | select(.domain=="account" or (.specs[]? | contains("order-flow")) or (.req[]? == 20))' \
   .claude/clio/debt.jsonl
+
+# everything open, or filtered by one word — what the user means by "what do I owe?"
+jq -s -c --arg q "<word or empty>" 'group_by(.id)[] | last | select(.status!="done")
+  | select($q=="" or .domain==$q or (.req[]?|tostring)==$q
+           or (.specs[]? | contains($q)) or (.what[]? | contains($q)))' .claude/clio/debt.jsonl
 ```
 
 Read two fields first:
@@ -32,5 +37,11 @@ queue simultaneously — surface it before you start.
 docs as current state, and until the rework lands they *are* current — the code they describe is
 still there. Say which ones a delta targets, so nobody reads a doc's `## Decisions` as the pattern to
 follow when a plan task exists to undo it.
+
+Asked plainly for what is owed, report two groups in this order, `blocked_by` alone deciding which:
+**actionable now** (`blocked_by: null`) — `id` · `kind` · what · first entry of `code`, the work
+queue — then **blocked**, with what each waits on, said plainly as must-not-start. Close with one
+line on `in-process` records nothing has touched in a while, and any `spec-blocked` whose
+`blocked_by` names a row hop 1 now shows ✅. Flag those; `/clio:memo` and `/clio:update` re-file them.
 
 Then hop 4 (coverage) and Report, back in `SKILL.md`.

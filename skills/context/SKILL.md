@@ -8,6 +8,8 @@ argument-hint: "[area | requirements row | debt id | question — omit for the o
 
 Target (may be empty): $ARGUMENTS
 
+Also the answer to "what do I still owe?" — hop 3 alone, filtered, is the whole of it.
+
 **Two depths.** The *user* asked "where are we / what's next / continue" with no area named →
 [HOP0.md](HOP0.md): counts from the plans and ledgers, nothing opened, ≤ 10 lines, stop. Anything
 else — a target (area, row, debt `id`, file), a "why is X like this?" question, or **you triggered

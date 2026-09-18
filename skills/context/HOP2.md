@@ -56,6 +56,6 @@ names its sub-tasks. Use it before opening anything.
 or a file not on disk: for a moved doc, the current path is in that `id`'s **last** record, so
 re-run the query with `group_by(.id) | last` before concluding anything. Records written before
 Clio 3.0 have no `id` and key on `doc`; pre-2.0 ones hold only that run's delta in `files`/`keywords`
-and a scalar `commit`. `validate.sh all` names both — `/clio:migrate` migrates them.
+and a scalar `commit`. `validate.sh all` names both; they still resolve, so migrating is optional.
 
 Next: [HOP3.md](HOP3.md).

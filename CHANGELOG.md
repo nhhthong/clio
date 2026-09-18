@@ -1,5 +1,39 @@
 # Changelog
 
+## 3.2.0 — 2026-09-18
+
+- **Ten skills down to six.** `/clio:debt` was one `jq` that hop 3 already documents, and
+  `clio:context` already printed the queue/blocked counts, so hop 3 took the filter and the
+  two-group report. `/clio:audit` was a wrapper: its checks belong in `validate.sh`, where they fire
+  on every run instead of waiting to be remembered, and turning a detection into the command that
+  fixes it is the tail of `/clio:update`, since a spec change is what leaves a plan stale.
+  `/clio:migrate` — and `.claude/clio/VERSION`, whose only reader it was — went because writing a
+  migration for a layout change nobody has yet is guessing at its shape; reading an older layout is
+  what matters, and `validate.sh` does that by grouping on `.id // <the id that later claimed the
+  path>` and downgrading a missing field to a warning. `/clio:ask` was a hand-written table of the
+  other commands plus "read that skill's `SKILL.md`", both of which Claude Code already does.
+  Nothing was lost; four names were.
+- **`/clio:memo` is five steps, not six.** Resolving which doc to write and gathering the facts for
+  it always ran together and the second needs the first's answer, so they are one file now. Splitting
+  a step earns its cost when some branches skip it; these never do.
+- **The always-loaded `CLAUDE.md` template lost a quarter of its `## Rules`.** It is the most
+  expensive file in the kit — every session, every repo — and its first bullet had grown to thirteen
+  lines listing what to verify. The rule is the same; it now says it once.
+- **Two `validate.sh` rules removed a turn after they were added.** "A ⚠️/❌ row a plan already
+  builds" fires on the correct state: `/clio:plan` gives an undecided row a placeholder line naming
+  the debt it waits on. "A ✅ row with no plan task" duplicated the ✅-with-no-index-record INFO.
+  Kept: a plan task claiming a `req` no row decides, which is the rule `check_req` already applies to
+  ledger records, applied to the other file that carries them.
+- **`validate.sh` joins `requirements.md` to the plan tables.** A plan task claiming a `req` no row
+  decides is a FAIL; a ✅ row nobody planned is an INFO; a ⚠️/❌ row a plan already builds is a WARN.
+  Detection belongs where it runs automatically.
+- **`/clio:update` § 6 names the plans a spec change left behind, and `--fix` re-plans them.** The
+  skill already knew which rows moved and already had a line saying to re-run `/clio:plan`; it now
+  prints the command per area, skips ⚠️/❌ rows because an undecided row has no task to write, and
+  with `--fix` runs them. `/clio:plan` stays the only writer of `docs/plans/*.md`.
+- **Fixed: `CLAUDE.md` claimed `/clio:update` was the only writer of `docs/specs/`.** `/clio:ingest`
+  writes two files there. The template loads every session, so the wrong line was taught every time.
+
 ## 3.1.0 — 2026-09-17
 
 - **New: `/clio:audit`, and the old `audit` is now `/clio:migrate`.** The skill that moves a

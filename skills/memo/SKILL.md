@@ -16,14 +16,13 @@ Target passed in (may be empty): $ARGUMENTS
 
 Step files live in `${CLAUDE_PLUGIN_ROOT}/skills/memo/steps/`. Read each when you reach it, not before.
 
-1. **Resolve the target doc** → `${CLAUDE_PLUGIN_ROOT}/skills/memo/steps/RESOLVE-DOC.md`. A path, a plan
-   task id, or nothing. Creating at the wrong path forks a sub-task's history.
-2. **Gather facts** → `${CLAUDE_PLUGIN_ROOT}/skills/memo/steps/GATHER-FACTS.md`. Verified file list, which
-   `requirements.md` row this work serves, and which plan task it is.
-3. **Write the doc** → `${CLAUDE_PLUGIN_ROOT}/skills/memo/steps/WRITE-DOC.md`. UPDATE, or CREATE when step 1
-   found nothing.
-4. **Index it** → `${CLAUDE_PLUGIN_ROOT}/skills/memo/steps/INDEX-IT.md`. One line in `index.jsonl`, every run.
-5. **Log open items** → `${CLAUDE_PLUGIN_ROOT}/skills/memo/steps/DEBT-IT.md`. Close what this run finished,
+1. **Resolve the doc, gather the facts** → `${CLAUDE_PLUGIN_ROOT}/skills/memo/steps/RESOLVE-AND-GATHER.md`.
+   A path, a plan task id, or nothing; then the verified file list, the `requirements.md` row this
+   work serves, and the plan task it is. Creating at the wrong path forks a sub-task's history.
+2. **Write the doc** → `${CLAUDE_PLUGIN_ROOT}/skills/memo/steps/WRITE-DOC.md`. UPDATE, or CREATE when step 1
+   found no doc.
+3. **Index it** → `${CLAUDE_PLUGIN_ROOT}/skills/memo/steps/INDEX-IT.md`. One line in `index.jsonl`, every run.
+4. **Log open items** → `${CLAUDE_PLUGIN_ROOT}/skills/memo/steps/DEBT-IT.md`. Close what this run finished,
    record what is still owed.
-6. **Wrap up** → `${CLAUDE_PLUGIN_ROOT}/skills/memo/steps/WRAP-UP.md`. CONTEXT.md diff (needs a yes), ADR if
+5. **Wrap up** → `${CLAUDE_PLUGIN_ROOT}/skills/memo/steps/WRAP-UP.md`. CONTEXT.md diff (needs a yes), ADR if
    applicable, report.

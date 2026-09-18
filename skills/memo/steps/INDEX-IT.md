@@ -46,7 +46,7 @@ Validate — never declare done on a line it rejects:
 ```
 `FAIL` → `sed -i.bak '$d' .claude/clio/index.jsonl && rm .claude/clio/index.jsonl.bak`, fix, re-append.
 
-Pre-3.0 records carry no `id` and key on `doc` instead. Readers still resolve them; `/clio:migrate`
-migrates them. Don't hand-migrate one here — append your own record and let audit do the sweep.
+Pre-3.0 records carry no `id` and key on `doc` instead. Readers still resolve them, so leave them
+alone: append your own record and let the old one stay history.
 
 Next: `DEBT-IT.md`.

@@ -184,6 +184,22 @@ case $mode in
       done < <(awk -F'|' 'NF>5 && $2 ~ /^ *[0-9]+(\.[0-9]+)* *$/ {gsub(/^ +| +$/,"",$2); print $2}' "$pl" | sort | uniq -d)
     done
 
+    # A plan task's `req` column, against requirements.md — the same rule check_req applies to a
+    # ledger record, applied to the other file that carries req numbers.
+    # Not checked here: which decided rows have no plan task. `plan` gives a ⚠️/❌ row a placeholder
+    # line naming the debt it waits on, so "a plan row exists for an undecided row" is the correct
+    # state, not a finding; and "✅ with no plan task" overlaps the ✅-with-no-index-record INFO below.
+    if [ -f "$REQ" ] && compgen -G '.claude/docs/plans/*.md' >/dev/null; then
+      planreq=$(awk -F'|' 'NF>5 && $2 ~ /^ *[0-9]+(\.[0-9]+)* *$/ {
+        n=split($4,a,","); for(i=1;i<=n;i++){gsub(/^ +| +$/,"",a[i]); if(a[i] ~ /^[0-9]/) print a[i]}
+      }' .claude/docs/plans/*.md | sort -u)
+      while read -r n; do
+        [ -z "$n" ] && continue
+        printf '%s\n' "$rows" | grep -qx "$n" \
+          || fail "a plan task claims req $n, which requirements.md has no row for"
+      done <<<"$planreq"
+    fi
+
     # A spec-delta says the spec moved and the code has not followed. /clio:plan turns one into a
     # task carrying its id, so an open delta named in no plan means no plan absorbed it — and that
     # is silent: every later session reads a plan that no longer matches the decision.
@@ -192,7 +208,7 @@ case $mode in
       while read -r id; do
         [ -z "$id" ] && continue
         grep -qrF -- "$id" .claude/docs/plans/ \
-          || warn "spec-delta $id is in no plan — /clio:audit, then /clio:plan <area>"
+          || warn "spec-delta $id is in no plan — /clio:plan <area> absorbs it as a task"
       done < <(jq -s -r 'group_by(.id)[] | last
         | select(.kind=="spec-delta" and .status!="done" and .blocked_by==null) | .id' <<<"$debtjson")
     fi
@@ -204,7 +220,7 @@ case $mode in
     while IFS= read -r ref; do
       [ -z "$ref" ] && continue
       case $ref in *'<'*) continue ;; esac
-      [ -e "$ref" ] || warn "dead link in a document: $ref — renamed by /clio:audit? rewrite the reference"
+      [ -e "$ref" ] || warn "dead link in a document: $ref — was it renamed? rewrite the reference"
     done < <(grep -rhoE --include='*.md' '\.claude/[A-Za-z0-9._/-]+\.md' .claude/ CLAUDE.md 2>/dev/null | sort -u)
 
     for f in .claude/CONTEXT.md .claude/CLAUDE.md CLAUDE.md; do

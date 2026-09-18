@@ -41,7 +41,6 @@ mkdir -p .claude/rules .claude/clio .claude/docs/specs/memory .claude/docs/tasks
 [ -f "$CTX" ]                             || cp "$T/CONTEXT.md"      "$CTX"
 [ -f .claude/docs/specs/requirements.md ] || cp "$T/requirements.md" .claude/docs/specs/requirements.md
 touch .claude/clio/index.jsonl .claude/clio/debt.jsonl
-echo 3.0 > .claude/clio/VERSION          # layout version; /clio:migrate reads it to know what to migrate
 ```
 `.claude/rules/` stays empty. What the code is built with is `/clio:plan`'s job — it writes
 `docs/plans/infra.md` and `rules/<stack>.md` from what the repo shows, or from researched docs when
@@ -136,5 +135,4 @@ settles the stack, writes `docs/plans/infra.md` and `rules/<stack>.md`, and offe
 hook; none of that is this skill's to guess. From there the loop runs itself:
 `clio:context` before non-trivial work, `/clio:memo` after. The only nudge is Clio's
 `UserPromptSubmit` hook, which says once per session when git has work `index.jsonl` does not —
-nothing else reminds the user, and nothing writes on its own; say that once. After a plugin upgrade,
-`/clio:migrate` brings this `.claude/` to the new layout; it is dry-run by default.
+nothing else reminds the user, and nothing writes on its own; say that once.

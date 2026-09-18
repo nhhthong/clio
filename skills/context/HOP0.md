@@ -4,7 +4,7 @@ Counts only. Opens no task doc, no spec, no ADR.
 
 ```bash
 for p in .claude/docs/plans/*.md; do [ -e "$p" ] || continue
-  # A plan is normally /clio:plan's table, but one /clio:migrate lifted out of requirements.md keeps
+  # A plan is normally /clio:plan's table, but one lifted out of an old requirements.md keeps
   # its original bullets until it is re-planned. Cutting columns out of a bullet prints the whole
   # line, so pick the shape per file.
   n=$(grep -m1 '\[ \]' "$p")

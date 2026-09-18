@@ -148,7 +148,7 @@ approve; a wrong split is paid on every task. Declined → adjust, ask once more
 ### Re-plan
 
 **Never delete, edit or untick a ticked row.** It records that something once ran, and that stays
-true however the spec moves. A row whose verification prose `/clio:migrate` moved into a task doc
+true however the spec moves. A row whose verification prose was moved into a task doc
 keeps its tick and its `Test`: the doc holds the record, the row is the index into it. New tasks
 append under their row; refresh `Re-planned:`.
 
@@ -162,8 +162,8 @@ What the spec did decides which of four a changed row gets:
 | ticked | does not want it, nothing was built | `~~superseded~~`, as row one |
 
 A `spec-delta` debt record is what tells you which: `/clio:update` writes one when a spec moves, and
-its `what` names the change. Carry the record's `id` in the new task so `/clio:audit` can see the
-delta was absorbed — an open delta named in no plan is what `validate.sh all` warns about.
+its `what` names the change. Carry the record's `id` in the new task: an open delta named in no plan
+is what `validate.sh all` warns about, and carrying the id is what silences it.
 
 Reverting is a task like any other. It needs a `Test` that fails while the old behaviour is still
 there, or nobody can tell a revert from a claim of one.

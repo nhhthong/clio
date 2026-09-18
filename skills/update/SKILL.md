@@ -1,7 +1,7 @@
 ---
 name: update
 description: After a spec file changes, work out what the change means for code already written — which task/decision docs it invalidates, whether it is safe to implement yet — record each delta in .claude/clio/debt.jsonl, and move the requirements.md row marker when the decision itself changed. Run when a requirement, contract or ticket changes.
-argument-hint: "[spec file or keyword, optional — omit to sweep all specs]"
+argument-hint: "[spec file or keyword, optional — omit to sweep all specs; add --fix to re-plan the areas that moved]"
 ---
 
 **Run only when the user asked for it, this turn** — by slash command, or in plain words ("the spec changed, update it", "spec đổi rồi").
@@ -65,7 +65,7 @@ echo '{"date":"YYYY-MM-DD","id":"<kebab-key>","kind":"spec-delta","status":"pend
 
 ## 4. Move the `requirements.md` row if the *decision* changed
 
-You are the only writer of `.claude/docs/specs/`; a stale marker keeps `clio:context` stopping
+You and `/clio:ingest` are the only writers of `.claude/docs/specs/`; a stale marker keeps `clio:context` stopping
 future sessions to ask about a settled point.
 
 | Marker now | Delta means | Do |
@@ -95,5 +95,27 @@ fixed.
 Report each delta as `id` · `status` · `blocked_by` · row · one-line action, queue (`blocked_by:
 null`) first. Then: deltas you could not date, what is blocked on exactly what, records you
 unblocked, every row moved (old → new, and the source that justified it), rows deliberately left
-⚠️, and any `index.jsonl` record this delta shows to be wrong. A moved row that has a
-`.claude/docs/plans/<area>.md` → say to re-run `/clio:plan <area>`; its tasks may be superseded.
+⚠️, and any `index.jsonl` record this delta shows to be wrong.
+
+## 6. The plans the change left behind
+
+A delta means the plan for that area was built against the old decision, and nothing else notices:
+`clio:context` will keep handing out its tasks, and a task already `[x]` will keep reading as
+current. `validate.sh all` warns while an open delta sits in no plan, which is the floor, not the fix.
+
+Per area whose rows moved, one line naming the row, what it costs, and the command:
+
+```text
+checkout  row 12 ✅ changed today · task 3.2 [x] 2026-09-02 built against the old decision
+          spec-delta checkout-loyalty-added, in no plan          →  /clio:plan checkout
+ocr       row 20 ⚠️ still open                                   →  leave it; an undecided row has
+                                                                    no task to write
+```
+
+**`--fix`** runs `/clio:plan <area>` for those areas, one at a time, skipping the clean ones and
+skipping every ⚠️/❌ row. It saves the typing, not the approval: `/clio:plan` still reads the file,
+applies its own re-plan rules — a ticked row is never edited or unticked — shows the full table and
+asks before writing.
+
+Without `--fix`, print the commands and stop. Either way, a plan whose tasks were superseded is
+`/clio:plan`'s to rewrite, never this skill's: `docs/plans/*.md` has one writer.
