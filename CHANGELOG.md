@@ -2,6 +2,12 @@
 
 ## 3.2.0 — 2026-09-18
 
+- **README drops the tooling recommendations and one duplicated section.** "Suggested tooling"
+  pitched MCP servers and two other plugins, none of which Clio installs or needs; "What is in the
+  kit" stated for the third time that the layout outlives the plugin. Three claims that appeared
+  three times each — the nudge, "an update never touches your `.claude/`", "nothing is written unless
+  you asked" — now appear once. `/clio:plan` still prefers Context7 when it is there, which is a
+  runtime preference rather than something to install up front.
 - **Ten skills down to six.** `/clio:debt` was one `jq` that hop 3 already documents, and
   `clio:context` already printed the queue/blocked counts, so hop 3 took the filter and the
   two-group report. `/clio:audit` was a wrapper: its checks belong in `validate.sh`, where they fire

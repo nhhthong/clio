@@ -82,26 +82,6 @@ An upgrade that moves the layout leaves your `.claude/` alone, and readers still
 shape: a doc with no `id` keys on its path, a pre-2.0 record on its `commit`. `validate.sh all` names
 what is old without failing on it. A release needing more says so in [CHANGELOG.md](CHANGELOG.md).
 
-## Suggested tooling
-
-None of this is installed, and none is required. The template `CLAUDE.md` states rules like *never
-state a library API from memory*, which a tool enforces better than a bullet does. Add what you want
-by hand: `-s user` for every repo, `-s project` for this one, committed.
-
-### MCP servers, so "unverified" becomes "let me look"
-
-| Server | Rule it serves | Add |
-|---|---|---|
-| [Context7](https://github.com/upstash/context7) | never state a library API from memory; read its current docs | `claude mcp add -s user context7 -- npx -y @upstash/context7-mcp` |
-| [codebase-memory-mcp](https://github.com/DeusData/codebase-memory-mcp) | never guess a call chain; query the code graph | `claude mcp add -s user codebase-memory-mcp -- codebase-memory-mcp` |
-
-### Plugins for the build and review loop around `/clio:memo`
-
-| Plugin | What it adds | Add |
-|---|---|---|
-| [caveman](https://github.com/JuliusBrussee/caveman) | terse replies, fewer output tokens; the ledgers are terse for the same reason | `claude plugin marketplace add JuliusBrussee/caveman && claude plugin install caveman@caveman` |
-| [ponytail](https://github.com/DietrichGebert/ponytail) | the laziest working solution, YAGNI enforced, so `/clio:memo` has fewer lines to account for | `claude plugin marketplace add DietrichGebert/ponytail && claude plugin install ponytail@ponytail` |
-
 ## How it differs
 
 | | Clio | Auto-memory (claude-mem, mem0…) | Skills packs (mattpocock/skills, superpowers…) |
