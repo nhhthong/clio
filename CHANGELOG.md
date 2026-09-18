@@ -2,12 +2,20 @@
 
 ## 3.2.0 — 2026-09-18
 
-- **README drops the tooling recommendations and one duplicated section.** "Suggested tooling"
-  pitched MCP servers and two other plugins, none of which Clio installs or needs; "What is in the
-  kit" stated for the third time that the layout outlives the plugin. Three claims that appeared
-  three times each — the nudge, "an update never touches your `.claude/`", "nothing is written unless
-  you asked" — now appear once. `/clio:plan` still prefers Context7 when it is there, which is a
-  runtime preference rather than something to install up front.
+- **README cut to Clio: 255 lines to 180.** Gone: "Suggested tooling", which pitched MCP servers and
+  two other plugins that Clio neither installs nor needs; "What is in the kit", stating for the third
+  time that the layout outlives the plugin; "Updating", whose `claude plugin update` lines are the
+  CLI's own and whose local-checkout recipe lives in `CONTRIBUTING.md`; "Auto-enable for a team"; and
+  the "Contributing" pointer, since GitHub surfaces `CONTRIBUTING.md` by itself. What an upgrade does
+  to an existing `.claude/` stayed — that one is Clio's, not the CLI's — and moved into § The layout.
+  Three claims that each appeared three times — the drift nudge, "an update never touches your
+  `.claude/`", "nothing is written unless you asked" — now appear once.
+- **Fixed: the drift nudge never loaded.** `plugin.json` declared `"hooks": "./hooks/hooks.json"`,
+  but that path loads by convention, so the loader saw the same file twice and refused both:
+  `Duplicate hooks file detected … The standard hooks/hooks.json is loaded automatically`. The hook
+  has been dead since 2.1.0 shipped it in `91f0389`, which is every release that has claimed to
+  notice a skipped `/clio:memo`. The manifest no longer names it, and `test.sh` now fails if it does —
+  the old check asserted the field existed, so the test was protecting the bug.
 - **Ten skills down to six.** `/clio:debt` was one `jq` that hop 3 already documents, and
   `clio:context` already printed the queue/blocked counts, so hop 3 took the filter and the
   two-group report. `/clio:audit` was a wrapper: its checks belong in `validate.sh`, where they fire

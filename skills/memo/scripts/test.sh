@@ -195,8 +195,11 @@ sed -i '$d' .claude/docs/plans/acct.md
 # that catches a release naming two different builds — run it before you tag.
 cd "$(dirname "$V")/../../.."
 jq -e . .claude-plugin/plugin.json .claude-plugin/marketplace.json > /dev/null || { echo "a manifest is not valid JSON"; exit 1; }
-h=$(jq -r .hooks .claude-plugin/plugin.json)
-[ -f "$h" ] || { echo "plugin.json names a hooks file that does not exist: $h"; exit 1; }
+# hooks/hooks.json loads by convention. Naming it in plugin.json too makes the loader read it twice
+# and refuse both, which silently kills the drift nudge — so the manifest must NOT mention it.
+[ -f hooks/hooks.json ] || { echo "hooks/hooks.json is missing"; exit 1; }
+jq -e 'has("hooks")' .claude-plugin/plugin.json >/dev/null 2>&1 \
+  && { echo "plugin.json declares .hooks; the standard hooks/hooks.json already loads itself"; exit 1; }
 v=$(jq -r .version .claude-plugin/plugin.json)
 [ "$(jq -r '.plugins[0].version' .claude-plugin/marketplace.json)" = "$v" ] || { echo "marketplace.json disagrees with plugin.json ($v)"; exit 1; }
 grep -q "version-$v-blue" README.md      || { echo "README badge is not version $v"; exit 1; }

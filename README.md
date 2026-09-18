@@ -60,28 +60,6 @@ From there the loop runs itself: Claude runs `clio:context` before non-trivial w
 Requires `bash`, `jq`, `git`, `awk` and `sed`. Setup writes nothing outside `.claude/`, and a plugin
 update writes nothing inside it.
 
-## Updating
-
-```bash
-claude plugin marketplace update nhhthong
-claude plugin update clio@nhhthong
-```
-
-Restart Claude Code afterwards. To run a working copy instead of the published one, point the
-marketplace at the checkout — its name in `marketplace.json` collides with the GitHub entry, so
-remove that one first:
-
-```bash
-claude plugin uninstall clio@nhhthong
-claude plugin marketplace remove nhhthong
-claude plugin marketplace add /path/to/clio          # reads the working tree, no commit needed
-claude plugin install clio@nhhthong
-```
-
-An upgrade that moves the layout leaves your `.claude/` alone, and readers still resolve the old
-shape: a doc with no `id` keys on its path, a pre-2.0 record on its `commit`. `validate.sh all` names
-what is old without failing on it. A release needing more says so in [CHANGELOG.md](CHANGELOG.md).
-
 ## How it differs
 
 | | Clio | Auto-memory (claude-mem, mem0…) | Skills packs (mattpocock/skills, superpowers…) |
@@ -119,6 +97,10 @@ and validator by hand.
 | **Always loaded** | `CLAUDE.md` | rules only, ~80 lines; imports `CONTEXT.md`; domain vocabulary | you, `/clio:setup` |
 | | `CONTEXT.md` | stable facts: entities, colliding terms, key flows, landmines | you, `/clio:memo` (with a yes) |
 | | `rules/<stack>.md` | path-scoped, loads only for the files it names; written from what this repo shows, never from a template | you, `/clio:plan` |
+
+An upgrade that moves the layout leaves your `.claude/` alone, and readers still resolve the old
+shape: a doc with no `id` keys on its path, a pre-2.0 record on its `commit`. `validate.sh all` names
+what is old without failing on it. A release needing more says so in [CHANGELOG.md](CHANGELOG.md).
 
 The three ledgers join on `req`, the requirement row number. `.jsonl` files are append-only: an
 update is a new line under the same `id`, and readers take the last. A task doc's `id` is its
@@ -182,27 +164,6 @@ appears in an index record.
 
 `clio:context` runs before work and `/clio:memo` after it; the other four fire on an event. Without
 `.claude/clio/` every skill says so and points at `/clio:setup`.
-
-<details>
-<summary>Auto-enable for a team</summary>
-
-Add to the project's `.claude/settings.json`; members get the plugin when they trust the repo.
-
-```json
-{
-  "extraKnownMarketplaces": { "nhhthong": { "source": { "source": "github", "repo": "nhhthong/clio" } } },
-  "enabledPlugins": { "clio@nhhthong": true }
-}
-```
-</details>
-
-## Contributing
-
-Bugs and questions go to [Issues](https://github.com/nhhthong/clio/issues). Schema, validator and
-read-side queries are kept in sync by hand; [CONTRIBUTING.md](CONTRIBUTING.md) says where each lives.
-`bash skills/memo/scripts/test.sh` and `bash hooks/test-nudge.sh` cover the validator and the drift
-hook, and the first also rejects a version that disagrees across the manifests, this README and
-[CHANGELOG.md](CHANGELOG.md).
 
 ## License
 

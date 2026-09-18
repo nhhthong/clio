@@ -19,6 +19,5 @@
     "anti-hallucination",
     "spec",
     "tech-debt"
-  ],
-  "hooks": "./hooks/hooks.json"
+  ]
 }
