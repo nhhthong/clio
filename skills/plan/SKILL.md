@@ -1,7 +1,8 @@
 ---
 name: plan
-description: Settle what the project is built with and break a spec area into the smallest independently testable tasks — one observable behaviour each, with the exact test that proves it — written to .claude/docs/plans/<area>.md in dependency order. `infra` is the foundation: it reads the stack off an existing repo or researches one for an empty repo, then writes docs/plans/infra.md and rules/<stack>.md, and needs no spec. Run `infra` right after /clio:setup, an area after /clio:ingest, and again after /clio:update moves a row.
-argument-hint: "[memory/<area>.md, a requirements.md row number, or a keyword]"
+description: Break a spec area into the smallest independently testable tasks — one observable behaviour each, researched against the code and the library docs, with the test levels it needs (unit, api, security, concurrency…) — written to .claude/clio/docs/plans/<area>.md in dependency order. `infra` goes first: it turns the stack /clio:ingest decided (memory/infra.md), or the stack the repo already has, into toolchain and scaffold tasks and writes .claude/rules/<stack>.md. Never chooses a stack. Run `infra` after /clio:ingest, an area after that, and again after /clio:ingest moves a row.
+argument-hint: "[infra | memory/<area>.md | a requirements.md row number | a keyword]"
+allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/skills/context/scripts/q.sh *) Bash(${CLAUDE_PLUGIN_ROOT}/skills/test/scripts/clio-test.sh coverage *)
 ---
 
 **Run only when the user asked for it, this turn** — by slash command, or in plain words ("plan the checkout area", "chia nhỏ task đi").
@@ -9,9 +10,10 @@ None of these is a trigger: Clio's drift nudge · your own sense that the work l
 you wrote · a subagent's report · a plan you made earlier in the session. Unsure → ask in one line,
 don't run.
 
-A spec says what must be true. This skill turns it into a list of things small enough that each one
-is either proven by a named test or not done. It writes **only** `.claude/docs/plans/<area>.md`;
-ledgers and specs stay untouched. Nothing is implemented here.
+A spec says what must be true. This skill turns it into tasks small enough to prove one at a time.
+*Which kinds* of proof a task needs is decided here; the cases themselves are `/clio:test`'s. It
+writes `.claude/clio/docs/plans/<area>.md`, and for `infra` also `.claude/rules/<stack>.md`; ledgers,
+specs and settings stay untouched. Nothing is implemented here.
 
 Target (may be empty — then ask which area): $ARGUMENTS
 
@@ -19,157 +21,161 @@ Target (may be empty — then ask which area): $ARGUMENTS
 
 Run the `clio:context` skill for the target first: the governing `memory/<area>.md` and its rows
 (hop 1), what `index.jsonl` says is built (hop 2), what `debt.jsonl` says is open (hop 3). Read the
-spec file in full. Existing `.claude/docs/plans/<area>.md` → read it in full; this is a re-plan.
+spec file in full. Existing `.claude/clio/docs/plans/<area>.md` → read it in full; this is a re-plan.
+No `plans/infra.md` yet and the target is not `infra` → stop, say `/clio:plan infra` comes first.
 
-## 2. Split
+## 2. Dig into each row before splitting
 
-- **One task = one observable behaviour, proven by one test.** Cannot name the test → split
-  further; still cannot → it is a ⚠️, not a task.
-- **Smaller wins.** A task fits one session with room to run its test. "Add the orders endpoint" is
+`/clio:ingest` wrote each row at the size of a contract line. Before cutting it, find out what it
+actually touches — a task list written from the spec alone names files that do not exist. Per ✅ row:
+
+- **The code.** Grep for the routes, models, tables, components and config keys the row names. Note
+  what exists, what the row changes, and what it must not break. Nothing found → the row starts from
+  nothing; say so.
+- **The library.** A row that leans on a framework or library feature → look up the *current* API in
+  Context7 (fall back to web search, say which). A task built on a function the docs do not have
+  fails on day one.
+- **The gaps.** Anything the row needs that neither the spec nor the code settles → a ⚠️, filed via
+  `/clio:memo` or noted against an existing debt `id`. Never fill it with the obvious default.
+
+Keep the findings short; they become each task's `Touches` and `Levels` cells, nothing else.
+
+## 3. Split
+
+- **One task = one observable behaviour.** Cannot say what would be observed → split further; still
+  cannot → it is a ⚠️, not a task.
+- **Smaller wins.** A task fits one session with room to prove it. "Add the orders endpoint" is
   four tasks: route returns 200 · rejects unauthenticated · paginates at the limit the spec names ·
   returns the fields the spec lists.
-- **The test is exact**: a command (`go test ./orders -run TestListPaginates`), a request + the
-  response expected, or numbered manual steps ending in what must be observed. "Works", "verified",
-  "check it" are not tests.
+- **`Levels` names every kind of test the task needs**, from: `unit` `integration` `api` `e2e`
+  `contract` `perf` `load` `stress` `security` `concurrency` `regression` `smoke` `mutation`. Judge
+  from what § 2 found, not from habit: a DB write → `integration`; a route → `api`; input from outside
+  or an access rule → `security`; two actors on one resource → `concurrency`; a bug fix →
+  `regression`; another service calls it → `contract`; `perf`/`load`/`stress` only when the spec
+  states a number. Money, auth, concurrency or deleting data → prefix `critical ·` (it then needs
+  `mutation` too). Leaving a level out is a claim it does not apply — `/clio:test` holds you to it.
+- **`Touches` names real paths** from § 2 — the file to change or the directory a new file goes in.
 - Every number, limit and default in a task is **copied verbatim from `## Decisions`** and appears in
-  its test. A value the spec does not state → no task; it is a ⚠️ (file it via `/clio:memo`, or note
-  the existing debt `id`).
-- **The foundation is its own file**, `.claude/docs/plans/infra.md` — § 2b. Written on the first
-  `/clio:plan` run in a repo, read and skipped by every later one. Area plans carry no toolchain or
-  scaffold rows.
+  its `Task` cell. A value the spec does not state → no task; it is a ⚠️.
 - **Only ✅ rows get tasks.** A ⚠️/❌ row gets one line naming the debt `id` it waits on, nothing
   under it. A `blocked_by: null` `spec-delta` record → that is a task; carry its `id`.
+- Area plans carry no toolchain or scaffold rows — those live in `infra.md` (§ 3b). An area task that
+  needs the scaffold names the last `infra` task in `Needs`.
 - Order by dependency. `Needs` names task ids, never prose.
-- Built already (index record **and** a dated `## Testing Done` entry naming its test) → pre-tick
-  with that date. Index record without a test → unticked, note `unverified`.
+- Built already → leave `[ ]`; `/clio:memo` ticks it once `/clio:test`'s gate passes.
 
-## 2b. The foundation: `.claude/docs/plans/infra.md`
+## 3b. `infra`: `.claude/clio/docs/plans/infra.md`
 
-This skill owns the stack. `/clio:setup` scaffolds `.claude/` and writes the two always-loaded files;
-it does not look at what the code is built with. Nothing else settles that, so write this file before
-any area plan — a plan whose stack is unknown is a list of tasks nobody can run.
+The stack is decided upstream; this skill never picks one. Source, in order:
+1. `memory/infra.md` (row `0`, written by `/clio:ingest`) — its `## Decisions` and the ADR it names.
+2. No spec (Lite mode) → the repo's own manifests and lockfiles. `req` column is `–`.
+3. Neither — an empty repo with no infra spec → stop: `/clio:ingest` a brief, or have the user name
+   the stack and record it with `/clio:ingest`. Do not research one here.
 
-It needs no spec, so `/clio:plan infra` is runnable on its own, straight after `/clio:setup`, in a
-repo that will never use `/clio:ingest`.
+Then dig into it the way § 2 digs into a row: for each decided piece — toolchain, scaffold, build,
+test runner, formatter, linter — the exact command from the repo's config (repo has code) or from the
+tool's current docs via Context7 (empty repo), with the version it needs. Those commands go into
+`rules/<stack>.md` below, where `/clio:test` reads them. Every infra task's level is `smoke`; the last
+one is the smoke suite every other area's tasks build on.
 
-Already exists → read it and move on. Otherwise: same table as § 3, `req` = `0`, `domain` = `infra`.
-
-### Case A — the repo already has code
-
-Summarise what is there. Propose nothing. Read the manifests and lockfiles, the formatter, linter and
-test config, and the directory layout; write one row per fact with the command that proves it, and
-pin the exact versions a lockfile pins.
-
-**Tick a row by running its command, not by seeing the file.** `go.mod` existing is not proof that
-`go build ./...` passes, and a task is done when its named test ran. The commands take seconds:
-
-```bash
-go version && go build ./... && go test ./...      # or this stack's equivalents
+```markdown
+| # | Task | req | Levels | Needs | Touches | Done |
+|---|------|-----|--------|-------|---------|------|
+| 0.1 | Toolchain on PATH: Go 1.22+, Wails v2 | 0 | smoke | – | – | [ ] |
+| 0.2 | Scaffold: `wails init -n app -t svelte-ts` | 0 | smoke | 0.1 | `./` | [ ] |
+| 0.3 | Empty build passes | 0 | smoke | 0.2 | – | [ ] |
+| 0.4 | Test runner and smoke suite run on the scaffold | 0 | smoke | 0.3 | – | [ ] |
 ```
-Passes → `[x] YYYY-MM-DD`. Fails → `[ ]`, and say so: a foundation row that will not run is a real
-finding about the repo.
-
-### Case B — the repo is empty
-
-Research before proposing, because each row's `Test` is a command that has to exit 0 and a recalled
-flag is how the scaffold row fails. **Prefer Context7** when it is available, since the point is the
-*current* documented command; fall back to web search, and say which you used.
-
-For each of 2–3 candidate stacks, take from its own documentation: the scaffold command, the build
-and test commands, the version they need, and the directory layout the docs recommend. Then **ASK** —
-the user picks one or names their own — and record the choice as an ADR (`WRAP-UP.md` § ADR) before
-writing the file. Never pick a stack silently.
-
-**Scope: what the scaffold needs, nothing beyond it.** Language and version, framework, build tool,
-test runner, folder layout, and a mocking library only where the test runner needs one named to run
-at all. A library for a *domain* — image processing, OCR, an HTTP client — is chosen when that
-domain's area is planned and gets its own ADR then. Choosing it here is guessing phases ahead of the
-spec, and the rows it would serve are usually still ⚠️.
-
-Every researched fact carries its source and the date you read it. A version number has a shelf life.
-
-Rows start `[ ]`; nothing is built yet. `/clio:memo` records the scaffold run as
-`files:["scaffold:<command>"]`, `req:[]`, and ticks the rows whose commands ran.
 
 ### Then: `.claude/rules/<stack>.md`
 
 One per stack, 10–20 lines, `paths:` frontmatter naming that stack's extensions — **or none at all**.
-Nothing is copied in from a template: every bullet is read off this repo, so a rule is true here or
-it is not written. Case B writes this after the scaffold exists, not before; there is nothing to read
-until then.
+A rule without `paths:` loads every session. Nothing is copied from a template: every bullet is read
+off this repo, so a rule is true here or it is not written. Empty repo → write it after the scaffold
+task ran, not before; there is nothing to read until then.
 
-Read, don't recall. For each bullet the repo has to show it:
-- **Formatter, linter, test runner** — the exact command, from the manifest's script block, the
-  lockfile, or the config on disk (`.prettierrc`, `pint.json`, `.golangci.yml`, `pyproject.toml`).
-  Not present → no bullet about formatting.
+For each bullet the repo has to show it:
+- **Build, test, format, lint** — the exact command, from the manifest's script block or the config
+  on disk (`.prettierrc`, `pint.json`, `.golangci.yml`, `pyproject.toml`). Not present → no bullet.
 - **Generated vs source** — only pairs you can point at: the generator config, the output directory,
-  and the command that regenerates it. A path that merely looks generated is not a bullet.
+  and the command that regenerates it. `/clio:memo` reads this to drop build output.
 - **Frozen artefacts** — applied migrations, committed lockfiles, vendored directories.
 - **The one convention this repo already follows** that a new file must match; read 2–3 existing
   files rather than stating the language's general advice.
 
-Never write a bullet the whole ecosystem would agree with but this repo does not show (`use
-BigDecimal for money`, `never edit vendor/`) unless you saw it here. `CLAUDE.md` § Rules is where a
-project-wide rule the *user states* belongs. A short file is a correct file; no verifiable bullet, no
-file.
+Never write a bullet the ecosystem would agree with but this repo does not show. A short file is a
+correct file; no verifiable bullet, no file. Show the draft and **ASK** before writing it.
 
-### Formatter hook, if the rules named a formatter
+A mechanical rule — format on save, lint before commit — is better as a hook than a bullet. Say so
+once and leave the hook to the user; this skill writes no settings file.
 
-Offer it once, and only when a `rules/*.md` bullet names a real command. `jq`-merge into
-`.claude/settings.local.json`, never overwrite, keep only this repo's branch:
-
-```json
-{ "hooks": { "PostToolUse": [ { "matcher": "Edit|Write", "hooks": [ { "type": "command", "timeout": 30,
-  "command": "f=$(jq -r '.tool_input.file_path // empty'); case \"$f\" in *.php) vendor/bin/pint \"$f\" ;; *.go) gofmt -w \"$f\" ;; *.dart) dart format \"$f\" ;; esac" } ] } ] } }
-```
-
-## 3. Write `.claude/docs/plans/<area>.md`
+## 4. Write `.claude/clio/docs/plans/<area>.md`
 
 ```markdown
 # Plan — <area>
 Spec: memory/<area>.md · rows <n>–<m> · Planned: YYYY-MM-DD · Re-planned: —
 
-| # | Task | req | Test that proves it | Needs | Done |
-|---|------|-----|---------------------|-------|------|
-| 0.1 | Toolchain on PATH (example stack: Go 1.22+, Wails v2) | 0 | `go version && wails doctor` exit 0, Go ≥ 1.22 | – | [ ] |
-| 0.2 | Scaffold run | 0 | `wails init -n app -t svelte-ts` exits 0, `go.mod` present | 0.1 | [ ] |
-| 0.3 | Empty build passes | 0 | `wails build` exits 0 | 0.2 | [ ] |
-| 0.4 | Test runner runs on the scaffold | 0 | `go test ./...` exits 0 | 0.3 | [ ] |
-| 3.1 | `GET /orders` returns 200 for an authenticated user | 3 | `go test ./orders -run TestListOK` | 0.4 | [ ] |
-| 3.2 | `GET /orders` returns 401 without a session | 3 | `go test ./orders -run TestListAuth` | 3.1 | [ ] |
-| 3.3 | List paginates at 50 per page (spec: "50 items") | 3 | `go test ./orders -run TestListPage` | 3.1 | [ ] |
-| 7.1 | — waits on `ocr-dpi-open` (⚠️ row) | 7.1 | – | – | – |
+| # | Task | req | Levels | Needs | Touches | Done |
+|---|------|-----|--------|-------|---------|------|
+| 3.1 | `GET /orders` returns 200 for an authenticated user | 3 | unit, api | 0.4 | `orders/handler.go` | [ ] |
+| 3.2 | `GET /orders` returns 401 without a session | 3 | critical · api, security | 3.1 | `orders/handler.go` | [ ] |
+| 3.3 | List paginates at 50 per page (spec: "50 items") | 3 | unit, integration, api, concurrency | 3.1 | `orders/repo.go` | [ ] |
+| 7.1 | — waits on `ocr-dpi-open` (⚠️ row) | 7.1 | – | – | – | – |
 ```
 
-Ids are `<row>.<n>`. `Done` is `[x] YYYY-MM-DD <commit>` once `/clio:memo` records the test ran;
-`[ ]` otherwise. **Show the full table and ASK before writing** — the split is the user's to
+Ids are `<row>.<n>`. `Done` is `[x] YYYY-MM-DD` (+ the commit, if any) once `/clio:memo` sees
+`/clio:test`'s gate pass; `[ ]` otherwise. **Show the full table and ASK before writing** — the split is the user's to
 approve; a wrong split is paid on every task. Declined → adjust, ask once more, then stop.
 
 ### Re-plan
 
-**Never delete, edit or untick a ticked row.** It records that something once ran, and that stays
-true however the spec moves. A row whose verification prose was moved into a task doc
-keeps its tick and its `Test`: the doc holds the record, the row is the index into it. New tasks
-append under their row; refresh `Re-planned:`.
+**Rows already in the file are history.** Never edit, delete, reorder or untick one — not its task,
+its `Levels` or `Test` cell, not the header of a pre-4.0 table (`Test that proves it` where
+`Levels` now is). The only cell that ever changes is `Done`: `/clio:memo` ticks it, and a re-plan may
+set an unticked one to `superseded YYYY-MM-DD → <new id>`, which counts as neither open nor done.
 
-What the spec did decides which of four a changed row gets:
+Every improvement is a new row, in a new table appended at the bottom (today's format), and the
+header line's `Re-planned:` date is refreshed:
 
-| The row | The spec now | Write |
+```markdown
+## Re-planned YYYY-MM-DD
+
+| # | Task | req | Levels | Needs | Touches | Done |
+|---|------|-----|--------|-------|---------|------|
+| 3.1.1 | Harden 3.1: security (was: `go test ./orders -run TestListOK`) | 3 | security | 3.1 | `orders/handler.go` | [ ] |
+| 3.2.1 | `GET /orders` returns 401 without a session (replaces pre-4.0 row 3.2) | 3 | critical · api, security | 3.1 | `orders/handler.go` | [ ] |
+| 3.3.1 | Pagination: 50 → 25 per page (spec-delta `orders-page-25`) | 3 | unit, api | 3.3 | `orders/repo.go` | [ ] |
+```
+The pre-4.0 row 3.2 above it keeps its task and `Test` cells; only its `Done` becomes
+`superseded YYYY-MM-DD → 3.2.1`.
+
+For each existing row, check both causes, and write what the table says:
+
+```bash
+${CLAUDE_PLUGIN_ROOT}/skills/context/scripts/q.sh owed --req <row's req>          # spec moved?
+${CLAUDE_PLUGIN_ROOT}/skills/test/scripts/clio-test.sh coverage <row id>          # tests enough?
+```
+
+| Row | Finding | Write |
 |---|---|---|
-| unticked | no longer supports it | `~~task~~ superseded YYYY-MM-DD` in place, `Done` → `–`, so it counts as neither open nor done |
-| ticked | still wants it, different behaviour | keep the row. New task below it, `Needs` naming it, `Test` proving the **new** behaviour |
-| ticked | does not want it, the code is there | keep the row. New **revert** task, `Test` proving it is gone — the route 404s, the control is not rendered, the column is dropped |
-| ticked | does not want it, nothing was built | `~~superseded~~`, as row one |
+| ticked | an open `spec-delta` changes its behaviour | sub-task: the new behaviour, `Levels` for it, the delta's `id` in the task |
+| ticked | a `spec-delta` drops it, the code is still there | sub-task: revert it, `regression` in `Levels` — the route 404s, the control is gone |
+| ticked | tests fall short: `coverage` says `no cases` (every pre-4.0 row), or lacks a level § 3 requires of this code today, or shows a case whose last run was `fail` | sub-task "Harden <id>: <what is missing>", `Levels` = the missing levels, plus `regression` for a failing case; a pre-4.0 row's old `Test` cell quoted in the task |
+| ticked | none of the above | nothing — it stays done |
+| unticked | the spec no longer wants it | `Done` → `superseded YYYY-MM-DD` |
+| unticked, pre-4.0 | still wanted | `Done` → `superseded YYYY-MM-DD → <old id>.<n>`, and the same task as that new row here, with `Levels` — the gate cannot run a `Test`-column row |
+| unticked | still wanted | leave it; it is still the plan |
 
-A `spec-delta` debt record is what tells you which: `/clio:update` writes one when a spec moves, and
-its `what` names the change. Carry the record's `id` in the new task: an open delta named in no plan
-is what `validate.sh all` warns about, and carrying the id is what silences it.
+- A new row's id is `<old id>.<n>`, the next free `n`. A sub-task's `Needs` names the old id; a
+  replacement keeps the old row's `Needs`. Each is gated and ticked on its own.
+- A `spec-delta` is carried by `id` in the sub-task: an open delta named in no plan is what
+  `validate.sh all` warns about, and carrying the id silences it.
+- A revert or a hardening is a task like any other. Its cases must fail while the gap is there, or
+  nobody can tell a fix from a claim of one.
+- `clio-test.sh gate` refuses a pre-4.0 row; its sub-task is what gets gated.
 
-Reverting is a task like any other. It needs a `Test` that fails while the old behaviour is still
-there, or nobody can tell a revert from a claim of one.
+## 5. Report
 
-## 4. Report
-
-Tasks written / pre-ticked / superseded · the first three with `Needs` satisfied and `Done` empty
-(the queue) · rows skipped as ⚠️/❌ and the debt `id` each waits on · any spec value you could not
-turn into a test.
+Tasks written / superseded / sub-tasks added and why (spec or tests) · the first three with `Needs`
+satisfied and `Done` empty (the queue) · rows skipped as ⚠️/❌ and the debt `id` each waits on · any spec value you could not
+turn into a task. Next: `/clio:test <task>` for the first task in the queue.

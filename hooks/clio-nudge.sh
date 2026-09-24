@@ -9,7 +9,7 @@ sid=$(jq -r '.session_id // "nosid"' <<<"$input" 2>/dev/null) || exit 0
 cwd=$(jq -r '.cwd // empty' <<<"$input" 2>/dev/null)
 [ -n "${cwd:-}" ] && cd "$cwd" 2>/dev/null
 
-IDX=.claude/clio/index.jsonl
+IDX=.claude/clio/database/index.jsonl
 # No Clio here, or the loop never started: /clio:setup already said the loop is manual. Say nothing.
 [ -s "$IDX" ] || exit 0
 git rev-parse --git-dir >/dev/null 2>&1 || exit 0
@@ -45,7 +45,7 @@ fi
 # Cannot record that we nudged → do not nudge: silence beats the same line on every prompt.
 : 2>/dev/null > "$mark" || exit 0
 
-msg="clio: work is not recorded in .claude/clio/index.jsonl — "
+msg="clio: work is not recorded in .claude/clio/database/index.jsonl — "
 if [ "$dirty" -gt 0 ]; then
   msg="${msg}${dirty} uncommitted change(s) in the working tree"
 fi
@@ -53,7 +53,7 @@ if [ "$dirty" -gt 0 ] && [ "$indexed" = no ]; then
   msg="${msg}; "
 fi
 if [ "$indexed" = no ]; then
-  msg="${msg}HEAD ${sha} appears in no index record"
+  msg="${msg}HEAD ${sha} appears in no index record (recorded before it was committed? /clio:memo only backfills the hash)"
 fi
 printf '%s.\n' "$msg"
 printf 'Tell the user once that /clio:memo is owed for this work, then carry on with their request.\n'

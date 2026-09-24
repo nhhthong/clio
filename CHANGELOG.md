@@ -1,5 +1,50 @@
 # Changelog
 
+## 4.0.0 — 2026-09-24
+
+Breaking: new layout, `/clio:update` folded into `/clio:ingest`, new `/clio:test`, `req` as strings.
+
+**Migrate a 3.x repo by hand** (`/clio:setup` stops when it sees the old layout):
+```bash
+mkdir -p .claude/clio/database
+git mv .claude/clio/index.jsonl .claude/clio/debt.jsonl .claude/clio/database/
+git mv .claude/docs .claude/clio/docs
+mkdir -p .claude/clio/docs/tests && touch .claude/clio/database/runs.jsonl
+```
+Then append one restated record per `id` with the new paths (never edit a line); move the `Domains`
+line from `CLAUDE.md` into `requirements.md` and add `Last ingest: <today> <git rev-parse --short
+HEAD>` under its title; move `clio/*.jsonl merge=union` to `.claude/clio/.gitattributes` as
+`database/*.jsonl merge=union`. Old records keep numeric `req` and still resolve. Plans with a `Test`
+column stay as they are: `/clio:plan <area>` re-plans them into sub-tasks.
+
+- **Layout.** Everything under `.claude/clio/`: `docs/` (specs, plans, tests, tasks, decisions) and
+  `database/` (`index`, `debt`, `runs`). Setup no longer writes `CLAUDE.md` or `CONTEXT.md`; both
+  templates and `validate.sh`'s checks on them are gone. Outside `.claude/clio/`, Clio writes only
+  `.claude/rules/*.md`, on a yes.
+- **New `/clio:test`.** Agreed seams, cases per level (`LEVELS.md`) with expected values sourced
+  outside the code, red → green one case at a time. `clio-test.sh run` is the only writer of
+  `runs.jsonl`; `gate` passes a task only when every case passed on the current content fingerprint (a
+  `git write-tree`, so committing keeps it; files a run creates are excluded as artifacts).
+  Critical tasks need a mutation case, concurrency ≥ 20 repeats, regression seen red first.
+- **Ingest proposes the stack** as `memory/infra.md` (row `0`, ADR). **Plan never picks one**, writes
+  no settings, researches each row before splitting, and names test `Levels` instead of a `Test`.
+- **Re-plan never edits an existing row** — only its `Done` cell changes. Improvements are sub-tasks
+  `<id>.<n>` in a new `## Re-planned` table: for an open `spec-delta`, or when `clio-test.sh
+  coverage` shows the tests fall short (no cases — every pre-4.0 row — a missing level, a failing
+  case). Pre-4.0 plans keep their `Test` table; `gate` refuses those rows, `validate.sh` names the plan.
+- **Memo** ticks a plan row only on a passing gate, records uncommitted work with an empty commit and
+  backfills the hash later, and proposes a path-scoped rule instead of a `CONTEXT.md` diff.
+- **`req` is an array of strings** — as numbers `7.1` and `7.10` collided. Write path refuses numbers.
+- **`q.sh`** holds every ledger read (was jq copied into six files); context gains a rules hop.
+- **Scripts are called by full path from `SKILL.md`.** `${CLAUDE_PLUGIN_ROOT}` is not substituted in
+  step files nor exported to Bash, so their commands ran as `/skills/...`. `allowed-tools`
+  pre-approves the scripts.
+- **`/clio:update` is gone; `/clio:ingest` does its job.** Every spec change already went through
+  ingest, so a second command only meant a step to forget. Re-ingest — or a sweep with no argument,
+  which diffs hand edits against the new `Last ingest:` line — weighs the change against built code,
+  files `spec-delta`s, moves row markers and names the areas to re-plan. `--fix` and `--dry-run` went
+  with it.
+
 ## 3.2.0 — 2026-09-18
 
 - **README cut to Clio: 255 lines to 180.** Gone: "Suggested tooling", which pitched MCP servers and

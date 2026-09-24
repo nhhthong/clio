@@ -10,9 +10,9 @@ root=$PWD
 while [ ! -d "$root/.claude/clio" ] && [ "$root" != "/" ]; do root=$(dirname "$root"); done
 [ -d "$root/.claude/clio" ] || { echo "FAIL: no .claude/clio above $PWD"; exit 1; }
 cd "$root"
-IDX=.claude/clio/index.jsonl
-DEBT=.claude/clio/debt.jsonl
-REQ=.claude/docs/specs/requirements.md
+IDX=.claude/clio/database/index.jsonl
+DEBT=.claude/clio/database/debt.jsonl
+REQ=.claude/clio/docs/specs/requirements.md
 fails=0
 fail(){ echo "FAIL: $*"; fails=$((fails+1)); }
 warn(){ echo "WARN: $*"; }
@@ -25,6 +25,12 @@ DEBT_FIELDS='date id kind status domain what req specs docs code action source b
 # the fix is appending a full record under the same key (readers take the last line), so an audit
 # names it and moves on, while the write path (`index` / `debt` mode) refuses the line outright.
 sev=fail
+# `req` holds requirement row numbers as strings: as JSON numbers 7.1 and 7.10 are the same value.
+# Write path refuses a number; `all` names pre-4.0 records, which q.sh still reads via tostring.
+check_req_type(){ # $1 ledger name, $2 line
+  jq -e '(.req // []) | all(type=="string")' >/dev/null 2>&1 <<<"$2" \
+    || "$sev" "$1 .req holds a number — write row numbers as strings (\"7.10\", not 7.10)"
+}
 check_fields(){ # $1 ledger name, $2 field list, $3 line
   local missing
   missing=$(jq -r --arg f "$2" '(($f | split(" ")) - keys) | join(" ")' <<<"$3" 2>/dev/null)
@@ -35,7 +41,7 @@ rows=$([ -f "$REQ" ] && awk -F'|' '/^\|/{gsub(/[ \t]/,"",$2); if($2 ~ /^[0-9]+(\
 # Same parse over the plan tables: the ids `plan_tasks` is allowed to name. No plan file at all is
 # normal (Lite mode, an area nobody planned), and then nothing here can be checked.
 shopt -s nullglob
-plans=(.claude/docs/plans/*.md)
+plans=(.claude/clio/docs/plans/*.md)
 tasks=$([ ${#plans[@]} -gt 0 ] && awk -F'|' '/^\|/{gsub(/[ \t]/,"",$2); if($2 ~ /^[0-9]+(\.[0-9]+)*$/) print $2}' "${plans[@]}")
 
 check_req(){   # $1 ledger name, $2 line
@@ -48,7 +54,7 @@ check_plan_tasks(){ # $2 line — an id naming no plan row sends /clio:memo to t
   [ -n "$tasks" ] || return 0
   while read -r t; do
     [ -z "$t" ] && continue
-    printf '%s\n' "$tasks" | grep -qx "$t" || fail "$1 .plan_tasks $t is in no .claude/docs/plans/*.md row"
+    printf '%s\n' "$tasks" | grep -qx "$t" || fail "$1 .plan_tasks $t is in no .claude/clio/docs/plans/*.md row"
   done < <(jq -r '.plan_tasks[]?' <<<"$2")
 }
 check_specs(){ # $1 ledger name, $2 line
@@ -62,7 +68,7 @@ check_index_line(){
          and (.req|type=="array") and (.specs|type=="array")
          and ((.plan_tasks|type=="array") or (has("plan_tasks")|not))' >/dev/null 2>&1 <<<"$line" \
     || { fail "index line missing a required field, bad type, or not valid JSON"; return 1; }
-  check_fields index "$IDX_FIELDS" "$line"
+  check_fields index "$IDX_FIELDS" "$line"; check_req_type index "$line"
   local doc; doc=$(jq -r .doc <<<"$line")
   # A migrated doc leaves its pre-3.0 records keyed on the old path, which is now gone. `all` mode's
   # own sweep reports those as INFO once it finds the record that supersedes them — so only FAIL
@@ -78,7 +84,7 @@ check_index_line(){
   # named by content.
   local id; id=$(jq -r '.id // empty' <<<"$line")
   case $doc in
-    .claude/docs/tasks/*|.claude/docs/decisions/*)
+    .claude/clio/docs/tasks/*|.claude/clio/docs/decisions/*)
       [ -z "$id" ] || case ${doc##*/} in "${id}_"*) ;;
         *) fail "index .id $id is not the filename prefix of $doc" ;; esac ;;
   esac
@@ -93,7 +99,7 @@ check_debt_line(){
          and (.req|type=="array") and (.specs|type=="array") and (.code|type=="array")
          and has("blocked_by")' >/dev/null 2>&1 <<<"$line" \
     || { fail "debt line missing a required field, bad kind/status, or not valid JSON"; return 1; }
-  check_fields debt "$DEBT_FIELDS" "$line"
+  check_fields debt "$DEBT_FIELDS" "$line"; check_req_type debt "$line"
   check_specs debt "$line"; check_req debt "$line"
 }
 
@@ -162,7 +168,7 @@ case $mode in
     # orphan docs — on disk, never indexed. globstar: task docs live in tasks/<feature>/ since 3.0,
     # and a non-recursive glob would make every one of them invisible to this check.
     shopt -s globstar nullglob
-    for d in .claude/docs/tasks/**/*.md .claude/docs/decisions/**/*.md; do
+    for d in .claude/clio/docs/tasks/**/*.md .claude/clio/docs/decisions/**/*.md; do
       [ -e "$d" ] || continue
       [ "${d##*/}" = summary.md ] && continue          # feature-level blurb, never an indexed doc
       jq -e --arg d "$d" 'select(.doc==$d)' <<<"$idxjson" >/dev/null 2>&1 || warn "orphan doc, no index record: $d — /clio:memo was skipped"
@@ -177,22 +183,46 @@ case $mode in
     done < <(jq -r '.doc' <<<"$idxjson" 2>/dev/null | sort -u)
     # One id, one row. A re-plan supersedes an unticked row *in place*; appending a second row with
     # the same id instead leaves two, and `Done` then depends on which one a reader hits first.
-    for pl in .claude/docs/plans/*.md; do
+    for pl in .claude/clio/docs/plans/*.md; do
       [ -e "$pl" ] || continue
       while read -r dup; do
         [ -n "$dup" ] && fail "$pl has task id $dup twice — supersede a row in place, never append a copy"
       done < <(awk -F'|' 'NF>5 && $2 ~ /^ *[0-9]+(\.[0-9]+)* *$/ {gsub(/^ +| +$/,"",$2); print $2}' "$pl" | sort | uniq -d)
     done
 
+    # A pre-4.0 table (Test column) with no table in today's format after it: never re-planned, so its
+    # ticked rows were never brought under /clio:test and the gate refuses its unticked ones.
+    for pl in .claude/clio/docs/plans/*.md; do
+      [ -e "$pl" ] || continue
+      grep -qE '^\| *# *\|.*\| *Test' "$pl" && ! grep -qE '^\| *# *\|.*\| *Levels *\|' "$pl" \
+        && warn "$pl is a pre-4.0 plan (Test column) — /clio:plan re-plans it into sub-tasks"
+    done
+    # Test cases: one id, one row — clio-test.sh refuses to run a duplicated id, say so before it does.
+    for tf in .claude/clio/docs/tests/*.md; do
+      [ -e "$tf" ] || continue
+      while read -r dup; do
+        [ -n "$dup" ] && fail "$tf has case id $dup twice"
+      done < <(awk -F'|' 'NF>=9 {g=$2; gsub(/^[ \t]+|[ \t]+$/,"",g); if(g!="Case" && g !~ /^-+$/) print g}' "$tf" | sort | uniq -d)
+    done
+    RUNS=.claude/clio/database/runs.jsonl
+    if [ -f "$RUNS" ]; then
+      n=0; while IFS= read -r l; do n=$((n+1))
+        [ -z "$l" ] || jq -e '.case and .fp and (.result|IN("pass","fail"))' >/dev/null 2>&1 <<<"$l" \
+          || fail "$RUNS line $n is not a clio-test.sh record — only the script writes this file"
+      done < "$RUNS"
+    else
+      warn "missing $RUNS — /clio:test has nowhere to record evidence"
+    fi
+
     # A plan task's `req` column, against requirements.md — the same rule check_req applies to a
     # ledger record, applied to the other file that carries req numbers.
     # Not checked here: which decided rows have no plan task. `plan` gives a ⚠️/❌ row a placeholder
     # line naming the debt it waits on, so "a plan row exists for an undecided row" is the correct
     # state, not a finding; and "✅ with no plan task" overlaps the ✅-with-no-index-record INFO below.
-    if [ -f "$REQ" ] && compgen -G '.claude/docs/plans/*.md' >/dev/null; then
+    if [ -f "$REQ" ] && compgen -G '.claude/clio/docs/plans/*.md' >/dev/null; then
       planreq=$(awk -F'|' 'NF>5 && $2 ~ /^ *[0-9]+(\.[0-9]+)* *$/ {
         n=split($4,a,","); for(i=1;i<=n;i++){gsub(/^ +| +$/,"",a[i]); if(a[i] ~ /^[0-9]/) print a[i]}
-      }' .claude/docs/plans/*.md | sort -u)
+      }' .claude/clio/docs/plans/*.md | sort -u)
       while read -r n; do
         [ -z "$n" ] && continue
         printf '%s\n' "$rows" | grep -qx "$n" \
@@ -204,28 +234,25 @@ case $mode in
     # task carrying its id, so an open delta named in no plan means no plan absorbed it — and that
     # is silent: every later session reads a plan that no longer matches the decision.
     shopt -s nullglob
-    if compgen -G '.claude/docs/plans/*.md' >/dev/null; then
+    if compgen -G '.claude/clio/docs/plans/*.md' >/dev/null; then
       while read -r id; do
         [ -z "$id" ] && continue
-        grep -qrF -- "$id" .claude/docs/plans/ \
+        grep -qrF -- "$id" .claude/clio/docs/plans/ \
           || warn "spec-delta $id is in no plan — /clio:plan <area> absorbs it as a task"
       done < <(jq -s -r 'group_by(.id)[] | last
         | select(.kind=="spec-delta" and .status!="done" and .blocked_by==null) | .id' <<<"$debtjson")
     fi
 
     # Links inside a document's prose. `.doc` and `.specs` are fields and already checked; a path
-    # written into a sentence is not, and /clio:audit renaming a doc is exactly what breaks those.
+    # written into a sentence is not, and moving a doc is exactly what breaks those.
     # Markdown only: a ledger is append-only, so its older records name the old path on purpose and
     # rewriting them would be the actual bug. Skip a path holding `<` — a template placeholder.
     while IFS= read -r ref; do
       [ -z "$ref" ] && continue
       case $ref in *'<'*) continue ;; esac
       [ -e "$ref" ] || warn "dead link in a document: $ref — was it renamed? rewrite the reference"
-    done < <(grep -rhoE --include='*.md' '\.claude/[A-Za-z0-9._/-]+\.md' .claude/ CLAUDE.md 2>/dev/null | sort -u)
+    done < <(grep -rhoE --include='*.md' '\.claude/[A-Za-z0-9._/-]+\.md' .claude/clio/ .claude/rules/ 2>/dev/null | sort -u)
 
-    for f in .claude/CONTEXT.md .claude/CLAUDE.md CLAUDE.md; do
-      grep -q '<!--' "$f" 2>/dev/null && warn "$f still has HTML comments — it loads every session, delete them"
-    done
     # requirements.md markers vs the ledgers
     if [ -f "$REQ" ]; then
       while IFS='|' read -r _ num _ _ status _; do

@@ -1,24 +1,12 @@
-# Hop 3 — what is still open (`.claude/clio/debt.jsonl`)
+# Hop 3 — what is still open (`.claude/clio/database/debt.jsonl`)
 
-Every open item lives here: `/clio:update` writes spec-moved-code-hasn't deltas, `/clio:memo`
+Every open item lives here: `/clio:ingest` writes spec-moved-code-hasn't deltas, `/clio:memo`
 writes leftover business from a completed run. Keyed by `id`, one line per `id`.
 
 ```bash
-# the row hop 1 gave you — start here
-N=18
-jq -s -c --argjson n $N 'group_by(.id)[] | last
-  | select((.req[]?==$n) and .status!="done")
-  | {id, kind, blocked:(.blocked_by!=null), action, docs}' .claude/clio/debt.jsonl
-
-# widen by area — pair domain with specs/req, never filter on domain alone (a pre-2.1 record may lack it; `validate.sh all` names those)
-jq -s -c 'group_by(.id)[] | last | select(.status!="done")
-  | select(.domain=="account" or (.specs[]? | contains("order-flow")) or (.req[]? == 20))' \
-  .claude/clio/debt.jsonl
-
-# everything open, or filtered by one word — what the user means by "what do I owe?"
-jq -s -c --arg q "<word or empty>" 'group_by(.id)[] | last | select(.status!="done")
-  | select($q=="" or .domain==$q or (.req[]?|tostring)==$q
-           or (.specs[]? | contains($q)) or (.what[]? | contains($q)))' .claude/clio/debt.jsonl
+q.sh owed --req 18                  # the row hop 1 gave you — start here; queue first
+q.sh owed --area account --spec order-flow --req 20   # widen: pair domain with specs/req
+q.sh owed --q "<word>"              # "what do I owe?" — omit --q for everything open
 ```
 
 Read two fields first:
@@ -42,6 +30,6 @@ Asked plainly for what is owed, report two groups in this order, `blocked_by` al
 **actionable now** (`blocked_by: null`) — `id` · `kind` · what · first entry of `code`, the work
 queue — then **blocked**, with what each waits on, said plainly as must-not-start. Close with one
 line on `in-process` records nothing has touched in a while, and any `spec-blocked` whose
-`blocked_by` names a row hop 1 now shows ✅. Flag those; `/clio:memo` and `/clio:update` re-file them.
+`blocked_by` names a row hop 1 now shows ✅. Flag those; `/clio:memo` and `/clio:ingest` re-file them.
 
-Then hop 4 (coverage) and Report, back in `SKILL.md`.
+Then hops 4–5 and Report, back in `SKILL.md`.

@@ -4,14 +4,17 @@
 
 - Ledger schema: `skills/memo/steps/DEBT-IT.md` and `skills/memo/steps/INDEX-IT.md`.
 - Validation: `skills/memo/scripts/validate.sh`. Every rule the schema states, the validator checks.
-- Read-side queries: `skills/context/HOP*.md`. Status semantics: `skills/update/SKILL.md` § 2.
-- `hooks/clio-nudge.sh` reads `index.jsonl` `.commits[]` as well, so that field lives in four files.
-- Reading an older `.claude/`: `validate.sh` groups on `.id // <the id that later claimed the path>`
+- Read-side queries and git facts (changed files, a run's commit): `skills/context/scripts/q.sh`.
+  Test evidence: `skills/test/scripts/clio-test.sh`, the only writer of `runs.jsonl`. Status
+  semantics: `skills/context/HOP3.md`.
+- `hooks/clio-nudge.sh` and `q.sh unrecorded` read `index.jsonl` `.commits[]` as well, so that field
+  lives in several files.
+- Reading an older `.claude/`: `validate.sh` and `q.sh` group on `.id // <the id that later claimed the path>`
   and downgrades a missing field to a warning, so a pre-3.0 layout still resolves. A change that
   breaks that has to say so in `CHANGELOG.md` with the steps to move a repo across by hand.
 - Drift between the layers: `validate.sh` detects it — requirement rows against plan tasks, an open
-  `spec-delta` in no plan, one task id twice — and `skills/update/SKILL.md` § 6 turns a detection into
-  the command that fixes it. `skills/plan/SKILL.md` § 3 holds the rules for re-planning around a
+  `spec-delta` in no plan, one task id twice, a pre-4.0 plan never re-planned — and `skills/ingest/SKILL.md` § 6 turns a detection into
+  the command that fixes it. `skills/plan/SKILL.md` § Re-plan holds the rules for re-planning around a
   ticked row, and `/clio:plan` stays the only writer of `docs/plans/*.md`.
 
 Change a field in one place, update the others in the same commit. Two invariants span files the
@@ -28,6 +31,8 @@ same way and are easy to miss:
 claude plugin validate .
 bash skills/memo/scripts/test.sh      # validate.sh fixtures: must print OK
 bash hooks/test-nudge.sh              # clio-nudge.sh fixtures: must print OK
+bash skills/test/scripts/selftest.sh  # clio-test.sh run/gate fixtures: must print OK
+bash skills/context/scripts/selftest.sh  # q.sh query fixtures: must print OK
 ```
 
 Nothing runs these for you; there is no CI. A new rule in `validate.sh` or `clio-nudge.sh` lands

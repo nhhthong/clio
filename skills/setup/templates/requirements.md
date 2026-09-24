@@ -1,4 +1,8 @@
 # Requirements — row → spec file index
+Last ingest: <written by /clio:ingest>
+
+Domains — the only values allowed in the `domain` field of both ledgers, by business area served,
+never by directory: <domains, e.g. `account` `checkout` `infra` `all`>
 
 Distilled requirement specs, final decisions only. **Starting a task whose context is ambiguous:
 find the matching row below, read the mapped file(s) under `memory/`. No row, or a row marked
@@ -17,7 +21,7 @@ Raw sources (<contract, Q&A, meeting notes…>) live at `<path>` (<committed / l
 version (git history keeps it).
 
 **The status column answers only "has this been decided?", never "is it built?"** — build state is
-`.claude/clio/index.jsonl`, open items `.claude/clio/debt.jsonl`, both joined on `req` = row `#`.
+`.claude/clio/database/index.jsonl`, open items `.claude/clio/database/debt.jsonl`, both joined on `req` = row `#`.
 
 ## By requirement number
 

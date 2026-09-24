@@ -1,10 +1,10 @@
-# Step 3 — Write the doc
+# Step 2 — Write the doc
 
 ## Where docs live
 
 One directory per feature, one file per sub-task:
 ```
-.claude/docs/tasks/order-page/
+.claude/clio/docs/tasks/order-page/
 ├── summary.md                     # the feature, ~20 lines, does not grow per run
 ├── 1789430400_order-fetch.md
 └── 1789516800_loyalty-lookup.md
@@ -18,7 +18,7 @@ keep both levels small and the filenames descriptive.
 ```bash
 ts=$(date +%s)          # this is the doc's id, forever: filename prefix and index.jsonl .id
 ```
-Filename: `.claude/docs/tasks/<feature>/${ts}_<name>.md`, `<name>` = 2–4 lowercase hyphenated words
+Filename: `.claude/clio/docs/tasks/<feature>/${ts}_<name>.md`, `<name>` = 2–4 lowercase hyphenated words
 naming the sub-task (`loyalty-lookup`, `order-bulk-create`). Working from a plan task → use that
 task's wording; the plan ids themselves go in the ledger's `plan_tasks`, not in the filename.
 
@@ -26,7 +26,7 @@ task's wording; the plan ids themselves go in the ledger's `plan_tasks`, not in 
 # <Sub-task Name>
 Date: YYYY-MM-DD
 Updated: YYYY-MM-DD
-Commit: <hash or "not committed">
+Commit: <hash, or empty>
 Plan tasks: <3.1, or "none">
 
 ## Summary
@@ -42,7 +42,7 @@ One sentence.
 - Anything that could affect other features
 
 ## Testing Done
-- YYYY-MM-DD — how it was verified
+- YYYY-MM-DD — the `clio-test.sh gate` OK line, or "unverified" and why
 
 ## Related
 - Prior task docs / ADRs this builds on. "none" if genuinely none.
@@ -57,7 +57,7 @@ One sentence.
 New feature directory → also write `summary.md`, and only what `ls` cannot say:
 ```markdown
 # <Feature>
-Domain: <domain> · Plan: `.claude/docs/plans/<area>.md` · Spec: `memory/<area>.md`
+Domain: <domain> · Plan: `.claude/clio/docs/plans/<area>.md` · Spec: `memory/<area>.md`
 
 ## What this is
 One or two sentences.
@@ -75,7 +75,7 @@ existing bullet except under `## Follow-up`. A missing section → add it in the
 the code no longer matches → relabel it in place, `## [SUPERSEDED YYYY-MM-DD] <heading>`, add
 `— REVERTED, DO NOT RE-IMPLEMENT` when the code is gone, keep the body.
 
-Header: keep `Date:`, refresh `Updated:` to today, append (don't replace) `Commit:`.
+Header: keep `Date:`, refresh `Updated:` to today, append this run's hash to `Commit:` if there is one.
 
 | Section | Do |
 |---|---|
@@ -84,7 +84,7 @@ Header: keep `Date:`, refresh `Updated:` to today, append (don't replace) `Commi
 | `## Decisions` | Append. Reversed → append `Superseded YYYY-MM-DD: now Y instead of X, because …`. |
 | `## Side Effects` / `## Testing Done` / `## Related` | Append, dated. |
 | `## Follow-up` | The only destructive section — delete completed, add new open. Empty → `none`. |
-| `## Change Log` | Append `- YYYY-MM-DD — <summary> (commit <hash>)`. |
+| `## Change Log` | Append `- YYYY-MM-DD — <summary>` (+ ` (commit <hash>)` if any). Backfill: `- YYYY-MM-DD — committed as <hash>`. |
 
 **Split gate.** This doc is over ~200 non-blank lines, **or** its `req` now holds more than one row
 → ask the user once whether the next piece of work should start its own sub-task doc in the same

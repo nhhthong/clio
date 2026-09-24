@@ -2,30 +2,37 @@
 name: context
 description: Load the spec, prior task docs and open debt for an area before working in it. Use before any non-trivial task, and when the user asks "where are we", "what's next", "why is X like this" or "any history on this".
 argument-hint: "[area | requirements row | debt id | question — omit for the overview]"
+allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/skills/context/scripts/q.sh *)
 ---
 
 # Related Context
 
 Target (may be empty): $ARGUMENTS
 
+Every ledger read goes through one read-only script. The hop files call it `q.sh`; each Bash call is
+a fresh shell, so always run it by its full path, never through a variable:
+`${CLAUDE_PLUGIN_ROOT}/skills/context/scripts/q.sh`.
+
 Also the answer to "what do I still owe?" — hop 3 alone, filtered, is the whole of it.
 
 **Two depths.** The *user* asked "where are we / what's next / continue" with no area named →
-[HOP0.md](HOP0.md): counts from the plans and ledgers, nothing opened, ≤ 10 lines, stop. Anything
+**hop 0**: run `q.sh summary` and open nothing else. Report in ≤ 10 lines: per area `done/open` and
+the first open task with its levels · debt `queue` vs `blocked` · last memo. A `next:` whose `Needs`
+is unticked is not next — say which task it waits on. Stop there. Anything
 else — a target (area, row, debt `id`, file), a "why is X like this?" question, or **you triggered
 this yourself before a task** (then the target is that task's area; an empty `$ARGUMENTS` is not a
-reason for hop 0) → hops 1–3 below, then open **only** the docs those records point at and answer
+reason for hop 0) → hops 1–4 below, then open **only** the docs those records point at and answer
 with `file:line` quotes. A follow-up question in the same session
-digs from where the last hop stopped; never re-run hop 0, never fall back to reading `.claude/docs/`
+digs from where the last hop stopped; never re-run hop 0, never fall back to reading `.claude/clio/docs/`
 whole. Nothing on record → say so; do not reconstruct an answer from the code.
 
-Three things decide whether a change is correct: what the customer asked for (`.claude/docs/specs/`),
-what was already built and why (`.claude/docs/tasks/`, `.claude/docs/decisions/`), and what is known
-broken/undecided (`.claude/clio/debt.jsonl`). This skill loads all three cheaply, in that order,
+Three things decide whether a change is correct: what the customer asked for (`.claude/clio/docs/specs/`),
+what was already built and why (`.claude/clio/docs/tasks/`, `.claude/clio/docs/decisions/`), and what is known
+broken/undecided (`.claude/clio/database/debt.jsonl`). This skill loads all three cheaply, in that order,
 without reading the whole archive.
 
 **Read-only.** Never writes to `index.jsonl`/`debt.jsonl`, never edits a spec, never fixes a stale
-record — it *reports* contradictions; `/clio:memo` and `/clio:update` are the writers. Staying
+record — it *reports* contradictions; `/clio:memo` and `/clio:ingest` are the writers. Staying
 silent because "nothing was actionable" is the failure mode.
 
 ## Walk the hops, in order
@@ -39,14 +46,18 @@ Each hop feeds the next — don't skip ahead, and don't stop after hop 1 just be
    file/area — the last record per doc is its full current state, earlier ones are the timeline.
 3. **What's still open** → [HOP3.md](HOP3.md). Query `debt.jsonl`. `blocked_by` is the only field
    that decides whether you may act on it.
-4. **Coverage** — nothing stores this, it's derived: hop 1's row number joined against hops 2 and 3
+4. **Rules for the files you will touch.** A path-scoped rule loads only once Claude *reads* a
+   matching file, so a file you are about to create has loaded nothing yet. Name them up front:
+   `q.sh rules <files from the plan's Touches or hop 2>`,
+   then read each matching rule. Its bullets are constraints for this task, quoted like the rest.
+5. **Coverage** — nothing stores this, it's derived: hop 1's row number joined against hops 2 and 3
    tells you what's built vs what's still owed. ✅ row + no index record + no open debt = decided but
    unbuilt, worth a sentence in your report.
 
 ## Report — including what looks wrong
 
-Summarise: governing spec + status, prior docs worth knowing, open debt in this area, the plan's
-next task and its test. A question ("why X?", "what is `<id>`?") is answered from the section the
+Summarise: governing spec + status, prior docs worth knowing, open debt in this area, the rules that bind the files, the plan's
+next task and its cases (`docs/tests/<area>.md`). A question ("why X?", "what is `<id>`?") is answered from the section the
 record names — task doc `## Decisions` / `## Side Effects` / `## Follow-up`, ADR `## Decision` /
 `## Consequences`, debt `what` / `action` / `blocked_by` — quoted, with the path. Then flag
 plainly, without fixing:
@@ -63,6 +74,6 @@ plainly, without fixing:
 
 ## If nothing matches
 
-Say so in one line, continue — don't fall back to reading all of `.claude/docs/`. "No task doc
+Say so in one line, continue — don't fall back to reading all of `.claude/clio/docs/`. "No task doc
 matched" ≠ "no context": hop 1 is independent of hop 2, and a spec row with no implementation
 history is exactly where reading the spec matters most.

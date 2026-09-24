@@ -1,9 +1,9 @@
-# Hop 1 — the requirement (`.claude/docs/specs/requirements.md`)
+# Hop 1 — the requirement (`.claude/clio/docs/specs/requirements.md`)
 
 Derive keywords from the task: domain area/domain, route path, model/table, module, feature name.
 `/account/orders` → `account`, `order`. `infra/docker/entrypoint` → `infra`.
 ```bash
-grep -in "<keyword>" .claude/docs/specs/requirements.md
+grep -in "<keyword>" .claude/clio/docs/specs/requirements.md
 ```
 `requirements.md` maps requirement rows (contract tasks, epics, or issue numbers — whatever `req` means in
 this project) + a topic-keyword table onto `memory/*.md` spec files. Read the mapped file(s) in
@@ -26,6 +26,6 @@ full — they're short and already distilled.
 
 Note the row number(s) (`req`) — reused in [HOP2.md](HOP2.md), and `/clio:memo` needs them.
 
-`.claude/docs/plans/<area>.md` exists → read it. The first row with `Done` empty and every `Needs`
-ticked is the next task; its `Test` column is the success criterion for this session. No plan file
+`.claude/clio/docs/plans/<area>.md` exists → read it. The first row with `Done` empty and every `Needs`
+ticked is the next task. Its cases in `.claude/clio/docs/tests/<area>.md` are the success criterion; none yet → `/clio:test <task>` designs them before code. No plan file
 for a ✅ row you are about to build → say `/clio:plan <area>` has not been run, continue.

@@ -9,7 +9,7 @@
   It is not auto-memory. Nothing is written unless you asked for it.
 
   [![Claude Code plugin](https://img.shields.io/badge/Claude_Code-plugin-D97757?logo=anthropic&logoColor=white)](https://code.claude.com/docs/en/plugins)
-  [![Version](https://img.shields.io/badge/version-3.2.0-blue)](CHANGELOG.md)
+  [![Version](https://img.shields.io/badge/version-4.0.0-blue)](CHANGELOG.md)
   [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 </div>
 
@@ -24,7 +24,7 @@ Spec      memory/checkout.md · rows 3–5 · row 4 open: tax rounding rule owed
 Built     2026-08-20 checkout-orders.md — GET /orders, pagination 50/page (commit 3f2a1c)
 Owed      cart-rounding · code-debt · CartService.php:52 · blocked_by: null   ← work queue
           tax-rule-open · spec-blocked · waiting on PO                        ← do not start
-Next      plan 3.3 — orders list filters by status · test: go test ./orders -run TestListFilter
+Next      plan 3.3 — orders list filters by status · levels: unit, api, concurrency · 4 cases, gate: 3.3-c1 never run
 ```
 
 Row 4 is open, so Claude asks about it instead of inventing a rounding rule.
@@ -48,17 +48,18 @@ claude plugin install clio@nhhthong
 Then, once per repository:
 
 ```text
-/clio:setup                  # lays out .claude/, fills CLAUDE.md and CONTEXT.md by asking you
-/clio:plan infra             # settles the stack: docs/plans/infra.md and rules/<stack>.md
-/clio:ingest docs/spec.md    # optional: distil a requirement document into spec files
-/clio:plan checkout          # optional: split one spec area into testable tasks
+/clio:setup                  # creates .claude/clio/docs/ and .claude/clio/database/
+/clio:ingest docs/spec.md    # distils the spec into areas and proposes the stack (row 0)
+/clio:plan infra             # the stack → toolchain/scaffold tasks and rules/<stack>.md
+/clio:plan checkout          # split one spec area into researched, testable tasks
 ```
 
-From there the loop runs itself: Claude runs `clio:context` before non-trivial work, you run
-`/clio:memo` after it. A hook notices when you skip the memo — see [The loop](#the-loop).
+From there, per task: Claude runs `clio:context` before non-trivial work, `/clio:test` designs
+and proves it, you run `/clio:memo` after. A hook notices when you skip the memo — see
+[The loop](#the-loop).
 
-Requires `bash`, `jq`, `git`, `awk` and `sed`. Setup writes nothing outside `.claude/`, and a plugin
-update writes nothing inside it.
+Requires `bash`, `jq`, `git`, `awk` and `sed`. Setup writes nothing outside `.claude/clio/`, never
+touches `CLAUDE.md` or `CONTEXT.md`, and a plugin update writes nothing inside it.
 
 ## How it differs
 
@@ -78,63 +79,64 @@ before working. Beads tracks only what is owed; Clio adds decided and built, and
 
 ## The layout
 
-Everything lives under `.claude/`. Three questions, one home each. `/clio:setup` writes this layout
-into your repo once and the six skills stay in the plugin, so dropping the plugin leaves the files
-behind: templates and `rules/` are yours to copy, the ledgers keep working if you write their schema
-and validator by hand.
+Everything Clio owns lives in `.claude/clio/`. Four questions, one home each. `/clio:setup` creates
+the folders once and the six skills stay in the plugin, so dropping the plugin leaves the files
+behind. `CLAUDE.md` and `CONTEXT.md` stay yours: Clio never writes them, and nothing it writes loads
+every session — the skills read it when they need it.
 
-| | Path | Holds | Written by |
+| | Path under `.claude/clio/` | Holds | Written by |
 |---|---|---|---|
-| **Decided** | `docs/specs/requirements.md` | one row per requirement → spec file → decided / open / blocked | humans, `/clio:update` |
+| **Decided** | `docs/specs/requirements.md` | one row per requirement → spec file → decided / open / blocked; the `Domains:` line | humans, `/clio:ingest` |
 | | `docs/specs/memory/*.md` | distilled decisions per area, each quoting its source | `/clio:ingest` |
-| | `docs/plans/infra.md` | the stack and the scaffold, read off the repo or researched for an empty one | `/clio:plan` |
-| | `docs/plans/<area>.md` | decided rows split into the smallest testable tasks | `/clio:plan` |
-| **Built** | `clio/index.jsonl` | one line per documented run, append-only; last line per `id` is its current state | `/clio:memo` |
+| | `docs/specs/memory/infra.md` | the stack, decided from the spec's constraints or read off the repo (row `0`) | `/clio:ingest` |
+| | `docs/plans/infra.md` | the stack as toolchain and scaffold tasks (level `smoke`); their commands go to `rules/<stack>.md` | `/clio:plan` |
+| | `docs/plans/<area>.md` | decided rows split into the smallest tasks, each with the test levels it needs; a re-plan appends sub-tasks, never edits a row | `/clio:plan` |
+| | `docs/tests/<area>.md` | test cases per task: level, expected value and its source, command, repeat | `/clio:test` |
+| **Built** | `database/index.jsonl` | one line per documented run, append-only; last line per `id` is its current state | `/clio:memo` |
 | | `docs/tasks/<feature>/<id>_<name>.md` | one doc per sub-task, for life; updated, never forked | `/clio:memo` |
-| | `docs/tasks/<feature>/summary.md` | what `ls` cannot say: the domain, the plan and spec it serves, the ADRs that constrain it | `/clio:memo` |
-| | `docs/decisions/*.md` | ADRs, flat, read by the features they constrain | `/clio:memo` |
-| **Owed** | `clio/debt.jsonl` | bugs, unverified work, open questions, append-only | `/clio:memo`, `/clio:update` |
-| **Always loaded** | `CLAUDE.md` | rules only, ~80 lines; imports `CONTEXT.md`; domain vocabulary | you, `/clio:setup` |
-| | `CONTEXT.md` | stable facts: entities, colliding terms, key flows, landmines | you, `/clio:memo` (with a yes) |
-| | `rules/<stack>.md` | path-scoped, loads only for the files it names; written from what this repo shows, never from a template | you, `/clio:plan` |
+| | `docs/tasks/<feature>/summary.md` | what `ls` cannot say: the domain, the plan and spec it serves, cross-cutting side effects | `/clio:memo` |
+| | `docs/decisions/*.md` | ADRs, flat, read by the features they constrain | `/clio:ingest`, `/clio:memo` |
+| **Proven** | `database/runs.jsonl` | one line per case run: result, repeats, commit, working-tree fingerprint | `clio-test.sh` only |
+| **Owed** | `database/debt.jsonl` | bugs, unverified work, open questions, append-only | `/clio:memo`, `/clio:ingest` |
 
-An upgrade that moves the layout leaves your `.claude/` alone, and readers still resolve the old
-shape: a doc with no `id` keys on its path, a pre-2.0 record on its `commit`. `validate.sh all` names
-what is old without failing on it. A release needing more says so in [CHANGELOG.md](CHANGELOG.md).
+Outside `.claude/clio/`, Clio writes only `.claude/rules/*.md`, and only with a yes: `/clio:plan
+infra` drafts `rules/<stack>.md`, `/clio:memo` proposes a one-bullet lesson under a narrow `paths:`
+glob. Path-scoped rules load only when Claude reads a matching file, so lessons do not grow the
+always-loaded files.
 
-The three ledgers join on `req`, the requirement row number. `.jsonl` files are append-only: an
-update is a new line under the same `id`, and readers take the last. A task doc's `id` is its
+`index` and `debt` join the spec on `req`, the requirement row number (a string: `"7.10"`);
+`runs` joins the plan on the task id. `.jsonl` files are append-only: an update is a new line under
+the same key, and readers take the last. A task doc's `id` is its
 creation timestamp and its filename prefix, so moving the doc never breaks its history.
 
-Only `CLAUDE.md` and `CONTEXT.md` load every session. The rest is queried: `ls docs/tasks/` names the
-features, `ls docs/tasks/<feature>/` its sub-tasks, and hop 2 reads one `## Decisions` block rather
-than a file.
-
-Already have a `.claude/`? Clio appends its import and one `## Project memory` block, then asks
-whether to bring `CLAUDE.md`, `CONTEXT.md` and `rules/` to this layout — the diff is shown and you
-confirm again before anything is written. Say no and nothing else is touched.
+Coming from 3.x (`.claude/docs/` and `.claude/clio/*.jsonl`)? Move them by hand — CHANGELOG 4.0.0
+has the commands. `/clio:setup` stops when it sees the old layout rather than moving your
+ledgers for you.
 
 ## The loop
 
 ```mermaid
 flowchart LR
-    subgraph ledgers[".claude/"]
+    subgraph ledgers[".claude/clio/"]
         direction TB
         S[("specs · decided")]
         I[("index.jsonl · built")]
+        E[("runs.jsonl · proven")]
         D[("debt.jsonl · owed")]
     end
 
     A(["new task"]) --> B["clio:context"]
     S & I & D -.-> B
     B -- "open row, no record" --> X(["stop, ask"])
-    B --> C["work one plan task<br/>its Test column = done"]
+    B --> T["/clio:test<br/>cases · red → green"]
+    T -.-> E
+    T --> C["gate passes<br/>= done"]
     C --> M["/clio:memo"]
     M -.-> I & D
     M -. "next session" .-> A
 
-    R(["spec changed"]) --> U["/clio:update"] -.-> S & D
-    U --> P["/clio:plan"] -.-> C
+    R(["spec arrives or changes"]) --> U["/clio:ingest"] -.-> S & D
+    U --> P["/clio:plan"] -.-> T
 ```
 
 Dotted lines are reads and writes. Skip `/clio:memo` and the next session starts without it; the one
@@ -148,22 +150,24 @@ appears in an index record.
 - Not verified by reading, grepping, querying or running: say "unverified" and ask.
 - **Decided ≠ built.** Decisions live in the spec register, build state only in the ledgers.
 - Ledger lines are never edited, reordered or deleted. One sub-task, one doc, for life.
-- A task is done when its named test ran, not when the code looks right.
+- A task is done when `/clio:test`'s gate passes: every case of every level the plan named, green on
+  the current code, repeated as often as the case says. Flaky is failed. The model never writes the
+  evidence; a script does.
 - `blocked_by: null` is the work queue; anything else waits. Every open spec point has a debt record.
 
 ## Commands
 
 | Command | Does | When |
 |---|---|---|
-| `/clio:setup` | lay out `.claude/`, fill CLAUDE.md / CONTEXT.md by asking | once per repo |
-| `/clio:ingest <doc>` | requirement document → spec files + row table | new source arrives |
-| `/clio:plan <area>` | decided rows → smallest testable tasks; `infra` settles the stack and writes `rules/` | `infra` right after setup, an area after ingest |
+| `/clio:setup` | create `.claude/clio/docs/` and `database/`, ask for the domain vocabulary | once per repo |
+| `/clio:ingest [doc]` | requirement document → spec files + row table + the stack as `memory/infra.md`; on later runs, what the change invalidates in built code (`spec-delta`), row markers (asks before ⚠️ → ✅), areas to re-plan. No argument sweeps hand edits | requirements arrive or change |
+| `/clio:plan <area>` | decided rows → researched, smallest testable tasks with their test levels; `infra` turns the decided stack into tasks and writes `rules/`; a re-plan adds sub-tasks for spec changes and thin tests | `infra` after ingest, then each area; again when ingest names it |
 | `/clio:context [x]` | no arg: where are we · with area / row / id / question: spec, built, owed, quoted · also answers "what do I owe?" | Claude, before work; you, to ask "why?" |
-| `/clio:memo [doc\|task id]` | record finished work: sub-task doc, ledgers, plan tick, ADR | after each feature or fix |
-| `/clio:update [spec\|--fix]` | a spec changed: what it invalidates, move the row marker (asks before ⚠️ → ✅), name the plans it left behind; `--fix` re-plans them | requirements change |
+| `/clio:test [task\|area]` | agree seams, design cases per level with expected values from the spec, run red → green, gate | per task, before `/clio:memo` |
+| `/clio:memo [doc\|task id]` | record the work, committed or not (the hash is backfilled later): sub-task doc, ledgers, plan tick on a passing gate, ADR, a path-scoped rule | after each feature or fix |
 
-`clio:context` runs before work and `/clio:memo` after it; the other four fire on an event. Without
-`.claude/clio/` every skill says so and points at `/clio:setup`.
+`clio:context` runs before work, `/clio:test` during it and `/clio:memo` after it; the other three
+fire on an event. Without `.claude/clio/` every skill says so and points at `/clio:setup`.
 
 ## License
 

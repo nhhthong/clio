@@ -6,8 +6,8 @@ d=$(mktemp -d); trap 'rm -rf "$d" "$d.marks"' EXIT
 export TMPDIR="$d.marks"; mkdir -p "$TMPDIR"   # outside the repo: markers must not show up in git status
 SID="$d.marks/sid"                              # fixed path — one case overrides TMPDIR for the hook only
 cd "$d"; git init -q .; git config user.email t@t; git config user.name t
-mkdir -p .claude/clio
-IDX=.claude/clio/index.jsonl
+mkdir -p .claude/clio/database
+IDX=.claude/clio/database/index.jsonl
 
 # The session id lives in a file: every helper below runs in a subshell, so a shell variable
 # would not survive to the next call and every case would silently reuse one session.
@@ -37,7 +37,7 @@ git checkout -q -- a.txt
 echo new > b.txt                      # never `git add`ed — `git diff HEAD` cannot see this one
 loud "untracked new file" "1 uncommitted change"
 rm b.txt
-mkdir -p .claude/docs/tasks; echo z > .claude/docs/tasks/d.md; git add -A
+mkdir -p .claude/clio/docs/tasks; echo z > .claude/clio/docs/tasks/d.md; git add -A
 quiet "only .claude/ changed — that is memo's own output"
 
 echo y >> a.txt
