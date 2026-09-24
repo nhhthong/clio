@@ -15,6 +15,39 @@
 
 <br>
 
+## New in 4.0.0 — `/clio:test`
+
+```bash
+/clio:test 3.3   # design cases per test level → run red → green → gate:
+                 # task is done only when every case passed on the current code
+```
+
+`/clio:plan` reads each task against the code it touches and names the levels it needs; `/clio:test`
+writes at least one case per level named. A level left out is an explicit claim it does not apply.
+
+| Level | Tests | Applied when the task… | Passes when |
+|---|---|---|---|
+| `unit` | one function or class through its public signature | has logic of its own | happy path, every boundary and every error the spec lists hold |
+| `integration` | service + repository + a real database | writes or reads a DB, queue or file | the real store enforces what the spec expects |
+| `api` | the endpoint as a client sees it | adds or changes a route | status, body, validation errors and paging match the spec |
+| `e2e` | a whole user flow | completes a flow the spec names | the flow finishes, and its key failure leaves the state the spec defines |
+| `contract` | the API between two services | is called by, or calls, another service | both consumer and provider verify the same contract |
+| `perf` | latency / throughput of one operation | has a number in the spec (p95, req/s) | the number is met — no number, no case |
+| `load` | the system at expected load | has an expected load in the spec | error rate and latency stay within it for the whole run |
+| `stress` | beyond the limit | has a limit in the spec | it degrades as allowed, loses no data, recovers |
+| `security` | anything crossing a trust boundary | takes outside input or enforces access | bad tokens, other users' data, injection, oversized input are all rejected; no secret in logs |
+| `concurrency` | two actors on one resource | can be hit by parallel requests or workers | invariant holds across ≥ 20 latch-released repeats with the race detector on |
+| `regression` | the bug that was fixed | is a bug fix or a revert | the case was seen failing before the fix, passing after |
+| `smoke` | the build is alive | is an infra / scaffold task | it starts, answers health, does one read and one write |
+| `mutation` | whether the other tests would catch a bug | is **critical** | mutation score ≥ threshold (default 80 %) |
+
+**Critical** — the task moves money, touches auth, runs concurrently or deletes data: it also needs
+`mutation`, and every case must have been seen red. A project can waive mutation once, by ADR, in
+`/clio:plan infra`.
+
+**Gate** — one red run in `Repeat` is a fail (flaky = failed); any code edit after a pass voids it;
+evidence is written only by the script; `/clio:memo` ticks the task only on `OK`.
+
 What Claude reads before touching code:
 
 ```text
