@@ -12,8 +12,8 @@ git mv .claude/docs .claude/clio/docs
 mkdir -p .claude/clio/docs/tests && touch .claude/clio/database/runs.jsonl
 ```
 Then append one restated record per `id` with the new paths (never edit a line); move the `Domains`
-line from `CLAUDE.md` into `requirements.md` and add `Last ingest: <today> <git rev-parse --short
-HEAD>` under its title; move `clio/*.jsonl merge=union` to `.claude/clio/.gitattributes` as
+line from `CLAUDE.md` into `requirements.md` and add a `Last ingest:` line under its title, then run
+`q.sh spec-mark` once so the next sweep has a baseline; move `clio/*.jsonl merge=union` to `.claude/clio/.gitattributes` as
 `database/*.jsonl merge=union`. Old records keep numeric `req` and still resolve. Plans with a `Test`
 column stay as they are: `/clio:plan <area>` re-plans them into sub-tasks.
 
@@ -25,23 +25,36 @@ column stay as they are: `/clio:plan <area>` re-plans them into sub-tasks.
   outside the code, red → green one case at a time. `clio-test.sh run` is the only writer of
   `runs.jsonl`; `gate` passes a task only when every case passed on the current content fingerprint (a
   `git write-tree`, so committing keeps it; files a run creates are excluded as artifacts).
-  Critical tasks need a mutation case, concurrency ≥ 20 repeats, regression seen red first.
+  Critical tasks need a mutation case — unless `plans/infra.md` records `Mutation: none`, a decision
+  `/clio:plan infra` asks once per project — and every non-mutation case of a critical task, like
+  every regression case, must have been seen red. Concurrency ≥ 20 repeats.
 - **Ingest proposes the stack** as `memory/infra.md` (row `0`, ADR). **Plan never picks one**, writes
   no settings, researches each row before splitting, and names test `Levels` instead of a `Test`.
 - **Re-plan never edits an existing row** — only its `Done` cell changes. Improvements are sub-tasks
-  `<id>.<n>` in a new `## Re-planned` table: for an open `spec-delta`, or when `clio-test.sh
+  in a new `## Re-planned` table — hardening grouped one per task doc, so a 15-row pre-4.0 plan
+  built by 5 docs gets 5, not 15 — for an open `spec-delta`, or when `clio-test.sh
   coverage` shows the tests fall short (no cases — every pre-4.0 row — a missing level, a failing
   case). Pre-4.0 plans keep their `Test` table; `gate` refuses those rows, `validate.sh` names the plan.
 - **Memo** ticks a plan row only on a passing gate, records uncommitted work with an empty commit and
-  backfills the hash later, and proposes a path-scoped rule instead of a `CONTEXT.md` diff.
+  backfills the hash later, and files each lesson at the lowest level it recurs in: the task doc,
+  the feature's new `summary.md` § General Memory (loaded by `clio:context` with the feature), a
+  path-scoped rule, and only for a must-remember fact that recurs in any task, `CONTEXT.md` /
+  `CLAUDE.md` / Claude's auto memory — the last three on a yes, with the current line count shown.
+- **`/clio:plan infra` never rewrites an existing `rules/<stack>.md`**: it proposes missing bullets
+  and corrections as a diff, keeps the file's `paths:`, and leaves it untouched when nothing is new.
 - **`req` is an array of strings** — as numbers `7.1` and `7.10` collided. Write path refuses numbers.
 - **`q.sh`** holds every ledger read (was jq copied into six files); context gains a rules hop.
 - **Scripts are called by full path from `SKILL.md`.** `${CLAUDE_PLUGIN_ROOT}` is not substituted in
   step files nor exported to Bash, so their commands ran as `/skills/...`. `allowed-tools`
   pre-approves the scripts.
+- **Found by running 4.0 on a real 3.x repo:** `validate.sh` failed a moved doc on its own history
+  lines; a sweep right after the migration saw every spec as new (no rename detection); memo created
+  a new doc for a re-plan sub-task instead of updating its parent's; the drift hook kept nudging for
+  files a memo had already recorded uncommitted. All four fixed, each with a test.
 - **`/clio:update` is gone; `/clio:ingest` does its job.** Every spec change already went through
   ingest, so a second command only meant a step to forget. Re-ingest — or a sweep with no argument,
-  which diffs hand edits against the new `Last ingest:` line — weighs the change against built code,
+  which diffs hand edits against a snapshot of the spec files (`q.sh spec-mark` / `spec-diff`, kept
+  under the local ref `refs/clio/ingest`, uncommitted edits included) — weighs the change against built code,
   files `spec-delta`s, moves row markers and names the areas to re-plan. `--fix` and `--dry-run` went
   with it.
 

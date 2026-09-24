@@ -24,9 +24,12 @@ Source: $ARGUMENTS
 | **re-ingest** | a source, spec file or keyword given; rows exist | § 1 for new areas and rows only, §§ 2–4 for what the source changes, § 6, § 5 |
 | **sweep** | no argument; rows exist | the spec files edited since `Last ingest:` are the source: § 6, § 5. Nothing edited → say so, stop |
 
-`Last ingest: YYYY-MM-DD <commit>` is the line under the title of `requirements.md`. Every run ends by
-rewriting it — the commit is `git rev-parse --short HEAD`, empty outside git or before the first
-commit. It is the before-state a sweep diffs against.
+The baseline a sweep diffs against is a snapshot of the spec files as this skill last left them,
+committed or not. Every run ends by taking it and rewriting the line under the title of
+`requirements.md` as `Last ingest: YYYY-MM-DD <what it printed>`:
+```bash
+${CLAUDE_PLUGIN_ROOT}/skills/context/scripts/q.sh spec-mark     # keeps the snapshot under the local ref refs/clio/ingest (not pushed)
+```
 
 ## 1. Read the source, agree the split
 
@@ -138,19 +141,22 @@ one block they can act on. After § 6: each delta as `id` · `blocked_by` · row
 rows moved (old → new, and the source that decided it); records unblocked; any `index.jsonl` record
 the change shows to be wrong — reported, never fixed, it is `/clio:memo`'s. Close with the plan
 commands: first run → `/clio:plan infra`, then `/clio:plan <area>` per area; later runs → the areas
-§ 6 names. Rewrite the `Last ingest:` line last.
+§ 6 names. Take the baseline and rewrite the `Last ingest:` line last.
 
 ## 6. What the change invalidates — re-ingest and sweep
 
 Specs move while code stands still. For every decision this run added, altered, reversed or resolved:
 
-**Before and after.** A change this run wrote is known. A hand edit is in git:
+**Before and after.** A change this run wrote is known. A hand edit shows against the baseline,
+uncommitted and new files included:
 ```bash
-git diff <Last ingest commit> -- .claude/clio/docs/specs/     # committed and uncommitted since
-git log -p -3 --format='%h %ad %s' --date=short -- .claude/clio/docs/specs/memory/<file>.md
+${CLAUDE_PLUGIN_ROOT}/skills/context/scripts/q.sh spec-diff --stat        # which spec files moved since the last ingest
+${CLAUDE_PLUGIN_ROOT}/skills/context/scripts/q.sh spec-diff               # the lines
 ```
-No commit on the `Last ingest:` line, or `.claude/clio/` not in git → reconstruct from dated notes
-("Superseded YYYY-MM-DD", the row's status text) and what the task docs assumed. Still cannot state
+No baseline in this clone (a fresh checkout, or written before this command existed) → if the
+`Last ingest:` line names a commit, `git diff -M <commit> -- .claude/` and read only the spec files;
+otherwise reconstruct from dated notes ("Superseded YYYY-MM-DD", the row's status text) and what the
+task docs assumed. Still cannot state
 the before-state → write the delta as new-rule-only and say so in the report.
 
 **Who built against it.**

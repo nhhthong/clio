@@ -64,7 +64,13 @@ One or two sentences.
 
 ## Cross-cutting side effects
 - What breaks elsewhere when any sub-task here changes. Empty is fine.
+
+## General Memory
+- What every sub-task of this feature must know and would otherwise re-learn: a helper to reuse,
+  a trap in this area, a local command. Written by `WRAP-UP.md`; `clio:context` loads it with the
+  feature. Empty is fine.
 ```
+An existing `summary.md` without `## General Memory` → add the heading when it first gets a bullet.
 **Never list the sub-tasks in it.** `ls` and `plans/<area>.md` already answer that; a hand-kept list
 is one more thing to drift.
 

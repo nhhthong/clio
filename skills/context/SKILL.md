@@ -43,7 +43,8 @@ Each hop feeds the next — don't skip ahead, and don't stop after hop 1 just be
    row. ⚠️/❌ defaults to stop-and-ask; a specific `debt.jsonl` record (hop 3) can override that for
    the exact piece it covers.
 2. **What was already built** → [HOP2.md](HOP2.md). Query `index.jsonl` for prior docs on this row/
-   file/area — the last record per doc is its full current state, earlier ones are the timeline.
+   file/area — the last record per doc is its full current state, earlier ones are the timeline —
+   and read the feature's `summary.md` § General Memory.
 3. **What's still open** → [HOP3.md](HOP3.md). Query `debt.jsonl`. `blocked_by` is the only field
    that decides whether you may act on it.
 4. **Rules for the files you will touch.** A path-scoped rule loads only once Claude *reads* a
@@ -56,7 +57,7 @@ Each hop feeds the next — don't skip ahead, and don't stop after hop 1 just be
 
 ## Report — including what looks wrong
 
-Summarise: governing spec + status, prior docs worth knowing, open debt in this area, the rules that bind the files, the plan's
+Summarise: governing spec + status, prior docs worth knowing, the feature's General Memory, open debt in this area, the rules that bind the files, the plan's
 next task and its cases (`docs/tests/<area>.md`). A question ("why X?", "what is `<id>`?") is answered from the section the
 record names — task doc `## Decisions` / `## Side Effects` / `## Follow-up`, ADR `## Decision` /
 `## Consequences`, debt `what` / `action` / `blocked_by` — quoted, with the path. Then flag

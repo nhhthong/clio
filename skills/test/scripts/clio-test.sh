@@ -107,8 +107,12 @@ gate(){
     awk -F'\t' -v l="$l" '$3==l && $4!~/^(|–|-)$/' <<<"$rows" | grep -q . \
       || fail "$task: plan requires level '$l', no runnable case covers it"
   done
-  [ "$critical" = no ] || awk -F'\t' '$3=="mutation"' <<<"$rows" | grep -q . \
-    || fail "$task is critical: a mutation case is required"
+  # `Mutation: none` in plans/infra.md records an ADR that this project runs no mutation tester;
+  # without that line, a critical task cannot pass on cases alone.
+  local no_mutation=no
+  grep -qiE '^Mutation: *none' "$PLANS/infra.md" 2>/dev/null && no_mutation=yes
+  [ "$critical" = no ] || [ "$no_mutation" = yes ] || awk -F'\t' '$3=="mutation"' <<<"$rows" | grep -q . \
+    || fail "$task is critical: a mutation case is required (or record \`Mutation: none\` in plans/infra.md via ADR)"
 
   local id level cmd rep last
   while IFS=$'\t' read -r id _ level cmd rep; do
@@ -122,9 +126,12 @@ gate(){
     jq -e --arg f "$cur" '.fp==$f' >/dev/null <<<"$last" || fail "$id: code changed since the last pass — re-run (see \`git status --short\`; a test output that is not gitignored counts as code)"
     jq -e --arg c "$cmd" '.cmd==$c' >/dev/null <<<"$last" || fail "$id: command changed since the last pass — re-run"
     jq -e --argjson r "$rep" '.runs>=$r' >/dev/null <<<"$last" || fail "$id: ran fewer times than Repeat $rep"
-    # A test never seen failing may pass by construction. Regression must prove it reproduced the bug.
     if ! jq -Rc --arg c "$id" 'fromjson? | select(.case==$c and .result=="fail")' "$RUNS" | grep -q .; then
+      # A test never seen failing may pass by construction. Regression must prove it reproduced the bug;
+      # on a critical task every case must, except mutation, whose red is a score below threshold.
       if [ "$level" = regression ]; then fail "$id: regression case never failed — it does not reproduce the bug"
+      elif [ "$critical" = yes ] && [ "$level" != mutation ]; then
+        fail "$id: never seen red on a critical task — break the code once on purpose and re-run it"
       else echo "WARN: $id never seen red"; fi
     fi
   done <<<"$rows"

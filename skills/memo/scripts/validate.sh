@@ -173,14 +173,16 @@ case $mode in
       [ "${d##*/}" = summary.md ] && continue          # feature-level blurb, never an indexed doc
       jq -e --arg d "$d" 'select(.doc==$d)' <<<"$idxjson" >/dev/null 2>&1 || warn "orphan doc, no index record: $d — /clio:memo was skipped"
     done
-    # index records pointing at docs that no longer exist without a supersedes trail
+    # pre-3.0 records (no id) pointing at docs that no longer exist without a supersedes trail. A record
+    # with an id is judged on its group's last line (check_index_line above): its earlier lines keep the
+    # path the doc had then, which is history, not a broken link.
     while read -r doc; do
       [ -z "$doc" ] && continue
       [ -f "$doc" ] && continue
       jq -e --arg d "$doc" 'select(.supersedes==$d)' <<<"$idxjson" >/dev/null 2>&1 \
         && info "renamed doc, superseded: $doc" \
         || fail "index record points at a missing doc and nothing supersedes it: $doc"
-    done < <(jq -r '.doc' <<<"$idxjson" 2>/dev/null | sort -u)
+    done < <(jq -r 'select(.id | not) | .doc' <<<"$idxjson" 2>/dev/null | sort -u)
     # One id, one row. A re-plan supersedes an unticked row *in place*; appending a second row with
     # the same id instead leaves two, and `Done` then depends on which one a reader hits first.
     for pl in .claude/clio/docs/plans/*.md; do

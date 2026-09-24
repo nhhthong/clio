@@ -36,6 +36,9 @@ git checkout -q -- a.txt
 
 echo new > b.txt                      # never `git add`ed — `git diff HEAD` cannot see this one
 loud "untracked new file" "1 uncommitted change"
+# memo ran on uncommitted work: b.txt is in an index record's files, so it is not memo-owed anymore
+echo "{\"commits\":[\"$(git rev-parse --short=6 HEAD)\"],\"files\":[\"b.txt\"]}" >> $IDX
+quiet "uncommitted file already recorded by a memo"
 rm b.txt
 mkdir -p .claude/clio/docs/tasks; echo z > .claude/clio/docs/tasks/d.md; git add -A
 quiet "only .claude/ changed — that is memo's own output"

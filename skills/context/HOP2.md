@@ -40,6 +40,13 @@ file whole only when those sections point you at something they don't contain.
 `ls` is free context: `ls .claude/clio/docs/tasks/` names the features, `ls .claude/clio/docs/tasks/<feature>/`
 names its sub-tasks. Use it before opening anything.
 
+**The feature's memory.** Every feature directory the matching docs live in (or the one this task
+will write into) has a `summary.md`; read its shared sections — what every sub-task there must know:
+```bash
+awk '/^## /{p = /^## (General Memory|Cross-cutting side effects)/} p' .claude/clio/docs/tasks/<feature>/summary.md
+```
+Its bullets bind this task like a path-scoped rule does; quote the ones that apply.
+
 A `doc` path missing on disk → `q.sh history <id>` before concluding anything; a moved doc's current
 path is in its last record.
 

@@ -50,6 +50,16 @@ ok "$S" run 5.1.1-u1; ok "$S" gate 5.1.1
 "$S" coverage 1.3 | grep -q "1.3-r1	regression	pass" || { echo "coverage lost last result: $("$S" coverage 1.3)"; bad=1; }
 [ "$("$S" coverage 7.7)" = "no cases" ] || { echo "coverage of an uncovered task"; bad=1; }
 
+# critical: every non-mutation case must have been seen red; `Mutation: none` in infra.md waives mutation
+out=$("$S" gate 1.2); grep -q 'never seen red on a critical task' <<<"$out" || { echo "critical never-red not refused: $out"; bad=1; }
+grep -q 'mutation case is required' <<<"$out" || { echo "mutation not required by default: $out"; bad=1; }
+printf '# Plan — infra\nMutation: none (ADR 1790000000_no-mutation)\n' > .claude/clio/docs/plans/infra.md
+out=$("$S" gate 1.2); grep -q 'mutation case is required' <<<"$out" && { echo "Mutation: none ignored: $out"; bad=1; }
+echo '| 1.2-u2 | 1.2 | unit | critical red then green | exit 0 | `test -f crit-ok` | 1 |' >> $T
+ko "$S" run 1.2-u2; touch crit-ok; ok "$S" run 1.2-u2
+"$S" gate 1.2 | grep -q '1.2-u2: never seen red' && { echo "a case seen red still flagged"; bad=1; }
+rm .claude/clio/docs/plans/infra.md
+
 # regression that never failed is rejected
 echo '| 1.3-r2 | 1.3 | regression | bug2 | exit 0 | `true` | 1 |' >> $T
 "$S" run 1.3-r2 >/dev/null; ko "$S" gate 1.3

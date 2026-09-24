@@ -106,6 +106,26 @@ For each bullet the repo has to show it:
 Never write a bullet the ecosystem would agree with but this repo does not show. A short file is a
 correct file; no verifiable bullet, no file. Show the draft and **ASK** before writing it.
 
+**The file already exists** — a re-plan, an older Clio, or the user wrote it. It is theirs now:
+never rewrite, reorder or trim it, and the 10–20 line target is for a new file only.
+- Check each bullet you would write against it; propose only the missing ones, as a diff, under the
+  section they belong to.
+- A bullet the repo now contradicts — a command renamed, a tool removed, a version moved — is
+  proposed as its own diff line with what changed and where you read it. Never delete it silently.
+- Its `paths:` frontmatter is kept; widen it only when a new bullet needs a path it doesn't cover,
+  and say so. A file with no `paths:` loads every session — point that out, don't add one yourself.
+- Nothing to add or correct → say so and leave the file untouched.
+
+### Mutation testing, decided once
+
+Critical tasks need a mutation case (`/clio:test`), so settle the tool here rather than per task:
+look up this stack's mutation tester in Context7 (PIT for JVM, Stryker for JS/TS/.NET, mutmut for
+Python, go-mutesting…), show the install and the threshold flag, and **ASK**. Yes → an ADR and an
+infra row installing it, `Levels` `smoke`. No → an ADR saying so, and the line `Mutation: none (ADR
+<file>)` under the plan's header — the gate reads it and stops requiring mutation cases. Either way,
+the question is not asked again. An infra plan written before this rule has neither — ask on its
+next re-plan.
+
 A mechanical rule — format on save, lint before commit — is better as a hook than a bullet. Say so
 once and leave the hook to the user; this skill writes no settings file.
 
@@ -143,6 +163,7 @@ header line's `Re-planned:` date is refreshed:
 | # | Task | req | Levels | Needs | Touches | Done |
 |---|------|-----|--------|-------|---------|------|
 | 3.1.1 | Harden 3.1: security (was: `go test ./orders -run TestListOK`) | 3 | security | 3.1 | `orders/handler.go` | [ ] |
+| 4.3.1 | Harden checkout doc (4.1–4.3): integration, concurrency | 4 | critical · integration, concurrency | 4.1, 4.2, 4.3 | `checkout/service.go` | [ ] |
 | 3.2.1 | `GET /orders` returns 401 without a session (replaces pre-4.0 row 3.2) | 3 | critical · api, security | 3.1 | `orders/handler.go` | [ ] |
 | 3.3.1 | Pagination: 50 → 25 per page (spec-delta `orders-page-25`) | 3 | unit, api | 3.3 | `orders/repo.go` | [ ] |
 ```
@@ -160,14 +181,19 @@ ${CLAUDE_PLUGIN_ROOT}/skills/test/scripts/clio-test.sh coverage <row id>        
 |---|---|---|
 | ticked | an open `spec-delta` changes its behaviour | sub-task: the new behaviour, `Levels` for it, the delta's `id` in the task |
 | ticked | a `spec-delta` drops it, the code is still there | sub-task: revert it, `regression` in `Levels` — the route 404s, the control is gone |
-| ticked | tests fall short: `coverage` says `no cases` (every pre-4.0 row), or lacks a level § 3 requires of this code today, or shows a case whose last run was `fail` | sub-task "Harden <id>: <what is missing>", `Levels` = the missing levels, plus `regression` for a failing case; a pre-4.0 row's old `Test` cell quoted in the task |
+| ticked | tests fall short: `coverage` says `no cases` (every pre-4.0 row), or lacks a level § 3 requires of this code today, or shows a case whose last run was `fail` | a "Harden" sub-task — **one per task doc, not per row** (below); `Levels` = the missing levels, plus `regression` for a failing case; a pre-4.0 row's old `Test` cell quoted in the task |
 | ticked | none of the above | nothing — it stays done |
 | unticked | the spec no longer wants it | `Done` → `superseded YYYY-MM-DD` |
 | unticked, pre-4.0 | still wanted | `Done` → `superseded YYYY-MM-DD → <old id>.<n>`, and the same task as that new row here, with `Levels` — the gate cannot run a `Test`-column row |
 | unticked | still wanted | leave it; it is still the plan |
 
-- A new row's id is `<old id>.<n>`, the next free `n`. A sub-task's `Needs` names the old id; a
-  replacement keeps the old row's `Needs`. Each is gated and ticked on its own.
+- **Harden by doc.** Group the rows that fall short by the task doc that built them
+  (`q.sh built --task <row>`, `type` `task` only — an ADR is not a unit of work). One sub-task per
+  doc: its id is `<highest row id it covers>.<n>`, its `Needs` lists every row it covers, and
+  `/clio:memo` finds that doc through the id's parent. A row no task doc claims hardens alone.
+  Deltas and reverts stay one per row — each is its own behaviour change.
+- Any other new row's id is `<old id>.<n>`, the next free `n`. A sub-task's `Needs` names the old
+  id; a replacement keeps the old row's `Needs`. Each is gated and ticked on its own.
 - A `spec-delta` is carried by `id` in the sub-task: an open delta named in no plan is what
   `validate.sh all` warns about, and carrying the id silences it.
 - A revert or a hardening is a task like any other. Its cases must fail while the gap is there, or

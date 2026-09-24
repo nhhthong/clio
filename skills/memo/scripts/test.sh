@@ -85,6 +85,9 @@ idx 1700000001 "$A" '["a.go"]' '["1"]'                >> $I
 debt a spec-blocked '["2"]' '"PO owes tax rule"'      >  $D
 out=$(bash "$V" all) || { echo "a migrated doc must not fail the audit"; echo "$out"; exit 1; }
 grep -q 'renamed doc, superseded' <<<"$out" || { echo "supersedes not resolved"; echo "$out"; exit 1; }
+# a doc with an id that moved: its earlier line keeps the old path, which is history, not a broken link
+echo '{"date":"2026-01-01","id":"1700000005","type":"task","doc":".claude/clio/docs/tasks/1700000005_login.md","domain":"x","plan_tasks":[],"files":["l.go"],"commits":[],"keywords":["k"],"req":["1"],"specs":[]}' | cat - $I > $I.tmp && mv $I.tmp $I
+out=$(bash "$V" all); grep -q 'missing doc.*1700000005_login' <<<"$out" && { echo "moved id doc flagged by its history"; echo "$out"; exit 1; }
 if grep -q 'points at a missing file' <<<"$out"; then echo "superseded path double-reported as FAIL"; echo "$out"; exit 1; fi
 # and the migration must read as finished: the superseded group's pre-3.0 records are history, so
 # they must not keep reporting the very fields the successor just supplied — otherwise a migration

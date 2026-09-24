@@ -58,8 +58,8 @@ From there, per task: Claude runs `clio:context` before non-trivial work, `/clio
 and proves it, you run `/clio:memo` after. A hook notices when you skip the memo — see
 [The loop](#the-loop).
 
-Requires `bash`, `jq`, `git`, `awk` and `sed`. Setup writes nothing outside `.claude/clio/`, never
-touches `CLAUDE.md` or `CONTEXT.md`, and a plugin update writes nothing inside it.
+Requires `bash`, `jq`, `git`, `awk` and `sed`. Setup writes nothing outside `.claude/clio/`, and a
+plugin update writes nothing inside it.
 
 ## How it differs
 
@@ -81,7 +81,7 @@ before working. Beads tracks only what is owed; Clio adds decided and built, and
 
 Everything Clio owns lives in `.claude/clio/`. Four questions, one home each. `/clio:setup` creates
 the folders once and the six skills stay in the plugin, so dropping the plugin leaves the files
-behind. `CLAUDE.md` and `CONTEXT.md` stay yours: Clio never writes them, and nothing it writes loads
+behind. `CLAUDE.md` and `CONTEXT.md` stay yours and stay small: nothing in `.claude/clio/` loads
 every session — the skills read it when they need it.
 
 | | Path under `.claude/clio/` | Holds | Written by |
@@ -99,10 +99,16 @@ every session — the skills read it when they need it.
 | **Proven** | `database/runs.jsonl` | one line per case run: result, repeats, commit, working-tree fingerprint | `clio-test.sh` only |
 | **Owed** | `database/debt.jsonl` | bugs, unverified work, open questions, append-only | `/clio:memo`, `/clio:ingest` |
 
-Outside `.claude/clio/`, Clio writes only `.claude/rules/*.md`, and only with a yes: `/clio:plan
-infra` drafts `rules/<stack>.md`, `/clio:memo` proposes a one-bullet lesson under a narrow `paths:`
-glob. Path-scoped rules load only when Claude reads a matching file, so lessons do not grow the
-always-loaded files.
+What a run learns goes as low as it can, so the always-loaded files do not grow with every task:
+
+| The lesson recurs in… | `/clio:memo` puts it in | Loads |
+|---|---|---|
+| only this sub-task | the task doc's `## Decisions` | when that task is worked on again |
+| any sub-task of the feature | `tasks/<feature>/summary.md` § General Memory | with the feature, via `clio:context` |
+| any task touching certain paths | `.claude/rules/<topic>.md` with `paths:` (asks first) | when a matching file is read |
+| any task at all, and must be remembered | `CONTEXT.md` or `CLAUDE.md` (asks first, shows the line count) | every session |
+
+`/clio:plan infra` also drafts `rules/<stack>.md`, and adds only missing bullets to one that exists.
 
 `index` and `debt` join the spec on `req`, the requirement row number (a string: `"7.10"`);
 `runs` joins the plan on the task id. `.jsonl` files are append-only: an update is a new line under
@@ -164,7 +170,7 @@ appears in an index record.
 | `/clio:plan <area>` | decided rows → researched, smallest testable tasks with their test levels; `infra` turns the decided stack into tasks and writes `rules/`; a re-plan adds sub-tasks for spec changes and thin tests | `infra` after ingest, then each area; again when ingest names it |
 | `/clio:context [x]` | no arg: where are we · with area / row / id / question: spec, built, owed, quoted · also answers "what do I owe?" | Claude, before work; you, to ask "why?" |
 | `/clio:test [task\|area]` | agree seams, design cases per level with expected values from the spec, run red → green, gate | per task, before `/clio:memo` |
-| `/clio:memo [doc\|task id]` | record the work, committed or not (the hash is backfilled later): sub-task doc, ledgers, plan tick on a passing gate, ADR, a path-scoped rule | after each feature or fix |
+| `/clio:memo [doc\|task id]` | record the work, committed or not (the hash is backfilled later): sub-task doc, ledgers, plan tick on a passing gate, ADR, and each lesson at the lowest level it recurs in | after each feature or fix |
 
 `clio:context` runs before work, `/clio:test` during it and `/clio:memo` after it; the other three
 fire on an event. Without `.claude/clio/` every skill says so and points at `/clio:setup`.

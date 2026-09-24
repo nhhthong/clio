@@ -35,6 +35,8 @@ q.sh built --task <task>
 grep -n "^| <task> " .claude/clio/docs/plans/*.md      # the row: its Levels and Done cells
 ```
 - A doc came back → UPDATE mode.
+- No doc, and the task is a re-plan sub-task (`3.1.1` under `3.1`) → `q.sh built --task <parent id>`.
+  A doc came back → UPDATE it: a sub-task changes or hardens what its parent's doc describes.
 - No doc, but the plan row exists → CREATE, with the id in `plan_tasks` at step 3.
 - Neither → stop, ask. Don't invent a plan id.
 

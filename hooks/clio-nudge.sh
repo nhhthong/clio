@@ -24,7 +24,12 @@ mark="${TMPDIR:-/tmp}/clio-nudge-${sid:-nosid}"
 # work most likely to be missing from the ledger, and `git diff` cannot see it. `cut -c4-` drops
 # porcelain's two status columns and keeps paths with spaces intact.
 # .claude/ is excluded: /clio:memo writes there, so counting it would nag about memo's own output.
-dirty=$(git status --porcelain 2>/dev/null | cut -c4- | grep -vc '^\.claude/')
+# A file some index record already lists was recorded while uncommitted — the memo happened, the
+# commit simply hasn't. ponytail: path match only, so further edits to an already-recorded file after
+# its memo go unnoticed until HEAD moves; compare content if that ever matters.
+recorded=$(jq -R -r 'fromjson? | .files[]?' "$IDX" 2>/dev/null | sort -u)
+dirty=$(git status --porcelain 2>/dev/null | cut -c4- | grep -v '^\.claude/' \
+  | grep -vxF -f <(printf '%s\n' "$recorded") | grep -c .)
 [ -n "$dirty" ] || dirty=0
 
 # ponytail: 6-char prefix match against the recorded commits. INDEX-IT.md writes short hashes of

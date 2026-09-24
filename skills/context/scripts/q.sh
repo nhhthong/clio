@@ -9,6 +9,8 @@
 #   changed                                   files this work touched: uncommitted + untracked, .claude/ excluded
 #   commit <file>...                          the commit holding these files — empty while any is uncommitted
 #   unrecorded [N]                            commits since the last one any index record names: hash<TAB>docs|-
+#   spec-mark                                 snapshot the spec files (committed or not) as ingest's baseline
+#   spec-diff [git-diff args]                 spec files now vs that baseline — hand edits since the last ingest
 # Filters are OR'd; none given → everything. `req` compares as a string, so 7.1 and 7.10 stay apart.
 set -uo pipefail
 
@@ -48,6 +50,15 @@ parse(){
 NONE='($r+$s+$f+$a+$k+$t+$i+$q=="")'
 REQ='($r!="" and any(.req[]?; tostring==$r))'
 SPEC='($s!="" and any(.specs[]?; contains($s)))'
+
+SPECS=.claude/clio/docs/specs
+# The spec files' content as a git tree, committed or not, ignored or not — ingest's baseline is what
+# the files said, not what was committed.
+spec_tree(){
+  local idx; idx=$(mktemp); rm -f "$idx"
+  GIT_INDEX_FILE=$idx git add -A -f -- "$SPECS" >/dev/null 2>&1
+  GIT_INDEX_FILE=$idx git write-tree; rm -f "$idx"
+}
 
 cmd=${1:-summary}; shift || true
 case $cmd in
@@ -116,6 +127,17 @@ case $cmd in
       docs=$(while IFS= read -r f; do "$0" built --file "$f"; done <<<"$files" | jq -r .doc | sort -u | paste -sd, -)
       printf '%s\t%s\n' "$h" "${docs:--}"
     done ;;
+  spec-mark)
+    git rev-parse --git-dir >/dev/null 2>&1 || { echo "not a git repository — no baseline to keep" >&2; exit 1; }
+    # A commit object under a local ref keeps the tree from `git gc`; refs/clio/* is not pushed by default.
+    tree=$(spec_tree)
+    c=$(git -c user.name=clio -c user.email=clio@localhost commit-tree "$tree" -m "clio: ingest baseline")
+    git update-ref refs/clio/ingest "$c"
+    git rev-parse --short "$tree" ;;
+  spec-diff)
+    base=$(git rev-parse -q --verify 'refs/clio/ingest^{tree}' 2>/dev/null) \
+      || { echo "no ingest baseline in this clone — fall back to the Last ingest commit, or reconstruct" >&2; exit 1; }
+    git diff "$@" "$base" "$(spec_tree)" ;;
   rules)
     [ $# -gt 0 ] || { echo "usage: q.sh rules <file>..." >&2; exit 1; }
     shopt -s globstar nullglob
@@ -136,5 +158,5 @@ case $cmd in
         done <<<"$globs"
       done
     done ;;
-  *) sed -n '2,12p' "$0"; exit 1 ;;
+  *) sed -n '2,14p' "$0"; exit 1 ;;
 esac

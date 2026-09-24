@@ -50,7 +50,9 @@ runnable case; a level that truly cannot apply goes back to `/clio:plan`, never 
   case; file `spec-blocked` via `/clio:memo`. Never invent a threshold.
 - **Critical** (the plan's `Levels` starts with `critical`) → a `mutation` case, command exits
   non-zero below the threshold (Stryker `--thresholds.break`, PIT `mutationThreshold`, go-mutesting
-  score). Default 80 % unless the spec or an ADR sets one.
+  score). Default 80 % unless the spec or an ADR sets one. The tool is settled once, by
+  `/clio:plan infra`; `Mutation: none` in `plans/infra.md` means the project decided against it and
+  the gate stops asking.
 - A tool the level needs and the repo lacks (Playwright, k6, Pact, a mutation tester) → propose it
   from its current docs (Context7), **ASK**, record the choice as an ADR per
   `${CLAUDE_PLUGIN_ROOT}/skills/memo/steps/WRAP-UP.md` § ADR.
@@ -85,8 +87,10 @@ clio-test.sh run 3.3-u1     # green
 - **Regression** cases must be seen red before green: the gate rejects one that never failed, because
   it never reproduced the bug.
 - A case red for the wrong reason (compile error, missing fixture) is not a red run — fix the test.
-- A case that passes on the first run of a new behaviour: the gate warns "never seen red". Break the
-  code on purpose once, or explain why it was already correct.
+- A case that passes on its first run — a hardened old test, code written before the case: on a
+  **critical** task the gate refuses it until it has been seen red, so break the code on purpose
+  once (as a concurrency case is proven: undo the lock, watch it fail, restore it). Elsewhere it
+  only warns.
 - Refactor after green, then re-run every case of the task.
 
 ## 5. Gate
@@ -95,7 +99,8 @@ clio-test.sh run 3.3-u1     # green
 clio-test.sh gate 3.3
 ```
 `OK` is the only pass. Anything else — never run, failed, code changed since, command changed, fewer
-runs than `Repeat`, a plan level with no case, critical without mutation, regression never red — the
+runs than `Repeat`, a plan level with no case, critical without mutation, a critical or regression
+  case never seen red — the
 task is not done. **Flaky is failed**: one red run in `Repeat` fails the case; `/clio:memo` files it
 as `code-debt` with `what` starting `flaky:`.
 

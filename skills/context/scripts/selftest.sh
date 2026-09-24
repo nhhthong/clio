@@ -73,6 +73,16 @@ eq "$("$Q" unrecorded 2>/dev/null)" "$(printf '%s\tt/300_x.md' "$h2")" "unrecord
 git add -A .claude; git commit -qm memo
 eq "$("$Q" unrecorded 2>/dev/null | cut -f1)" "$h2" "a .claude/-only commit is skipped"
 
+# ingest baseline: a snapshot of the spec files, committed or not; the diff sees hand edits and new files
+"$Q" spec-diff 2>/dev/null && { echo "spec-diff without a baseline must fail"; bad=1; }
+mkdir -p .claude/clio/docs/specs/memory; echo 'limit: 5' > .claude/clio/docs/specs/memory/a.md
+"$Q" spec-mark >/dev/null
+eq "$("$Q" spec-diff --stat | grep -c .)" 0 "no edit since the mark"
+echo 'limit: 10' > .claude/clio/docs/specs/memory/a.md; echo new > .claude/clio/docs/specs/memory/b.md
+eq "$("$Q" spec-diff --name-only | tr '\n' ' ')" ".claude/clio/docs/specs/memory/a.md .claude/clio/docs/specs/memory/b.md " "uncommitted edit and untracked new spec both seen"
+"$Q" spec-diff | grep -q '^+limit: 10' || { echo "spec-diff lost the content"; bad=1; }
+"$Q" spec-mark >/dev/null; eq "$("$Q" spec-diff --stat | grep -c .)" 0 "re-mark moves the baseline"
+
 printf -- '---\npaths: ["lib/**/*.rb", "app/*.rb"]\n---\n- r\n' > .claude/rules/rb.md
 eq "$("$Q" rules app/x.rb | grep -c 'rb.md')" 1 "inline paths: list parsed"
 
