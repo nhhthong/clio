@@ -1,6 +1,6 @@
 ---
 name: plan
-description: Break a spec area into the smallest independently testable tasks — one observable behaviour each, researched against the code and the library docs, with the test levels it needs (unit, api, security, concurrency…) — written to .claude/clio/docs/plans/<area>.md in dependency order. `infra` goes first: it turns the stack /clio:ingest decided (memory/infra.md), or the stack the repo already has, into toolchain and scaffold tasks and writes .claude/rules/<stack>.md. Never chooses a stack. Run `infra` after /clio:ingest, an area after that, and again after /clio:ingest moves a row.
+description: "Break a spec area into the smallest independently testable tasks — one observable behaviour each, researched against the code and the library docs, with the test levels it needs (unit, api, security, concurrency…) — written to .claude/clio/docs/plans/<area>.md in dependency order. `infra` goes first: it turns the stack /clio:ingest decided (memory/infra.md), or the stack the repo already has, into toolchain and scaffold tasks and writes .claude/rules/<stack>.md. Never chooses a stack. Run `infra` after /clio:ingest, an area after that, and again after /clio:ingest moves a row."
 argument-hint: "[infra | memory/<area>.md | a requirements.md row number | a keyword]"
 allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/skills/context/scripts/q.sh *) Bash(${CLAUDE_PLUGIN_ROOT}/skills/test/scripts/clio-test.sh coverage *)
 ---
