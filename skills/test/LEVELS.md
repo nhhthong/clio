@@ -4,6 +4,13 @@
 sections that cell names. Sources: Microsoft ISE Engineering Playbook (automated testing, CDC, fault
 injection, performance), OWASP WSTG (security, business logic), Pact docs (when contract testing fits).
 
+Under a catalog section, a bullet that names its own id (`` `level.n` ``, in order) is one distinct
+risk — `/clio:test`'s gate holds a task to every id its `Levels` cell names, via each case's
+`Covers` cell or a `Not applicable` line (§ below). A bullet with no id is a constraint on how
+every case of that level is built, not a risk of its own — it needs neither. `regression`, `smoke`
+and `mutation` carry no ids: each already has its own gate rule (red-then-green, the fixed suite,
+the threshold check).
+
 ## Choosing
 
 Risk → question → level. Ask every question against what `/clio:plan` § 2 found in the code and the
@@ -54,90 +61,96 @@ Where a yes still does not earn the level:
 - `perf` `load` `stress` `resilience` — no number or behaviour in the spec → no level; the gap is a
   ⚠️ (`spec-blocked`). Never invent a threshold or a fallback.
 
-**Not applicable.** A question whose trigger § 2 did find, answered no anyway — a POST that is
-naturally idempotent, a route that reads only immutable data — goes under the plan table as
-`- <task> · <level> — <reason>`. Silence means the trigger was absent.
+**Not applicable.** Two granularities, both silent unless § 2 actually found the trigger:
+- A whole level, its trigger found and answered no anyway — a POST that is naturally idempotent, a
+  route that reads only immutable data — goes under the plan table (`/clio:plan` § 4) as
+  `- <task> · <level> — <reason>`.
+- One id of a level the task does keep, whose specific risk this task's code does not raise — goes
+  under the tests doc (`/clio:test` § 3) as `- <task> · <level>.<n> — <reason>`.
 
 ## unit
 One class or function through its public signature (`UserService.createUser()`).
-- The happy path with a value from the spec · each boundary the spec names (min, max, max+1, empty,
-  zero) · each error the spec lists, asserting the error type or code, not just "throws".
+- `unit.1` The happy path with a value from the spec · each boundary the spec names (min, max, max+1,
+  empty, zero) · each error the spec lists, asserting the error type or code, not just "throws".
 - No DB, network, clock or randomness — inject them.
 
 ## integration
 Several real components together: service + repository + a real database (container, not a mock).
-- Write then read back through the public seam · the transaction rolls back on failure and leaves no
-  partial write · a constraint the schema enforces (unique, FK, not null) surfaces as the domain
-  error the spec expects.
+- `integration.1` Write then read back through the public seam · the transaction rolls back on
+  failure and leaves no partial write · a constraint the schema enforces (unique, FK, not null)
+  surfaces as the domain error the spec expects.
 - Each test owns its data: fresh schema or a transaction rolled back after it.
 
 ## api
 The endpoint as a client sees it (`POST /users`).
-- Status, body shape and every field the spec lists · each validation error with its status and
-  message · pagination, filtering, sorting at the limits the spec states.
+- `api.1` Status, body shape and every field the spec lists · each validation error with its status
+  and message · pagination, filtering, sorting at the limits the spec states.
 - Auth outcomes here are status checks only; attacks on them belong to `security`.
 
 ## e2e
 A whole flow from the spec's key flows (login → cart → pay), through the real UI or public API.
-- The flow completes · the one failure in the middle the spec cares about most (payment declined)
-  leaves the system in the state the spec says.
+- `e2e.1` The flow completes · the one failure in the middle the spec cares about most (payment
+  declined) leaves the system in the state the spec says.
 
 ## contract
 The API between two services (Order ↔ Payment), consumer-driven.
-- Consumer side: the requests it sends and the responses it relies on, as a contract file.
-- Provider side: verifies that contract against the running provider, with its state set up per
-  interaction. Both must run, or it is not a contract test.
+- `contract.1` Consumer side: the requests it sends and the responses it relies on, as a contract file.
+- `contract.2` Provider side: verifies that contract against the running provider, with its state set
+  up per interaction. Both must run, or it is not a contract test.
 
 ## idempotency
 The same operation delivered more than once.
-- Same request (same idempotency key, or same message id) N times → one effect, and every reply
-  matches the first.
-- Same key with a different body → the error the spec defines, not a second effect.
-- Redelivery after a crash between the effect and the ack → still one effect.
+- `idempotency.1` Same request (same idempotency key, or same message id) N times → one effect, and
+  every reply matches the first.
+- `idempotency.2` Same key with a different body → the error the spec defines, not a second effect.
+- `idempotency.3` Redelivery after a crash between the effect and the ack → still one effect.
 Assert the state (one row, one charge), never just the status code.
 
 ## concurrency
 Two or more actors on the same thing at once. `Repeat` ≥ 20, race detector on (`go test -race`,
 TSan, `-Djdk…`), interleaving forced with a barrier or latch.
-- **Lost update**: two writers, both changes survive or one gets a conflict error.
-- **Double effect**: two identical requests released together → exactly one order, one charge.
-- **Invariant**: a balance never negative, a stock count never below zero, under N parallel buyers.
-- **Isolation**: a reader never sees another transaction's partial write.
-- **Deadlock**: two resources locked in opposite order finish within a timeout.
-- **Ordering**: events processed out of order end in the state the spec defines.
+- `concurrency.1` **Lost update**: two writers, both changes survive or one gets a conflict error.
+- `concurrency.2` **Double effect**: two identical requests released together → exactly one order,
+  one charge.
+- `concurrency.3` **Invariant**: a balance never negative, a stock count never below zero, under N
+  parallel buyers.
+- `concurrency.4` **Isolation**: a reader never sees another transaction's partial write.
+- `concurrency.5` **Deadlock**: two resources locked in opposite order finish within a timeout.
+- `concurrency.6` **Ordering**: events processed out of order end in the state the spec defines.
 Every case asserts the invariant after all actors finish, never just "no error".
 
 ## security
 Everything that crosses a trust boundary (OWASP WSTG categories).
-- AuthN: no token, expired token, token signed with the wrong key, `alg: none` → rejected.
-- AuthZ: user A reads/edits/deletes user B's resource by changing an id → 403/404 (horizontal);
-  each role the spec names against each action it must not do (vertical).
-- Session: logout and expiry invalidate the token; a fixed session id is not accepted.
-- Input: SQL/NoSQL/command injection, path traversal, SSRF in a URL field, oversized payload, an
-  upload of the wrong type, script in a stored field rendered back — rejected or escaped.
-- Errors: no stack trace, query text, secret or PII in a response body or a log line.
-- Business logic: a step skipped or replayed (pay twice, reuse a one-time code) is refused.
+- `security.1` AuthN: no token, expired token, token signed with the wrong key, `alg: none` → rejected.
+- `security.2` AuthZ: user A reads/edits/deletes user B's resource by changing an id → 403/404
+  (horizontal); each role the spec names against each action it must not do (vertical).
+- `security.3` Session: logout and expiry invalidate the token; a fixed session id is not accepted.
+- `security.4` Input: SQL/NoSQL/command injection, path traversal, SSRF in a URL field, oversized
+  payload, an upload of the wrong type, script in a stored field rendered back — rejected or escaped.
+- `security.5` Errors: no stack trace, query text, secret or PII in a response body or a log line.
+- `security.6` Business logic: a step skipped or replayed (pay twice, reuse a one-time code) is refused.
 
 ## resilience
 A dependency fails the way the spec anticipates: timeout, 5xx, connection refused, slow response.
 - Fault injected at the seam the task does not own (a stub server, a toxiproxy, a mock of the
   third-party client) — never by mocking the task's own code.
-- The spec's behaviour holds: the retry count and back-off, the fallback value, the error surfaced
-  to the caller, no partial write · it recovers once the dependency is back.
+- `resilience.1` The spec's behaviour holds: the retry count and back-off, the fallback value, the
+  error surfaced to the caller, no partial write · it recovers once the dependency is back.
 
 ## perf
-Latency and throughput of one operation, **only with a number from the spec** (p95 < 200 ms, 1,000
-req/s). The command exits non-zero when the threshold is missed.
+Latency and throughput of one operation.
+- `perf.1` **Only with a number from the spec** (p95 < 200 ms, 1,000 req/s) — the command exits
+  non-zero when the threshold is missed.
 
 ## load
 The system at the load the spec expects (500 concurrent users, N minutes).
-- Error rate and latency percentiles stay inside the spec's numbers for the whole run.
-- Spike (sudden jump) or soak (hours) only when the spec names them.
+- `load.1` Error rate and latency percentiles stay inside the spec's numbers for the whole run.
+- `load.2` Spike (sudden jump) or soak (hours) only when the spec names them.
 
 ## stress
 Beyond the limit (10,000 concurrent users, or ramp until failure).
-- It fails in the way the spec allows (429, queueing, degraded mode), not by losing or corrupting
-  data · it recovers once the load drops.
+- `stress.1` It fails in the way the spec allows (429, queueing, degraded mode), not by losing or
+  corrupting data · it recovers once the load drops.
 
 ## regression
 One per bug fixed: reproduces the bug through a public seam. It must be **run red before the fix**
@@ -156,3 +169,6 @@ command exits non-zero below the threshold (default 80 %, or the spec's / an ADR
 mutants listed in the output are missing cases — add them, don't lower the threshold. The case's
 command runs a full analysis: incremental history (PIT `withHistory`) is for iterating by hand,
 never for evidence — it is experimental and ignores changes in a class's dependencies.
+The gate does not trust the exit code alone: it also reads the command's own text for a number ≥
+the threshold (80, or the `NN%` on `plans/infra.md`'s `Mutation:` line). A command with no visible
+number, or one lowered to slip past (`--thresholds.break 0`), is refused before it ever runs.

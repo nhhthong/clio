@@ -9,13 +9,13 @@
   It is not auto-memory. Nothing is written unless you asked for it.
 
   [![Claude Code plugin](https://img.shields.io/badge/Claude_Code-plugin-D97757?logo=anthropic&logoColor=white)](https://code.claude.com/docs/en/plugins)
-  [![Version](https://img.shields.io/badge/version-4.1.0-blue)](CHANGELOG.md)
+  [![Version](https://img.shields.io/badge/version-4.1.1-blue)](CHANGELOG.md)
   [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 </div>
 
 <br>
 
-## New in 4.0.0 — `/clio:test`
+## New in 4.1.0 — `/clio:test`
 
 ```bash
 /clio:test 3.3   # design cases per test level → run red → green → gate:

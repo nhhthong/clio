@@ -9,6 +9,10 @@
 # The model never writes runs.jsonl itself: a pass exists only because this script saw exit 0.
 set -uo pipefail
 export LC_ALL=C   # sort and comm must agree on order; awk matches bytes
+# The catalog this script's own repo ships beside it — not the target repo's — so `level_ids` below
+# reads the same ids /clio:test wrote from, however clio-test.sh was invoked. $0: SKILL.md calls it
+# by full path every time; a relative invocation only breaks the id-coverage check, not run/gate.
+LEVELS_FILE=$(cd "$(dirname "$0")/.." && pwd)/LEVELS.md
 
 root=$PWD
 while [ ! -d "$root/.claude/clio" ] && [ "$root" != "/" ]; do root=$(dirname "$root"); done
@@ -52,10 +56,14 @@ NOCOMMENT='/<!--/ {incom=1} incom { if (/-->/) incom=0; next }'
 # The only level names a plan or a case may use — LEVELS.md's catalog, lowercase.
 LEVELS="unit integration api contract e2e idempotency concurrency security resilience perf load stress regression smoke mutation"
 
-# Case table: | Case | Task | Level | Behaviour | Expected (source) | Command | Repeat |
-# Prints: case<TAB>task<TAB>level<TAB>command<TAB>repeat<TAB>error, one line per case row, every
-# tests file. error is empty for a well-formed row; a malformed one is still printed, so the case it
-# belongs to fails loudly instead of running a truncated command.
+# Case table, current: | Case | Task | Level | Covers | Behaviour | Expected (source) | Command | Repeat |
+# Case table, pre-4.1 (no Covers column, accepted unchanged — its rows just carry no id to enforce):
+#   | Case | Task | Level | Behaviour | Expected (source) | Command | Repeat |
+# Prints: case<TAB>task<TAB>level<TAB>covers<TAB>command<TAB>repeat<TAB>tracked<TAB>error, one line
+# per case row, every tests file. tracked is 1 for a Covers-column row, 0 for a pre-4.1 one — the
+# id-coverage check in gate() only ever counts a tracked row's Covers cell. error is empty for a
+# well-formed row; a malformed one is still printed, so the case it belongs to fails loudly instead
+# of running a truncated command.
 cases(){
   shopt -s nullglob
   local files=("$TESTS"/*.md)
@@ -64,21 +72,42 @@ cases(){
     /^[ \t]*\|/ {
       for(i=2;i<NF;i++){gsub(/^[ \t]+|[ \t]+$/,"",$i)}
       if ($2=="Case" || $2 ~ /^[-: ]+$/) next
-      c=$7; gsub(/^`|`$/,"",c); na=(c ~ /^(|–|-)$/); e=""
-      if (NF!=9) e=sprintf("the row splits into %d cells, not 7 — a `|` in the command? wrap it in a script", NF-2)
-      else if (index(lv, " " $4 " ")==0) e="level " $4 " is not one of: " substr(lv,2,length(lv)-2)
-      else if (!na && ($8 !~ /^[0-9]+$/ || $8+0<1)) e="Repeat " $8 " is not a whole number >= 1"
-      printf "%s\t%s\t%s\t%s\t%s\t%s\n", z($2), z($3), z($4), z(c), z($8), e
+      e=""; trk=1; cov=""; c=""; rep=""   # reset every row: an unset global here would leak
+      if (NF==9)      { trk=0; c=$7; rep=$8 }                    # the previous row value forward
+      else if (NF==10) { cov=$5; c=$8; rep=$9 }
+      else e=sprintf("the row splits into %d cells, not 7 (pre-4.1) or 8 — a `|` in the command? wrap it in a script", NF-2)
+      if (e=="") {
+        gsub(/^`|`$/,"",c); na=(c ~ /^(|–|-)$/)
+        if (index(lv, " " $4 " ")==0) e="level " $4 " is not one of: " substr(lv,2,length(lv)-2)
+        else if (!na && (rep !~ /^[0-9]+$/ || rep+0<1)) e="Repeat " rep " is not a whole number >= 1"
+      }
+      printf "%s\t%s\t%s\t%s\t%s\t%s\t%d\t%s\n", z($2), z($3), z($4), z(cov), z(c), z(rep), trk, e
     }
     function z(x){ return x=="" ? "–" : x }   # read collapses empty tab fields; keep every cell' "${files[@]}"
 }
 
+# All `level.n` ids LEVELS.md's catalog names for a level — the risks a named level must cover or
+# excuse. A level whose bullets carry no id (regression, smoke, mutation — each has its own gate
+# rule already) returns nothing, which is how gate() knows to skip the check entirely for it.
+level_ids(){ grep -oE "\`$1\.[0-9]+\`" "$LEVELS_FILE" 2>/dev/null | tr -d '`' | sort -u; }
+
+# `- <task> · <level.n> — <reason>` lines from every tests file: the bullet-scoped Not applicable
+# list § test/SKILL.md § 3 describes, for one task. `·` is multi-byte; tr's SET2 padding (as the
+# Levels-cell parsing above already relies on) turns each of its bytes into a space on its own.
+excused_ids(){
+  local t=$1
+  shopt -s nullglob; local files=("$TESTS"/*.md)
+  [ ${#files[@]} -gt 0 ] || return 0
+  awk "$NOCOMMENT"'/^-[ \t]*[^ \t]/' "${files[@]}" | tr '·' ' ' | sed -E 's/^-[ \t]*//' \
+    | while read -r ln_task ln_id _; do [ "$ln_task" = "$t" ] && echo "$ln_id"; done
+}
+
 run(){
-  local id=$1 row task level cmd rep
+  local id=$1 row task level covers cmd rep trk
   row=$(cases | awk -F'\t' -v c="$id" '$1==c')
   [ -n "$row" ] || { echo "FAIL: case $id is in no $TESTS/*.md row"; exit 1; }
   [ "$(wc -l <<<"$row")" -eq 1 ] || { echo "FAIL: case $id appears twice"; exit 1; }
-  IFS=$'\t' read -r _ task level cmd rep err <<<"$row"
+  IFS=$'\t' read -r _ task level covers cmd rep trk err <<<"$row"
   [ -z "$err" ] || { echo "FAIL: case $id: $err"; exit 1; }
   case $cmd in ''|'–'|'-') echo "FAIL: case $id has no command (N/A row?)"; exit 1 ;; esac
 
@@ -105,6 +134,8 @@ run(){
 
 # ponytail: fixed floor for concurrency repeats; make it a per-case column if 20 proves wrong somewhere.
 CONCURRENCY_MIN_REPEAT=20
+# LEVELS.md's mutation default; override per project with `NN%` on the `Mutation:` line in plans/infra.md.
+MUTATION_MIN_THRESHOLD=80
 
 # The task's case rows as written, whitespace-normalised: what the user approved.
 table_hash(){
@@ -152,26 +183,53 @@ gate(){
   # still naming it is a contradiction to resolve, not a level to waive quietly.
   local no_mutation=no
   grep -qiE '^Mutation: *none' "$PLANS/infra.md" 2>/dev/null && no_mutation=yes
+  # The threshold a mutation case's command must show: the project's own `NN%` if it set one,
+  # else LEVELS.md's default. Read once so every mutation case in this task is held to the same number.
+  local mutation_req=$MUTATION_MIN_THRESHOLD mline
+  mline=$(grep -iE '^Mutation:' "$PLANS/infra.md" 2>/dev/null | head -1)
+  [[ $mline =~ ([0-9]{1,3})% ]] && mutation_req=${BASH_REMATCH[1]}
+  local req_ids covered excused rid
   for l in $(tr ',·' '  ' <<<"${levels//critical/}"); do
     [[ " $LEVELS " == *" $l "* ]] || { fail "$task: plan level '$l' is not one of: $LEVELS"; continue; }
     [ "$l" != mutation ] || [ "$no_mutation" = no ] \
       || { fail "$task: plan names 'mutation' but plans/infra.md says \`Mutation: none\` — re-plan the task without it, or change the ADR"; continue; }
-    awk -F'\t' -v l="$l" '$3==l && $4!~/^(|–|-)$/' <<<"$rows" | grep -q . \
-      || fail "$task: plan requires level '$l', no runnable case covers it"
+    awk -F'\t' -v l="$l" '$3==l && $5!~/^(|–|-)$/' <<<"$rows" | grep -q . \
+      || { fail "$task: plan requires level '$l', no runnable case covers it"; continue; }
+    # Bullet coverage: only for a level LEVELS.md gives ids, and only once this task has at least one
+    # Covers-tracked row for it — a pre-4.1 case table (no Covers column) is grandfathered, not failed.
+    req_ids=$(level_ids "$l")
+    [ -n "$req_ids" ] || continue
+    awk -F'\t' -v l="$l" '$3==l && $7==1{f=1} END{exit !f}' <<<"$rows" || continue
+    covered=$(awk -F'\t' -v l="$l" '$3==l && $7==1{print $4}' <<<"$rows" \
+      | tr ',·' '\n\n' | sed 's/^[ \t]*//;s/[ \t]*$//' | grep -vE '^(|–|-)$')
+    excused=$(excused_ids "$task")
+    while IFS= read -r rid; do
+      [ -n "$rid" ] || continue
+      grep -qxF "$rid" <<<"$covered" && continue
+      grep -qxF "$rid" <<<"$excused" && continue
+      fail "$task: $l has no case covering $rid and no \`Not applicable\` line for it — LEVELS.md § $l"
+    done <<<"$req_ids"
   done
 
   # One case, one command: a command reused under another case (or level) proves nothing new.
   local dup
   while IFS= read -r dup; do [ -n "$dup" ] && fail "$task: cases $dup run the same command — one case, one command"
-  done < <(awk -F'\t' '$4!~/^(|–|-)$/ {ids[$4]=ids[$4] (ids[$4]==""?"":", ") $1; n[$4]++}
+  done < <(awk -F'\t' '$5!~/^(|–|-)$/ {ids[$5]=ids[$5] (ids[$5]==""?"":", ") $1; n[$5]++}
     END {for (c in n) if (n[c]>1) print ids[c]}' <<<"$rows")
 
-  local id level cmd rep err last flaky red
-  while IFS=$'\t' read -r id _ level cmd rep err; do
+  local id level covers cmd rep trk err last flaky red m
+  while IFS=$'\t' read -r id _ level covers cmd rep trk err; do
     [ -z "$err" ] || { fail "$id: $err"; continue; }
     case $cmd in ''|'–'|'-') continue ;; esac
     [ "$level" != concurrency ] || [ "$rep" -ge "$CONCURRENCY_MIN_REPEAT" ] \
       || fail "$id: concurrency case repeats $rep < $CONCURRENCY_MIN_REPEAT"
+    if [ "$level" = mutation ]; then
+      # The tool's own exit code is trusted (LEVELS.md: it fails below threshold) — but a threshold
+      # written as 0, or left out, always exits 0 too. Biggest 1-3 digit number in the command text:
+      # not proof the tool honors it, only that the "set threshold to 0" cheat leaves no number to find.
+      m=$(grep -oE '[0-9]{1,3}' <<<"$cmd" | awk 'BEGIN{x=0} {if($1+0<=100 && $1+0>x) x=$1+0} END{print x}')
+      [ "$m" -ge "$mutation_req" ] || fail "$id: mutation command shows no threshold >= ${mutation_req}% — looks cheatable (e.g. --thresholds.break 0); default is $MUTATION_MIN_THRESHOLD, override with \`NN%\` on the \`Mutation:\` line in plans/infra.md"
+    fi
     last=$(jq -Rc --arg c "$id" 'fromjson? | select(.case==$c)' "$RUNS" | tail -1)
     [ -n "$last" ] || { fail "$id: never run"; continue; }
     jq -e '.result=="pass"' >/dev/null <<<"$last" || { fail "$id: last run failed"; continue; }
@@ -206,10 +264,10 @@ gate(){
 }
 
 coverage(){
-  local task=$1 rows id level cmd last
-  rows=$(cases | awk -F'\t' -v t="$task" '$2==t && $4!~/^(|–|-)$/')
+  local task=$1 rows id level covers cmd last
+  rows=$(cases | awk -F'\t' -v t="$task" '$2==t && $5!~/^(|–|-)$/')
   [ -n "$rows" ] || { echo "no cases"; return 0; }
-  while IFS=$'\t' read -r id _ level cmd _ _; do
+  while IFS=$'\t' read -r id _ level covers cmd _ _ _; do
     last=$(jq -Rr --arg c "$id" 'fromjson? | select(.case==$c) | .result' "$RUNS" | tail -1)
     printf '%s\t%s\t%s\n' "$id" "$level" "${last:-never}"
   done <<<"$rows"

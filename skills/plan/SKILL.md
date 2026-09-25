@@ -129,8 +129,10 @@ first time the user agrees to `mutation` for a task (§ 3) and `plans/infra.md` 
 settle the tool for the whole project right there: look up this stack's mutation tester in Context7
 (PIT for JVM, Stryker for JS/TS/.NET, mutmut for Python, go-mutesting…), show the install and the
 threshold flag, and **ASK**.
-- Yes → an ADR, `Mutation: <tool> (ADR <file>)` under `plans/infra.md`'s header, and a re-plan row
-  there installing it (`Levels` `smoke`); the area task keeps `mutation`.
+- Yes → an ADR, `Mutation: <tool> (ADR <file>)` under `plans/infra.md`'s header — append `, NN%`
+  after the file when the threshold differs from LEVELS.md's 80% default; `/clio:test`'s gate reads
+  that number and refuses a mutation case whose command doesn't show it — and a re-plan row there
+  installing it (`Levels` `smoke`); the area task keeps `mutation`.
 - No → an ADR saying so and `Mutation: none (ADR <file>)` under `plans/infra.md`'s header; the area
   task drops `mutation`. From then on no task is proposed it, and the gate refuses a plan row that
   still names it.

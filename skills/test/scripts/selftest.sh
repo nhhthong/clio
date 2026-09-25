@@ -64,6 +64,17 @@ has 1.6 "says \`Mutation: none\`"   # a row naming mutation against the ADR is r
 echo '| 1.2-u2 | 1.2 | unit | critical red then green | exit 0 | `test -f crit-ok` | 1 |' >> $T
 ko "$S" run 1.2-u2; touch crit-ok; ok "$S" run 1.2-u2
 "$S" gate 1.2 | grep -q '1.2-u2: never seen red' && { echo "a case seen red still flagged"; bad=1; }
+
+# mutation: the command's own exit code is not trusted alone — its text must show a real threshold
+printf '# Plan — infra\nMutation: stryker (ADR 1790000000_stryker)\n' > .claude/clio/docs/plans/infra.md
+printf '| 1.7 | zeroed | 1 | mutation | – | – | [ ] |\n| 1.8 | honest | 1 | mutation | – | – | [ ] |\n' >> .claude/clio/docs/plans/p.md
+echo '| 1.7-m1 | 1.7 | mutation | x | x | `true --thresholds.break 0` | 1 |' >> $T
+echo '| 1.8-m1 | 1.8 | mutation | x | x | `true --thresholds.break 85` | 1 |' >> $T
+"$S" approve 1.7 >/dev/null; "$S" run 1.7-m1 >/dev/null; has 1.7 'no threshold >= 80%'   # 0 does not clear the default
+"$S" approve 1.8 >/dev/null; "$S" run 1.8-m1 >/dev/null; okg 1.8                          # 85 clears it
+# a project threshold above default (90%) holds even a normally-fine 85 to the higher bar
+printf '# Plan — infra\nMutation: stryker (ADR 1790000000_stryker, 90%%)\n' > .claude/clio/docs/plans/infra.md
+has 1.8 'no threshold >= 90%'
 rm .claude/clio/docs/plans/infra.md
 
 # the approved table is the definition of done: deleting a failing case or lowering Repeat voids it
@@ -126,6 +137,41 @@ rm -rf gen
 # regression that never failed is rejected
 echo '| 1.3-r2 | 1.3 | regression | bug2 | exit 0 | `true` | 1 |' >> $T
 "$S" run 1.3-r2 >/dev/null; ko "$S" gate 1.3
+
+# Covers: LEVELS.md gives `contract` two ids. A new-format table (with the Covers column) is held to
+# both — one covered by a case, no case and no excuse for the other — the gate names the missing one.
+printf '| 4.1 | sync | 1 | contract | – | – | [ ] |\n| 4.2 | sync2 | 1 | contract | – | – | [ ] |\n' >> .claude/clio/docs/plans/q.md
+printf '\n| Case | Task | Level | Covers | Behaviour | Expected (source) | Command | Repeat |\n|---|---|---|---|---|---|---|---|\n' >> $T
+echo '| 4.1-c1 | 4.1 | contract | contract.1 | consumer | x | `true c1` | 1 |' >> $T
+"$S" approve 4.1 >/dev/null; "$S" run 4.1-c1 >/dev/null
+has 4.1 'no case covering contract.2'
+echo '| 4.1-c2 | 4.1 | contract | contract.2 | provider | x | `true c2` | 1 |' >> $T
+"$S" approve 4.1 >/dev/null; "$S" run 4.1-c2 >/dev/null; okg 4.1   # both ids now covered
+
+# a `Not applicable` line excuses an id without a case for it
+echo '| 4.2-c1 | 4.2 | contract | contract.1 | consumer | x | `true c3` | 1 |' >> $T
+printf '\nNot applicable:\n- 4.2 · contract.2 — the provider will not run a contract test\n' >> $T
+"$S" approve 4.2 >/dev/null; "$S" run 4.2-c1 >/dev/null; okg 4.2
+
+# pre-4.1 rows (no Covers column) are grandfathered: task 1.2's `unit` case above never names
+# `unit.1`, and every case run earlier in this file passed gate all along — nothing new to flag here.
+out=$("$S" gate 1.2)
+grep -q 'no case covering' <<<"$out" && { echo "a pre-4.1 row was held to a Covers id it never had a column for: $out"; bad=1; }
+
+# coverage() reads the shifted Covers-column layout too, not just gate()
+"$S" coverage 4.1 | grep -q '4.1-c1	contract	pass' || { echo "coverage lost a Covers-column case: $("$S" coverage 4.1)"; bad=1; }
+
+# a malformed row (a `|` inside its command) must not leak the PRECEDING row's Covers value into the
+# next task's coverage — even across a task boundary, since cases() sees every file's rows in order
+# before gate() ever filters by task. Before the fix this let an unrelated bullet look covered.
+printf '| 4.4 | leakA | 1 | security | – | – | [ ] |\n| 4.5 | leakB | 1 | security | – | – | [ ] |\n' >> .claude/clio/docs/plans/q.md
+echo '| 4.4-s1 | 4.4 | security | security.1 | authn | x | `true c7` | 1 |' >> $T
+echo '| 4.5-s1 | 4.5 | security | security.2 | x | x | `true || false` | 1 |' >> $T   # malformed, right after 4.4-s1
+echo '| 4.5-s2 | 4.5 | security | security.6 | biz | x | `true c8` | 1 |' >> $T          # legit: satisfies "a case exists"
+"$S" approve 4.4 >/dev/null; "$S" run 4.4-s1 >/dev/null
+"$S" approve 4.5 >/dev/null; "$S" run 4.5-s1 >/dev/null; "$S" run 4.5-s2 >/dev/null
+out=$("$S" gate 4.5)
+grep -q 'no case covering security.1' <<<"$out" || { echo "a malformed row leaked another task's Covers value: $out"; bad=1; }
 
 [ $bad -eq 0 ] && echo OK
 exit $bad

@@ -44,11 +44,13 @@ through agreed seams:
 Per level in the plan's `Levels` cell, the cases [LEVELS.md](LEVELS.md) lists for it — read the
 section for each level you design, not the whole file. Every level the plan names gets at least one
 runnable case; a level that truly cannot apply goes back to `/clio:plan` (it supersedes the row),
-never silently dropped. Each bullet of a level's section that applies to this task is a case; one
-that does not gets no row — the table the user approves holds only cases that run. A bullet whose
-risk the code does show, left out anyway, goes in the report with its reason. A risk LEVELS.md
-§ Choosing would flag and the plan's `Levels` lacks → say so in the report; do not add the level
-yourself.
+never silently dropped. Each numbered bullet (`level.n`) of a level's section that applies to this
+task is a case — its id goes in that case's `Covers` cell. One that does not apply gets no case row;
+write it under `Not applicable` (§ 3 table below) as `- <task> · <level>.<n> — <reason>` instead of
+only saying so in the report — `/clio:test`'s own gate holds every id LEVELS.md lists for a named
+level to one or the other, case or excuse. An unnumbered bullet is a constraint on every case of the
+level (LEVELS.md says so), not a risk to cover on its own. A risk LEVELS.md § Choosing would flag and
+the plan's `Levels` lacks → say so in the report; do not add the level yourself.
 
 - **Expected values come from outside the code**: a number from `## Decisions`, a worked example, a
   known-good literal. Name the source in the `Expected` cell. Re-computing the expected value with
@@ -69,17 +71,26 @@ yourself.
 # Tests — <area>
 Plan: plans/<area>.md · Spec: memory/<area>.md · Seams: <agreed seams>
 
-| Case | Task | Level | Behaviour | Expected (source) | Command | Repeat |
-|---|---|---|---|---|---|---|
-| 3.3-u1 | 3.3 | unit | page 2 of 120 items has 50 | 50 items (spec: "50 per page") | `go test ./orders -run TestPage2$` | 1 |
-| 3.3-a1 | 3.3 | api | GET /orders?page=3 on 120 items | 20 items, `next` null (worked example) | `go test ./orders -run TestAPILastPage$` | 1 |
-| 3.3-s1 | 3.3 | security | page=-1 | 400, no SQL error in body | `go test ./orders -run TestPageNegative$` | 1 |
-| 3.3-c1 | 3.3 | concurrency | 2 writers insert while paging | no duplicate, no skipped id | `go test -race ./orders -run TestPageConcurrentInsert$` | 50 |
+| Case | Task | Level | Covers | Behaviour | Expected (source) | Command | Repeat |
+|---|---|---|---|---|---|---|---|
+| 3.3-u1 | 3.3 | unit | unit.1 | page 2 of 120 items has 50 | 50 items (spec: "50 per page") | `go test ./orders -run TestPage2$` | 1 |
+| 3.3-a1 | 3.3 | api | api.1 | GET /orders?page=3 on 120 items | 20 items, `next` null (worked example) | `go test ./orders -run TestAPILastPage$` | 1 |
+| 3.3-s1 | 3.3 | security | security.4 | page=-1 | 400, no SQL error in body | `go test ./orders -run TestPageNegative$` | 1 |
+| 3.3-c1 | 3.3 | concurrency | concurrency.3 | 2 writers insert while paging | no duplicate, no skipped id | `go test -race ./orders -run TestPageConcurrentInsert$` | 50 |
+
+Not applicable:
+- 3.3 · security.2 — the route is public; there is no owner to check horizontally
 ```
 - One case, one command, one behaviour. The command runs exactly that case (`-run TestX$`, `-t "name"`,
   `-k name`) and exits non-zero on failure. No `|` inside a command — wrap it in a script. A test
   that already proves one level does not also prove another under a second case id: the gate
   refuses two cases of a task with the same command — write the second test.
+- `Covers` names the LEVELS.md id (`level.n`) the case proves; `–` for a level whose bullets carry no
+  id (`regression`, `smoke`, `mutation`). Two cases may share an id when the risk genuinely takes two
+  seams to prove; an id with no case anywhere and no `Not applicable` line fails the gate.
+- `Not applicable` here is bullet-scoped (`<task> · <level>.<n>`, this doc) — not the plan's own
+  `Not applicable` table, which is whole-level (`<task> · <level>`, `plans/<area>.md`). A re-design
+  appends to it, never edits a line, same as the plan's.
 - `Repeat` ≥ 20 for `concurrency` (the gate refuses less), and every concurrency case forces the
   interleaving (barrier, latch, `-race`) rather than hoping for it.
 - **Show the whole table and ASK before writing.** The case list is the definition of done. Once
@@ -117,15 +128,17 @@ clio-test.sh gate 3.3
 ```
 `OK` is the only pass. Anything else — never run, failed, code changed since, command changed, fewer
 runs than `Repeat`, a case table changed since `approve`, a malformed row, a level outside LEVELS.md,
-a superseded row, two cases sharing a command, a plan level with no case, `mutation` named while
-`plans/infra.md` says `Mutation: none`, a critical or regression
+a superseded row, two cases sharing a command, a plan level with no case, a LEVELS.md id of a named
+level covered by no case and excused by no `Not applicable` line, `mutation` named while
+`plans/infra.md` says `Mutation: none`, a mutation command whose own text shows no threshold at or
+above the required number, a critical or regression
 case never seen red — the task is not done. **Flaky is failed**: one red run in `Repeat` fails the
 case, and so does a fail on this same code after it once passed — re-running until green does not
 clear it; only a code change does. `/clio:memo` files it as `code-debt` with `what` starting `flaky:`.
 
 ## 6. Report
 
-Seams agreed · cases per level (and levels sent back to `/clio:plan`) · bullets left out although the
-code shows their risk, each with its reason · the gate output verbatim ·
+Seams agreed · cases per level (and levels sent back to `/clio:plan`) · the `Not applicable` ids
+written and why · the gate output verbatim ·
 cases never seen red · ⚠️ values that blocked a case · tools proposed. Then: `/clio:memo <task>`
 records the work and ticks the row, which it does only on a passing gate.
