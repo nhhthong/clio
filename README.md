@@ -9,7 +9,7 @@
   It is not auto-memory. Nothing is written unless you asked for it.
 
   [![Claude Code plugin](https://img.shields.io/badge/Claude_Code-plugin-D97757?logo=anthropic&logoColor=white)](https://code.claude.com/docs/en/plugins)
-  [![Version](https://img.shields.io/badge/version-4.0.0-blue)](CHANGELOG.md)
+  [![Version](https://img.shields.io/badge/version-4.1.0-blue)](CHANGELOG.md)
   [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 </div>
 
@@ -23,7 +23,9 @@
 ```
 
 `/clio:plan` reads each task against the code it touches and names the levels it needs; `/clio:test`
-writes at least one case per level named. A level left out is an explicit claim it does not apply.
+writes at least one case per level named. A level left out is an explicit claim it does not apply;
+when the code shows the risk and the plan still says no, the plan writes the reason under `Not applicable`.
+The questions that pick the levels are in [`skills/test/LEVELS.md`](skills/test/LEVELS.md) § Choosing.
 
 | Level | Tests | Applied when the task… | Passes when |
 |---|---|---|---|
@@ -36,17 +38,23 @@ writes at least one case per level named. A level left out is an explicit claim 
 | `load` | the system at expected load | has an expected load in the spec | error rate and latency stay within it for the whole run |
 | `stress` | beyond the limit | has a limit in the spec | it degrades as allowed, loses no data, recovers |
 | `security` | anything crossing a trust boundary | takes outside input or enforces access | bad tokens, other users' data, injection, oversized input are all rejected; no secret in logs |
+| `idempotency` | the same request delivered twice | can be retried, double-submitted or redelivered | N deliveries leave one effect; a reused key with a new body is refused |
 | `concurrency` | two actors on one resource | can be hit by parallel requests or workers | invariant holds across ≥ 20 latch-released repeats with the race detector on |
+| `resilience` | a dependency failing | has a failure behaviour in the spec (timeout, retry, fallback) | the spec's behaviour holds with the fault injected, and it recovers — no behaviour, no case |
 | `regression` | the bug that was fixed | is a bug fix or a revert | the case was seen failing before the fix, passing after |
 | `smoke` | the build is alive | is an infra / scaffold task | it starts, answers health, does one read and one write |
-| `mutation` | whether the other tests would catch a bug | is **critical** | mutation score ≥ threshold (default 80 %) |
+| `mutation` | whether the other tests would catch a bug | is beyond critical — Claude proposes, you decide | mutation score ≥ threshold (default 80 %) |
 
-**Critical** — the task moves money, touches auth, runs concurrently or deletes data: it also needs
-`mutation`, and every case must have been seen red. A project can waive mutation once, by ADR, in
-`/clio:plan infra`.
+**Critical** — a bug would corrupt shared state, grant access or destroy something (money, auth,
+deletes, two writers on one record are the usual shapes): every case must have been seen red.
+**Beyond critical** — a slipped bug would leave wrong state that compounds silently and is hard to undo (a balance, stock or booking count that drifts),
+held by hand-written logic: `/clio:plan` assesses the task, proposes `mutation` with its reasons and
+asks; it is never added silently. A project can waive mutation once, by ADR, in `/clio:plan infra`.
 
-**Gate** — one red run in `Repeat` is a fail (flaky = failed); any code edit after a pass voids it;
-evidence is written only by the script; `/clio:memo` ticks the task only on `OK`.
+**Gate** — one red run in `Repeat` is a fail, and so is a red on the same code after a pass (flaky =
+failed; re-running to green does not clear it); any code edit after a pass voids it; any change to
+the case table after the user approved it voids it; evidence is written only by the script;
+`/clio:memo` ticks the task only on `OK`.
 
 What Claude reads before touching code:
 
@@ -129,7 +137,7 @@ every session — the skills read it when they need it.
 | | `docs/tasks/<feature>/<id>_<name>.md` | one doc per sub-task, for life; updated, never forked | `/clio:memo` |
 | | `docs/tasks/<feature>/summary.md` | what `ls` cannot say: the domain, the plan and spec it serves, cross-cutting side effects | `/clio:memo` |
 | | `docs/decisions/*.md` | ADRs, flat, read by the features they constrain | `/clio:ingest`, `/clio:memo` |
-| **Proven** | `database/runs.jsonl` | one line per case run: result, repeats, commit, working-tree fingerprint | `clio-test.sh` only |
+| **Proven** | `database/runs.jsonl` | one line per case run (result, repeats, commit, working-tree fingerprint) and per approved case table (its hash) | `clio-test.sh` only |
 | **Owed** | `database/debt.jsonl` | bugs, unverified work, open questions, append-only | `/clio:memo`, `/clio:ingest` |
 
 What a run learns goes as low as it can, so the always-loaded files do not grow with every task:
@@ -182,7 +190,9 @@ Dotted lines are reads and writes. Skip `/clio:memo` and the next session starts
 thing that notices is `hooks/clio-nudge.sh`, a `UserPromptSubmit` hook comparing git against
 `index.jsonl`. At most once per session it tells Claude the memo is owed. It never writes a ledger,
 never invokes a skill, and stays silent when the only changes are under `.claude/` and `HEAD` already
-appears in an index record.
+appears in an index record. A second hook, `hooks/clio-guard.sh` (`PreToolUse`), refuses any Edit,
+Write or shell command that writes, deletes or reverts `runs.jsonl` other than `clio-test.sh` —
+reads pass, and it acts only in a repo with `.claude/clio`.
 
 ## Rules the layout enforces
 
@@ -191,7 +201,7 @@ appears in an index record.
 - Ledger lines are never edited, reordered or deleted. One sub-task, one doc, for life.
 - A task is done when `/clio:test`'s gate passes: every case of every level the plan named, green on
   the current code, repeated as often as the case says. Flaky is failed. The model never writes the
-  evidence; a script does.
+  evidence; a script does, and a hook refuses any other write to it.
 - `blocked_by: null` is the work queue; anything else waits. Every open spec point has a debt record.
 
 ## Commands

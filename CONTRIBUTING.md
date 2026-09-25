@@ -31,6 +31,7 @@ same way and are easy to miss:
 claude plugin validate .
 bash skills/memo/scripts/test.sh      # validate.sh fixtures: must print OK
 bash hooks/test-nudge.sh              # clio-nudge.sh fixtures: must print OK
+bash hooks/test-guard.sh              # clio-guard.sh fixtures: must print OK
 bash skills/test/scripts/selftest.sh  # clio-test.sh run/gate fixtures: must print OK
 bash skills/context/scripts/selftest.sh  # q.sh query fixtures: must print OK
 ```

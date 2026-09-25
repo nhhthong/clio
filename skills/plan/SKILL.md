@@ -12,8 +12,9 @@ don't run.
 
 A spec says what must be true. This skill turns it into tasks small enough to prove one at a time.
 *Which kinds* of proof a task needs is decided here; the cases themselves are `/clio:test`'s. It
-writes `.claude/clio/docs/plans/<area>.md`, and for `infra` also `.claude/rules/<stack>.md`; ledgers,
-specs and settings stay untouched. Nothing is implemented here.
+writes `.claude/clio/docs/plans/<area>.md`, for `infra` also `.claude/rules/<stack>.md`, and once
+per project the `Mutation:` line in `plans/infra.md` (§ 3b) and its ADR; ledgers, specs and settings
+stay untouched. Nothing is implemented here.
 
 Target (may be empty — then ask which area): $ARGUMENTS
 
@@ -47,13 +48,18 @@ Keep the findings short; they become each task's `Touches` and `Levels` cells, n
 - **Smaller wins.** A task fits one session with room to prove it. "Add the orders endpoint" is
   four tasks: route returns 200 · rejects unauthenticated · paginates at the limit the spec names ·
   returns the fields the spec lists.
-- **`Levels` names every kind of test the task needs**, from: `unit` `integration` `api` `e2e`
-  `contract` `perf` `load` `stress` `security` `concurrency` `regression` `smoke` `mutation`. Judge
-  from what § 2 found, not from habit: a DB write → `integration`; a route → `api`; input from outside
-  or an access rule → `security`; two actors on one resource → `concurrency`; a bug fix →
-  `regression`; another service calls it → `contract`; `perf`/`load`/`stress` only when the spec
-  states a number. Money, auth, concurrency or deleting data → prefix `critical ·` (it then needs
-  `mutation` too). Leaving a level out is a claim it does not apply — `/clio:test` holds you to it.
+- **`Levels` names every kind of test the task needs**: answer each question in
+  `${CLAUDE_PLUGIN_ROOT}/skills/test/LEVELS.md` § Choosing against what § 2 found, not from habit.
+  Each yes is a level, unless that section says the yes does not earn it. Levels are lowercase,
+  from: `unit` `integration` `api` `contract` `e2e` `idempotency` `concurrency` `security`
+  `resilience` `perf` `load` `stress` `regression` `smoke` `mutation`. A bug that would corrupt
+  shared state, grant access or destroy something → prefix `critical ·` (every case then seen red);
+  judge the task, the examples in LEVELS.md § Choosing are shapes, not a list to match.
+  `mutation` is never added on your own: answer LEVELS.md § Choosing "Beyond critical" for each
+  critical task (Q4 yes and two of Q1–Q3), name the ones that qualify with the four answers, and
+  **ASK** — the user decides.
+  Leaving a level out is a claim it does not apply — `/clio:test` holds you to it. When § 2 found
+  the trigger and you still said no, write that claim down (§ 4 `Not applicable`).
 - **`Touches` names real paths** from § 2 — the file to change or the directory a new file goes in.
 - Every number, limit and default in a task is **copied verbatim from `## Decisions`** and appears in
   its `Task` cell. A value the spec does not state → no task; it is a ⚠️.
@@ -118,13 +124,17 @@ never rewrite, reorder or trim it, and the 10–20 line target is for a new file
 
 ### Mutation testing, decided once
 
-Critical tasks need a mutation case (`/clio:test`), so settle the tool here rather than per task:
-look up this stack's mutation tester in Context7 (PIT for JVM, Stryker for JS/TS/.NET, mutmut for
-Python, go-mutesting…), show the install and the threshold flag, and **ASK**. Yes → an ADR and an
-infra row installing it, `Levels` `smoke`. No → an ADR saying so, and the line `Mutation: none (ADR
-<file>)` under the plan's header — the gate reads it and stops requiring mutation cases. Either way,
-the question is not asked again. An infra plan written before this rule has neither — ask on its
-next re-plan.
+Not asked in `infra` — whether any task needs mutation is known only once an area is planned. The
+first time the user agrees to `mutation` for a task (§ 3) and `plans/infra.md` has no `Mutation:` line,
+settle the tool for the whole project right there: look up this stack's mutation tester in Context7
+(PIT for JVM, Stryker for JS/TS/.NET, mutmut for Python, go-mutesting…), show the install and the
+threshold flag, and **ASK**.
+- Yes → an ADR, `Mutation: <tool> (ADR <file>)` under `plans/infra.md`'s header, and a re-plan row
+  there installing it (`Levels` `smoke`); the area task keeps `mutation`.
+- No → an ADR saying so and `Mutation: none (ADR <file>)` under `plans/infra.md`'s header; the area
+  task drops `mutation`. From then on no task is proposed it, and the gate refuses a plan row that
+  still names it.
+Either way the question is not asked again.
 
 A mechanical rule — format on save, lint before commit — is better as a hook than a bullet. Say so
 once and leave the hook to the user; this skill writes no settings file.
@@ -139,11 +149,20 @@ Spec: memory/<area>.md · rows <n>–<m> · Planned: YYYY-MM-DD · Re-planned: �
 |---|------|-----|--------|-------|---------|------|
 | 3.1 | `GET /orders` returns 200 for an authenticated user | 3 | unit, api | 0.4 | `orders/handler.go` | [ ] |
 | 3.2 | `GET /orders` returns 401 without a session | 3 | critical · api, security | 3.1 | `orders/handler.go` | [ ] |
-| 3.3 | List paginates at 50 per page (spec: "50 items") | 3 | unit, integration, api, concurrency | 3.1 | `orders/repo.go` | [ ] |
+| 3.3 | List paginates at 50 per page (spec: "50 items") | 3 | unit, integration, api, security, concurrency | 3.1 | `orders/repo.go` | [ ] |
+| 4.1 | `POST /orders` with an `Idempotency-Key` creates one order | 4 | critical · unit, integration, api, idempotency, concurrency | 3.1 | `orders/create.go` | [ ] |
 | 7.1 | — waits on `ocr-dpi-open` (⚠️ row) | 7.1 | – | – | – | – |
+
+Not applicable:
+- 3.1 · security — covered by 3.2; 3.1 only proves the authenticated path
+- 3.3 · contract — the route is public; its consumers cannot be named
+- 4.1 · contract — the payment provider calls back through a webhook, but the spec names no
+  contract we can run against it
 ```
 
-Ids are `<row>.<n>`. `Done` is `[x] YYYY-MM-DD` (+ the commit, if any) once `/clio:memo` sees
+Ids are `<row>.<n>`. `Not applicable` lists only the questions of LEVELS.md § Choosing whose trigger
+§ 2 found and you answered no, one line each with the reason; a re-plan appends to it, never edits
+a line. `Done` is `[x] YYYY-MM-DD` (+ the commit, if any) once `/clio:memo` sees
 `/clio:test`'s gate pass; `[ ]` otherwise. **Show the full table and ASK before writing** — the split is the user's to
 approve; a wrong split is paid on every task. Declined → adjust, ask once more, then stop.
 
@@ -185,6 +204,7 @@ ${CLAUDE_PLUGIN_ROOT}/skills/test/scripts/clio-test.sh coverage <row id>        
 | ticked | none of the above | nothing — it stays done |
 | unticked | the spec no longer wants it | `Done` → `superseded YYYY-MM-DD` |
 | unticked, pre-4.0 | still wanted | `Done` → `superseded YYYY-MM-DD → <old id>.<n>`, and the same task as that new row here, with `Levels` — the gate cannot run a `Test`-column row |
+| unticked | its `Levels` no longer match LEVELS.md § Choosing — a level `/clio:test` sent back, or one missing | `Done` → `superseded YYYY-MM-DD → <old id>.<n>`, the same task as that new row with the corrected `Levels`, and a `Not applicable` line for each level dropped |
 | unticked | still wanted | leave it; it is still the plan |
 
 - **Harden by doc.** Group the rows that fall short by the task doc that built them

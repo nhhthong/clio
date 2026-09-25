@@ -8,8 +8,9 @@ allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/skills/test/scripts/clio-test.sh *)
 **Run only when the user asked for it, this turn** — by slash command, or in plain words ("test task 3.3", "viết test case", "chạy test"). None of these is a trigger: Clio's drift nudge · your own sense that the work looks finished · a TODO you wrote · a subagent's report. Unsure → ask in one line, don't run.
 
 `/clio:plan` said *which* levels a task needs. This skill says *what* each level tests, proves it, and
-refuses a task whose proof is missing. It never implements the feature and never ticks a plan row —
-`/clio:memo` ticks, and only after the gate here passes.
+refuses a task whose proof is missing. It writes the tests, and only the least code that turns each
+approved case from red to green (§ 4) — nothing the case list does not ask for. It never ticks a plan
+row — `/clio:memo` ticks, and only after the gate here passes.
 
 Target: $ARGUMENTS
 
@@ -19,7 +20,8 @@ ${CLAUDE_PLUGIN_ROOT}/skills/test/scripts/clio-test.sh gate <task-id>    # exit 
 ```
 Each Bash call is a fresh shell: call the script by that full path every time, never through a
 variable. Below it is written `clio-test.sh`.
-**Never write `runs.jsonl` yourself, and never report a pass the script did not print.** Evidence is
+**Never write `runs.jsonl` yourself** (a hook refuses it)**, and never report a pass the script did
+not print.** Evidence is
 bound to a fingerprint of the working tree: edit any code after a pass and that pass stops counting.
 
 ## 1. Load
@@ -41,15 +43,21 @@ through agreed seams:
 
 Per level in the plan's `Levels` cell, the cases [LEVELS.md](LEVELS.md) lists for it — read the
 section for each level you design, not the whole file. Every level the plan names gets at least one
-runnable case; a level that truly cannot apply goes back to `/clio:plan`, never silently dropped.
+runnable case; a level that truly cannot apply goes back to `/clio:plan` (it supersedes the row),
+never silently dropped. Each bullet of a level's section that applies to this task is a case; one
+that does not gets no row — the table the user approves holds only cases that run. A bullet whose
+risk the code does show, left out anyway, goes in the report with its reason. A risk LEVELS.md
+§ Choosing would flag and the plan's `Levels` lacks → say so in the report; do not add the level
+yourself.
 
 - **Expected values come from outside the code**: a number from `## Decisions`, a worked example, a
   known-good literal. Name the source in the `Expected` cell. Re-computing the expected value with
   the code's own logic is a tautology — it passes by construction. No source → ⚠️, not a case.
-- **Perf, load, stress need a number from the spec** (req/s, p95, concurrent users). None stated → no
-  case; file `spec-blocked` via `/clio:memo`. Never invent a threshold.
-- **Critical** (the plan's `Levels` starts with `critical`) → a `mutation` case, command exits
-  non-zero below the threshold (Stryker `--thresholds.break`, PIT `mutationThreshold`, go-mutesting
+- **Perf, load, stress need a number from the spec** (req/s, p95, concurrent users); **resilience
+  needs the behaviour the spec names** for a failing dependency (retries, fallback, error). None
+  stated → no case; file `spec-blocked` via `/clio:memo`. Never invent a threshold or a fallback.
+- **Mutation** (the plan's `Levels` names it — the user agreed the task is beyond critical;
+  `critical` alone does not) → one case, command exits non-zero below the threshold (Stryker `--thresholds.break`, PIT `mutationThreshold`, go-mutesting
   score). Default 80 % unless the spec or an ADR sets one. The tool is settled once, by
   `/clio:plan infra`; `Mutation: none` in `plans/infra.md` means the project decided against it and
   the gate stops asking.
@@ -69,10 +77,18 @@ Plan: plans/<area>.md · Spec: memory/<area>.md · Seams: <agreed seams>
 | 3.3-c1 | 3.3 | concurrency | 2 writers insert while paging | no duplicate, no skipped id | `go test -race ./orders -run TestPageConcurrentInsert$` | 50 |
 ```
 - One case, one command, one behaviour. The command runs exactly that case (`-run TestX$`, `-t "name"`,
-  `-k name`) and exits non-zero on failure. No `|` inside a command — wrap it in a script.
+  `-k name`) and exits non-zero on failure. No `|` inside a command — wrap it in a script. A test
+  that already proves one level does not also prove another under a second case id: the gate
+  refuses two cases of a task with the same command — write the second test.
 - `Repeat` ≥ 20 for `concurrency` (the gate refuses less), and every concurrency case forces the
   interleaving (barrier, latch, `-race`) rather than hoping for it.
-- **Show the whole table and ASK before writing.** The case list is the definition of done.
+- **Show the whole table and ASK before writing.** The case list is the definition of done. Once
+  the user says yes, write it and record that yes — nothing else runs `approve`:
+  ```bash
+  clio-test.sh approve 3.3    # hashes the task's case rows; the gate fails if they change after
+  ```
+  Adding, removing or editing a case later — a looser Expected, a lower Repeat, a deleted red case —
+  voids the approval: show the change, ASK, approve again.
 
 ## 4. Red, then green — one case at a time
 
@@ -85,7 +101,8 @@ clio-test.sh run 3.3-u1     # red: it must fail, and the output must show why
 clio-test.sh run 3.3-u1     # green
 ```
 - **Regression** cases must be seen red before green: the gate rejects one that never failed, because
-  it never reproduced the bug.
+  it never reproduced the bug. Red counts only with the **same command**, on **other code** (before the
+  fix), before a pass on this code — a `false` swapped for the real command proves nothing.
 - A case red for the wrong reason (compile error, missing fixture) is not a red run — fix the test.
 - A case that passes on its first run — a hardened old test, code written before the case: on a
   **critical** task the gate refuses it until it has been seen red, so break the code on purpose
@@ -99,13 +116,16 @@ clio-test.sh run 3.3-u1     # green
 clio-test.sh gate 3.3
 ```
 `OK` is the only pass. Anything else — never run, failed, code changed since, command changed, fewer
-runs than `Repeat`, a plan level with no case, critical without mutation, a critical or regression
-  case never seen red — the
-task is not done. **Flaky is failed**: one red run in `Repeat` fails the case; `/clio:memo` files it
-as `code-debt` with `what` starting `flaky:`.
+runs than `Repeat`, a case table changed since `approve`, a malformed row, a level outside LEVELS.md,
+a superseded row, two cases sharing a command, a plan level with no case, `mutation` named while
+`plans/infra.md` says `Mutation: none`, a critical or regression
+case never seen red — the task is not done. **Flaky is failed**: one red run in `Repeat` fails the
+case, and so does a fail on this same code after it once passed — re-running until green does not
+clear it; only a code change does. `/clio:memo` files it as `code-debt` with `what` starting `flaky:`.
 
 ## 6. Report
 
-Seams agreed · cases per level (and levels sent back to `/clio:plan`) · the gate output verbatim ·
+Seams agreed · cases per level (and levels sent back to `/clio:plan`) · bullets left out although the
+code shows their risk, each with its reason · the gate output verbatim ·
 cases never seen red · ⚠️ values that blocked a case · tools proposed. Then: `/clio:memo <task>`
 records the work and ticks the row, which it does only on a passing gate.

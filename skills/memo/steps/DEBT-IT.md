@@ -34,8 +34,8 @@ clio-test.sh gate <task-id>
 - `OK` → tick `[x] YYYY-MM-DD` (+ ` <hash>` if any) on that exact row in `.claude/clio/docs/plans/<area>.md`, in
   place, and paste the `OK` line under `## Testing Done`.
 - Anything else → leave `[ ]`, file an `unverified` record naming the gate's FAIL lines, and tell the
-  user `/clio:test <task-id>` is owed. A failing case repeated-red-then-green is `code-debt` with
-  `what` starting `flaky:`.
+  user `/clio:test <task-id>` is owed. A gate line `flaky —` is `code-debt` with `what`
+  starting `flaky:`.
 - `plan_tasks` empty (work outside any plan) → no gate to run; `unverified` unless the user names the
   check that ran. Never tick a row step 1 was unsure about.
 

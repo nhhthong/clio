@@ -1,5 +1,60 @@
 # Changelog
 
+## 4.1.0 — 2026-09-25
+
+Breaking for the gate: **every task needs `clio-test.sh approve <task>` once** before its gate can pass
+again. Show the task's case table to the user, then approve it. Nothing else to migrate. Old plans
+without a `Not applicable` list stay valid.
+
+Changes:
+- **Levels chosen by risk.** `LEVELS.md` § Choosing: 13 questions (risk → question → level), when a yes
+  still does not earn a level (contract for public APIs, e2e outside the key flows, perf/resilience
+  with no number or behaviour in the spec). Sources: Microsoft ISE Playbook, OWASP WSTG, Pact docs.
+  `/clio:plan` answers them per task.
+- **New levels `idempotency`, `resilience`.** Transaction/isolation folded into `integration` and
+  `concurrency`. Security cases follow OWASP WSTG (session, SSRF, uploads, business-logic replay).
+- **Critical narrowed**: money, auth, deleting data, or two writers able to corrupt one record. It was
+  "runs concurrently". Critical now means only "every case seen red".
+- **Mutation only for tasks beyond critical**: `/clio:plan` assesses each critical task with four
+  questions (wrong state that compounds? silent? hard to undo? held by hand-written logic?), not a
+  list of domains — so stock drift or an oversold booking is caught like money is. It gives its
+  answers as the reason and asks; the user decides. `critical` no longer implies it. Auth, deletes and races hinge on annotations, SQL constraints, config and locking,
+  which a mutation tester does not mutate — their own cases prove them. Mutation runs over classes
+  with logic, never with PIT `withHistory` as evidence (experimental, ignores dependency changes).
+  An existing critical task whose plan row does not name `mutation` no longer needs a mutation case.
+- **`Not applicable`** list under a plan table: a level whose trigger the code shows, answered no, with
+  the reason. Re-plan can supersede an unticked row whose `Levels` were wrong.
+- **Gate: flaky bound to the code.** A fail on the same fingerprint after a pass fails the case;
+  re-running to green no longer clears it.
+- **Gate: red bound to the command and the code.** A regression or critical case counts as seen red
+  only when the same command failed on other code before a pass on this code.
+- **Gate: approved case table.** New `clio-test.sh approve <task>` records a hash of the task's case
+  rows in `runs.jsonl`; the gate fails when the rows change after it (a case deleted, Repeat lowered).
+- **Gate: strict rows.** A row split by `|`, a non-numeric `Repeat`, a level outside the 15 names or a
+  superseded plan row now fail instead of being read loosely. Rows inside `<!-- -->` are not read.
+- **Gate: one case, one command.** Two cases of a task running the same command fail — relabelling
+  one test as a second level no longer "covers" it.
+- **Case table holds only cases that run.** No more `–` rows per LEVELS.md bullet that does not
+  apply; a bullet whose risk the code shows, left out anyway, goes in `/clio:test`'s report with its
+  reason. An old table's `–` rows still parse and are skipped.
+- **Fingerprint: test artifacts are files, not directories.** A directory a run created used to be
+  excluded whole, so code written into it later never voided a pass. Directory entries in older
+  `runs.jsonl` lines are ignored.
+- **New `hooks/clio-guard.sh` (`PreToolUse`).** Refuses Edit/Write on `runs.jsonl` and shell
+  commands that write, delete or revert it (redirect, `tee`, `sed -i`, `rm`, `mv`, `cp` onto it,
+  `git restore`/`checkout`) unless they go through `clio-test.sh`; reads and copies *from* it pass.
+  Acts only in a repo with `.claude/clio`. Pattern match: it stops the shortcut, not a script
+  opening the file itself.
+- **Mutation tool asked lazily.** `/clio:plan infra` no longer asks; the first task the user agrees
+  is beyond critical settles it for the project. A plan row naming `mutation` against
+  `Mutation: none` now fails the gate instead of being waived.
+- **Fixed: a ledger under `.claude/` could move the fingerprint.** `git rm --cached` refuses a file
+  staged and then edited again (`runs.jsonl` mid-memo) without `-f`; the error was silenced, the
+  staged copy stayed in the tree, and every `git add` of it voided every pass of every task.
+- **Fixed:** an empty table cell shifted every cell after it; `comm` saw unsorted input under some
+  locales (script now runs with `LC_ALL=C`).
+- `/clio:test` says what it writes: the tests, and the least code that turns an approved case green.
+
 ## 4.0.0 — 2026-09-24
 
 Breaking. Layout moved, `/clio:update` merged into `/clio:ingest`, new `/clio:test`, `req` now strings.

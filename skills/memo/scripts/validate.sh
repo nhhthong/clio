@@ -209,7 +209,7 @@ case $mode in
     RUNS=.claude/clio/database/runs.jsonl
     if [ -f "$RUNS" ]; then
       n=0; while IFS= read -r l; do n=$((n+1))
-        [ -z "$l" ] || jq -e '.case and .fp and (.result|IN("pass","fail"))' >/dev/null 2>&1 <<<"$l" \
+        [ -z "$l" ] || jq -e '(.case and .fp and (.result|IN("pass","fail"))) or (.approve and .hash)' >/dev/null 2>&1 <<<"$l" \
           || fail "$RUNS line $n is not a clio-test.sh record — only the script writes this file"
       done < "$RUNS"
     else
