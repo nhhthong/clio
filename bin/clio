@@ -1,0 +1,61 @@
+#!/usr/bin/env python3
+"""clio — the one entry point to Clio's scripts. Python 3.9+, standard library only.
+  clio test <cmd> ...      run cases, record evidence, gate a task     (skills/test/scripts/clio_test.py)
+  clio q <cmd> ...         every read of Clio's ledgers, read-only      (skills/context/scripts/q.py)
+  clio validate [mode]     check index.jsonl / debt.jsonl / the repo    (skills/memo/scripts/validate.py)
+  clio selftest            run every selftest of the plugin — for contributors
+Each subcommand prints its own usage when called without arguments. The hooks are not routed
+here: hooks.json calls hooks/clio_guard.py and hooks/clio_nudge.py directly."""
+import glob
+import importlib.util
+import os
+import subprocess
+import sys
+
+sys.dont_write_bytecode = True   # keep the plugin directory free of __pycache__
+ROOT = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
+CMDS = {
+    "test": "skills/test/scripts/clio_test.py",
+    "q": "skills/context/scripts/q.py",
+    "validate": "skills/memo/scripts/validate.py",
+}
+
+
+def selftest():
+    """Every selftest*.py under skills/ and hooks/, all at once — each builds its own scratch repo, so
+    none waits on another: one name and verdict per line, exit 1 if any failed."""
+    files = sorted(glob.glob(os.path.join(ROOT, "skills", "**", "selftest*.py"), recursive=True)
+                   + glob.glob(os.path.join(ROOT, "hooks", "selftest*.py")))
+    procs = [(os.path.relpath(f, ROOT),
+              subprocess.Popen([sys.executable, f], stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                               universal_newlines=True))
+             for f in files if os.path.basename(f) != "selftest_common.py"]
+    bad = 0
+    for name, p in procs:
+        text = p.communicate()[0]
+        if p.returncode == 0:
+            print("OK    " + name)
+        else:
+            bad = 1
+            print("FAIL  " + name)
+            sys.stdout.write("".join("      " + l + "\n" for l in text.rstrip("\n").split("\n")))
+    return bad
+
+
+def main(argv):
+    cmd = argv[0] if argv else ""
+    if cmd == "selftest":
+        return selftest()
+    if cmd not in CMDS:
+        print(__doc__.split("\n", 1)[1].rstrip(), file=sys.stderr)
+        return 1
+    path = os.path.join(ROOT, CMDS[cmd])
+    spec = importlib.util.spec_from_file_location("clio_" + cmd, path)
+    mod = importlib.util.module_from_spec(spec)
+    sys.argv = [path] + argv[1:]
+    spec.loader.exec_module(mod)
+    return mod.main(argv[1:])
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

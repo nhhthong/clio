@@ -9,7 +9,7 @@
   It is not auto-memory. Nothing is written unless you asked for it.
 
   [![Claude Code plugin](https://img.shields.io/badge/Claude_Code-plugin-D97757?logo=anthropic&logoColor=white)](https://code.claude.com/docs/en/plugins)
-  [![Version](https://img.shields.io/badge/version-4.1.2-blue)](CHANGELOG.md)
+  [![Version](https://img.shields.io/badge/version-4.2.0-blue)](CHANGELOG.md)
   [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 </div>
 
@@ -48,8 +48,8 @@ The questions that pick the levels are in [`skills/test/LEVELS.md`](skills/test/
 
 **Critical** — a bug would corrupt shared state, grant access or destroy something (money, auth,
 deletes, two writers on one record are the usual shapes): every case must have been seen red.
-So must every `regression` case. `clio-test.sh red` gets that red by running them on the base
-commit's code with today's tests, in a throwaway worktree — nobody breaks code by hand. Other tasks
+So must every `regression` case. `clio test red` gets that red by running them on the base
+commit's code with today's tests, in a worktree kept for the next run — nobody breaks code by hand. Other tasks
 have no red phase: the spec-sourced expected values and the approved table already guard them.
 **Beyond critical** — a slipped bug would leave wrong state that compounds silently and is hard to undo (a balance, stock or booking count that drifts),
 held by hand-written logic: `/clio:plan` assesses the task, proposes `mutation` with its reasons and
@@ -92,6 +92,21 @@ becomes a valid answer, and a short loop writes the session back to disk before 
 
 ## Quick start
 
+### Requirements
+
+| Tool | Version | Why |
+|---|---|---|
+| Python | **3.9 or newer**, standard library only — nothing to `pip install` | every Clio script (`bin/clio`) and both hooks |
+| `git` | 2.5 or newer | evidence is bound to the working tree; `red` runs in a worktree |
+
+```bash
+python3 -c 'import sys; print(sys.version); sys.exit(sys.version_info < (3, 9))' && echo "Python OK"
+```
+
+`/clio:setup` runs the same check and stops on anything missing.
+
+### Install
+
 ```bash
 claude plugin marketplace add nhhthong/clio
 claude plugin install clio@nhhthong
@@ -110,8 +125,7 @@ From there, per task: Claude runs `clio:context` before non-trivial work, `/clio
 and proves it, you run `/clio:memo` after. A hook notices when you skip the memo — see
 [The loop](#the-loop).
 
-Requires `bash`, `jq`, `git`, `awk` and `sed`. Setup writes nothing outside `.claude/clio/`, and a
-plugin update writes nothing inside it.
+Setup writes nothing outside `.claude/clio/`, and a plugin update writes nothing inside it.
 
 ## How it differs
 
@@ -148,7 +162,7 @@ every session — the skills read it when they need it.
 | | `docs/tasks/<feature>/<id>_<name>.md` | one doc per sub-task, for life; updated, never forked | `/clio:memo` |
 | | `docs/tasks/<feature>/summary.md` | what `ls` cannot say: the domain, the plan and spec it serves, cross-cutting side effects | `/clio:memo` |
 | | `docs/decisions/*.md` | ADRs, flat, read by the features they constrain | `/clio:ingest`, `/clio:memo` |
-| **Proven** | `database/runs.jsonl` | one line per case run (result, repeats, commit, working-tree fingerprint split into test and code halves) and per approved case table (its hash) | `clio-test.sh` only |
+| **Proven** | `database/runs.jsonl` | one line per case run (result, repeats, commit, working-tree fingerprint split into test and code halves) and per approved case table (its hash) | `clio test` only |
 | **Owed** | `database/debt.jsonl` | bugs, unverified work, open questions, append-only | `/clio:memo`, `/clio:ingest` |
 
 What a run learns goes as low as it can, so the always-loaded files do not grow with every task:
@@ -166,10 +180,6 @@ What a run learns goes as low as it can, so the always-loaded files do not grow 
 `runs` joins the plan on the task id. `.jsonl` files are append-only: an update is a new line under
 the same key, and readers take the last. A task doc's `id` is its
 creation timestamp and its filename prefix, so moving the doc never breaks its history.
-
-Coming from 3.x (`.claude/docs/` and `.claude/clio/*.jsonl`)? Move them by hand — CHANGELOG 4.0.0
-has the commands. `/clio:setup` stops when it sees the old layout rather than moving your
-ledgers for you.
 
 ## The loop
 
@@ -198,11 +208,11 @@ flowchart LR
 ```
 
 Dotted lines are reads and writes. Skip `/clio:memo` and the next session starts without it; the one
-thing that notices is `hooks/clio-nudge.sh`, a `UserPromptSubmit` hook comparing git against
+thing that notices is `hooks/clio_nudge.py`, a `UserPromptSubmit` hook comparing git against
 `index.jsonl`. At most once per session it tells Claude the memo is owed. It never writes a ledger,
 never invokes a skill, and stays silent when the only changes are under `.claude/` and `HEAD` already
-appears in an index record. A second hook, `hooks/clio-guard.sh` (`PreToolUse`), refuses any Edit,
-Write or shell command that writes, deletes or reverts `runs.jsonl` other than `clio-test.sh` —
+appears in an index record. A second hook, `hooks/clio_guard.py` (`PreToolUse`), refuses any Edit,
+Write or shell command that writes, deletes or reverts `runs.jsonl` other than `clio test` —
 reads pass, and it acts only in a repo with `.claude/clio`.
 
 ## Rules the layout enforces
@@ -223,7 +233,7 @@ reads pass, and it acts only in a repo with `.claude/clio`.
 | `/clio:ingest [doc]` | requirement document → spec files + row table + the stack as `memory/infra.md`; on later runs, what the change invalidates in built code (`spec-delta`), row markers (asks before ⚠️ → ✅), areas to re-plan. No argument sweeps hand edits | requirements arrive or change |
 | `/clio:plan <area>` | decided rows → researched, smallest testable tasks with their test levels; `infra` turns the decided stack into tasks and writes `rules/`; a re-plan adds sub-tasks for spec changes and thin tests | `infra` after ingest, then each area; again when ingest names it |
 | `/clio:context [x]` | no arg: where are we · with area / row / id / question: spec, built, owed, quoted · also answers "what do I owe?" | Claude, before work; you, to ask "why?" |
-| `/clio:test [task\|ids\|area]` | design seams and cases per level with expected values from the spec — a batch of up to 5 ready tasks, approved in one question — write tests and code, run each task in one call; red only for regression/critical, from the base commit (`clio-test.sh red`); then gate | per batch, before `/clio:memo` |
+| `/clio:test [task\|ids\|area]` | design seams and cases per level with expected values from the spec — a batch of up to 5 ready tasks, approved in one question — write tests and code, run each task in one call; red only for regression/critical, from the base commit (`clio test red`); then gate | per batch, before `/clio:memo` |
 | `/clio:memo [doc\|task id]` | record the work, committed or not (the hash is backfilled later): sub-task doc, ledgers, plan tick on a passing gate, ADR, and each lesson at the lowest level it recurs in | after each feature or fix |
 
 `clio:context` runs before work, `/clio:test` during it and `/clio:memo` after it; the other three

@@ -8,7 +8,7 @@ line.
 ## 1. Close what this run finished
 
 ```bash
-q.sh owed --req <req>
+clio q owed --req <req>
 ```
 Fully resolved → append with `status:"done"`, and the commit hash, if any, in `action`. Partly → `status:"in-process"`,
 narrow `what` to what is left. Unblocked but not finished → `blocked_by:null`, keep `status`. Include
@@ -29,7 +29,7 @@ doc rather than guessing, and say so in the report.
 
 Verification is `/clio:test`'s evidence, never your account of it. For each id in `plan_tasks`:
 ```bash
-clio-test.sh gate <task-id>
+clio test gate <task-id>
 ```
 - `OK` → tick `[x] YYYY-MM-DD` (+ ` <hash>` if any) on that exact row in `.claude/clio/docs/plans/<area>.md`, in
   place, and paste the `OK` line under `## Testing Done`.
@@ -42,7 +42,7 @@ clio-test.sh gate <task-id>
 ## 3. New records
 
 One per `## Follow-up` bullet that outlives this session. Existing `id` for the same problem →
-reuse it (`q.sh owed --all --id <id>`); else pick a new one.
+reuse it (`clio q owed --all --id <id>`); else pick a new one.
 Group by problem, never mix kinds in one record.
 
 | `kind` | Meaning |
@@ -76,7 +76,7 @@ All 14 fields, always present (`null` / `[]`, never omitted):
 cat >> .claude/clio/database/debt.jsonl <<'EOF'
 {"date":"YYYY-MM-DD","id":"<kebab-key>","kind":"code-debt","status":"pending","domain":"cart","what":["<what is wrong>"],"req":["15"],"specs":[".claude/clio/docs/specs/memory/products-pricing.md"],"docs":[".claude/clio/docs/tasks/<feature>/<id>_<name>.md"],"code":["app/Services/CartService.php:52"],"action":"<fix>","source":null,"blocked_by":null,"issue":null}
 EOF
-validate.sh debt
+clio validate debt
 ```
 `FAIL` → `sed -i.bak '$d' .claude/clio/database/debt.jsonl && rm .claude/clio/database/debt.jsonl.bak`, fix, re-append.
 

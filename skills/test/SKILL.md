@@ -4,7 +4,7 @@ description: Design, write, run and gate the tests for plan tasks, in batches �
 researches (Context7, web) and measures the fastest way to run many cases in one runner start, and
 records it as a `Batch:` line in `.claude/rules/`. The script records the evidence; a task passes only when every case passed on the current code. Use when the user asks to test, design test cases or run tests.
 argument-hint: "[task id such as 3.3 | several ids | area | gate <task-id>]"
-allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/skills/test/scripts/clio-test.sh *)
+allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/bin/clio test *)
 ---
 
 **Run only when the user asked for it, this turn** — by slash command, or in plain words ("test task 3.3", "viết test case", "chạy test"). None of these is a trigger: Clio's drift nudge · your own sense that the work looks finished · a TODO you wrote · a subagent's report. Unsure → ask in one line, don't run.
@@ -17,13 +17,14 @@ approved case pass (§ 4) — nothing the case list does not ask for. It never t
 Target: $ARGUMENTS
 
 ```bash
-${CLAUDE_PLUGIN_ROOT}/skills/test/scripts/clio-test.sh run-task <task-id>...          # every case of each task, Repeat times each, one runs.jsonl line per case
-${CLAUDE_PLUGIN_ROOT}/skills/test/scripts/clio-test.sh red <task-id>... [--base <rev>]  # the cases that need red, on the base commit's code with today's tests
-${CLAUDE_PLUGIN_ROOT}/skills/test/scripts/clio-test.sh run <case-id>                    # one case on its own
-${CLAUDE_PLUGIN_ROOT}/skills/test/scripts/clio-test.sh gate <task-id>                   # exit 0 only when every case of the task has fresh, complete, passing evidence
+${CLAUDE_PLUGIN_ROOT}/bin/clio test run-task <task-id>...          # every case of each task, Repeat times each, one runs.jsonl line per case
+${CLAUDE_PLUGIN_ROOT}/bin/clio test red <task-id>... [--base <rev>]  # the cases that need red, on the base commit's code with today's tests (--fresh: rebuild its worktree)
+${CLAUDE_PLUGIN_ROOT}/bin/clio test run <case-id>                    # one case on its own
+${CLAUDE_PLUGIN_ROOT}/bin/clio test gate <task-id>                   # exit 0 only when every case of the task has fresh, complete, passing evidence
+${CLAUDE_PLUGIN_ROOT}/bin/clio test history <case-id>                # every recorded run of one case, red runs marked
 ```
 Each Bash call is a fresh shell: call the script by that full path every time, never through a
-variable. Below it is written `clio-test.sh`. Run test cases **only through the script** — a command
+variable. Below it is written `clio test`. Run test cases **only through the script** — a command
 from the case table run directly records nothing, and a pass the script did not record does not
 exist. The repo's own build / typecheck command (from `.claude/rules/*.md`) you may run directly.
 **Never write `runs.jsonl` yourself** (a hook refuses it)**, and never report a pass the script did
@@ -37,7 +38,7 @@ spec's `## Decisions`, the code in `Touches`, and `.claude/rules/*.md` for the r
 commands. Existing `.claude/clio/docs/tests/<area>.md` → read it; this is a re-design.
 
 **One task, several ids, or an area.** An area → the batch is its open rows whose `Needs` are all
-ticked (`q.sh summary` names the first; read the plan for the rest), in plan order. Cap a batch at
+ticked (`clio q summary` names the first; read the plan for the rest), in plan order. Cap a batch at
 **5 tasks or ~30 cases**, whichever comes first — past that the user skims, and a skimmed yes is not
 an approval. The rest waits for the next batch; say which.
 
@@ -47,7 +48,7 @@ How cases run costs more than anything else here, whatever the stack: a runner t
 (a JVM, a framework, a container, a bundler) pays it once per command. One example, measured on a
 Maven + Spring Boot repo: 8 cases each as its own `mvn` took 72 s (boot ~7 s every time, test bodies
 under 0.5 s); the same 8 in one `mvn` took 11 s. So **before the first run** — a new case table, and
-just as much an existing one (a re-run, a table written before 4.1.2) — check for a `Batch:` line:
+just as much an existing one (a re-run, a table written before 4.2.0) — check for a `Batch:` line:
 
 - **A `Batch:` line in `.claude/rules/*.md` already covers this stack** → use it, skip the rest. Each
   case's `Command` is that template with `{tests}` replaced by the one test it runs — word for word,
@@ -169,7 +170,7 @@ Not applicable:
   The user may accept all, or all but some ("ok, trừ 3.2: thêm case X"). Write what was accepted and
   record that yes, for exactly those tasks — nothing else runs `approve`:
   ```bash
-  clio-test.sh approve 3.1 3.3 3.4   # one record and hash per task; the gate fails a task whose rows change after
+  clio test approve 3.1 3.3 3.4      # one record and hash per task; the gate fails a task whose rows change after
   ```
   A task sent back is redesigned and asked again on its own. Adding, removing or editing a case
   later — a looser Expected, a lower Repeat, a deleted red case, a new `Not applicable` line — voids
@@ -184,7 +185,7 @@ gate asks for no other:
 - every case of a `critical` task, except `mutation` (its red is a score below threshold).
 
 **Tasks with neither** (most of them): write the tests and the least code that makes them pass, run
-the build, then one call — `clio-test.sh run-task 3.1 3.3 3.4` for the whole batch. With a `Batch:`
+the build, then one call — `clio test run-task 3.1 3.3 3.4` for the whole batch. With a `Batch:`
 line (§ 1b) that is one runner start for every case of every task in it; the output marks each case
 `— batch`. Failures → fix
 the code (never loosen a test) and re-run the failing task. Refactor, re-run once.
@@ -193,9 +194,10 @@ the code (never loosen a test) and re-run the failing task. Refactor, re-run onc
 - **The code does not exist yet** → add the bare seam (the signature, a route returning 501, a stub
   returning the zero value), run the build, `run-task` → every case fails **on its assertion**. Then
   implement and `run-task` again.
-- **The code exists, or the fix is written** → `clio-test.sh red <task>`: it runs those cases on the
-  code of the base commit (default `HEAD`, i.e. before your uncommitted change) in a throwaway
-  worktree holding today's test files, and records the red. Nobody edits code to break it. Already
+- **The code exists, or the fix is written** → `clio test red <task>`: it runs those cases on the
+  code of the base commit (default `HEAD`, i.e. before your uncommitted change) in a worktree
+  holding today's test files, and records the red. The worktree is kept at `.git/clio-red` and
+  reused, so the next `red` rebuilds only what changed; `--fresh` starts it over. Nobody edits code to break it. Already
   committed the change → `--base <the commit before it>`. Then `run-task` on today's code.
 
 Read every red's output: a red counts only if it failed **on its assertion** — a build error, a
@@ -205,8 +207,24 @@ base did not compile) is `NOT RED … did not run`, and the gate never counts it
 compile the tests at all (they call code the base lacks), `red` cannot help — use the stub route
 above on today's code instead, and say so. A `red` run is never read as today's result: the gate's
 "last run" is the last run on this code, so run `run-task` after `red`, not the other way round. A case the
-script reports `NOT RED` passed on the old code: it cannot tell the bug from the fix — strengthen it
-(show the user the changed row, approve again) rather than moving on.
+script reports `NOT RED` passed on the old code. Two different reasons, two different answers —
+**never break code by hand to get a red**:
+- **The test is weak** — the bug was there and the case did not see it: strengthen the case (show
+  the user the changed row, approve again) and run `red` again.
+- **The behaviour was always right** — a hardening task: the base never had the bug, so no red
+  exists to find. This exit is for `critical` tasks only; a `regression` case that will not go red
+  does not reproduce its bug — rewrite it until it does. If the task names `mutation`, a passing
+  mutation case stands in for red on its other cases (the gate prints a `NOTE`). If it does not and many cases come back `NOT RED`, propose
+  `mutation` for the task to the user (`/clio:plan` adds it) — unless `plans/infra.md` says
+  `Mutation: none`. Otherwise, one case at a time, propose a waiver in the tests file, under the
+  table:
+  ```
+  Red waived:
+  - 3.4-u2 — correct since before a1b2c3d; `red --base a1b2c3d` passed
+  ```
+  It is part of the approved table, so the user says yes to it like to a case. The gate accepts it
+  only if a `red` run of that case with these test files **passed** on a base commit — a waiver
+  stands on a tried red, never instead of one.
 
 - Red must come from **the code, never the test**: the script fingerprints test files and code
   separately. Test files are recognised by path (`_test.`, `.test.`, `.spec.`, `test_*.py`, `tests/`,
@@ -214,7 +232,7 @@ script reports `NOT RED` passed on the old code: it cannot tell the bug from the
 - Long levels (`load`, `stress`, `perf`, `mutation`, e2e with a UI, `concurrency` with a big
   `Repeat`): run them with a Bash timeout that covers them (up to 600000 ms) or `run_in_background`;
   each repeat is capped at `CLIO_TIMEOUT` seconds (default 600) — raise it for those
-  (`CLIO_TIMEOUT=1800 clio-test.sh run-task …`). Never start infra (docker, a staging target), use a
+  (`CLIO_TIMEOUT=1800 clio test run-task …`). Never start infra (docker, a staging target), use a
   secret or hit a paid or shared service on your own: say what is needed and ask.
 - **One runner at a time per build.** Never start a test or build command while another one runs
   on the same module — Maven, Gradle, cargo and most bundlers share one output directory
@@ -222,12 +240,13 @@ script reports `NOT RED` passed on the old code: it cannot tell the bug from the
   failures that are not the code's). A long run in `run_in_background` means nothing else touches
   that build until it has finished; with a `Batch:` line the slow cases are in the same single run
   anyway, so there is nothing to put in the background.
-- One case to re-run on its own (a flaky suspect) → `clio-test.sh run <case-id>`.
+- One case to re-run on its own (a flaky suspect) → `clio test run <case-id>`; what it did before →
+  `clio test history <case-id>`.
 
 ## 5. Gate
 
 ```bash
-clio-test.sh gate 3.1    # one call per task of the batch — it reads runs.jsonl, it runs no test
+clio test gate 3.1       # one call per task of the batch — it reads runs.jsonl, it runs no test
 ```
 `OK` is the only pass. Anything else — never run, failed, code changed since, command changed, fewer
 runs than `Repeat`, a case table changed since `approve` (a `Not applicable` line added or edited counts), a malformed row, a level outside LEVELS.md,
@@ -235,9 +254,12 @@ a superseded row, two cases sharing a command, a plan level with no case, a LEVE
 level covered by no case and excused by no `Not applicable` line, `mutation` named while
 `plans/infra.md` says `Mutation: none`, a mutation command with no named threshold flag at or
 above the required number (or a `#` in it), a critical or regression
-case never seen red — the task is not done. **Flaky is failed**: one red run in `Repeat` fails the
+case never seen red, a `Red waived:` line with no passing `red` behind it — the task is not done. **Flaky is failed**: one red run in `Repeat` fails the
 case, and so does a fail on this same code after it once passed — re-running until green
 does not clear it; only a code change does. `/clio:memo` files it as `code-debt` with `what` starting `flaky:`.
+A stale incremental build can fake one: a file restored by git keeps its old mtime and the build
+skips it, so the run tests yesterday's class. Before you call a case flaky, rebuild clean and look
+at the failure; if it was the build, tell the user so — do not edit code just to clear the flag.
 
 ## 6. Report
 

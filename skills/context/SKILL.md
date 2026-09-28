@@ -2,21 +2,21 @@
 name: context
 description: Load the spec, prior task docs and open debt for an area before working in it. Use before any non-trivial task, and when the user asks "where are we", "what's next", "why is X like this" or "any history on this".
 argument-hint: "[area | requirements row | debt id | question — omit for the overview]"
-allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/skills/context/scripts/q.sh *)
+allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/bin/clio q *)
 ---
 
 # Related Context
 
 Target (may be empty): $ARGUMENTS
 
-Every ledger read goes through one read-only script. The hop files call it `q.sh`; each Bash call is
+Every ledger read goes through one read-only script. The hop files call it `clio q`; each Bash call is
 a fresh shell, so always run it by its full path, never through a variable:
-`${CLAUDE_PLUGIN_ROOT}/skills/context/scripts/q.sh`.
+`${CLAUDE_PLUGIN_ROOT}/bin/clio q`.
 
 Also the answer to "what do I still owe?" — hop 3 alone, filtered, is the whole of it.
 
 **Two depths.** The *user* asked "where are we / what's next / continue" with no area named →
-**hop 0**: run `q.sh summary` and open nothing else. Report in ≤ 10 lines: per area `done/open` and
+**hop 0**: run `clio q summary` and open nothing else. Report in ≤ 10 lines: per area `done/open` and
 the first open task with its levels · debt `queue` vs `blocked` · last memo. A `next:` whose `Needs`
 is unticked is not next — say which task it waits on. Stop there. Anything
 else — a target (area, row, debt `id`, file), a "why is X like this?" question, or **you triggered
@@ -49,7 +49,7 @@ Each hop feeds the next — don't skip ahead, and don't stop after hop 1 just be
    that decides whether you may act on it.
 4. **Rules for the files you will touch.** A path-scoped rule loads only once Claude *reads* a
    matching file, so a file you are about to create has loaded nothing yet. Name them up front:
-   `q.sh rules <files from the plan's Touches or hop 2>`,
+   `clio q rules <files from the plan's Touches or hop 2>`,
    then read each matching rule. Its bullets are constraints for this task, quoted like the rest.
 5. **Coverage** — nothing stores this, it's derived: hop 1's row number joined against hops 2 and 3
    tells you what's built vs what's still owed. ✅ row + no index record + no open debt = decided but

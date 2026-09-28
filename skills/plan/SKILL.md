@@ -2,7 +2,7 @@
 name: plan
 description: "Break a spec area into the smallest independently testable tasks — one observable behaviour each, researched against the code and the library docs, with the test levels it needs (unit, api, security, concurrency…) — written to .claude/clio/docs/plans/<area>.md in dependency order. `infra` goes first: it turns the stack /clio:ingest decided (memory/infra.md), or the stack the repo already has, into toolchain and scaffold tasks and writes .claude/rules/<stack>.md. Never chooses a stack. Run `infra` after /clio:ingest, an area after that, and again after /clio:ingest moves a row."
 argument-hint: "[infra | memory/<area>.md | a requirements.md row number | a keyword]"
-allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/skills/context/scripts/q.sh *) Bash(${CLAUDE_PLUGIN_ROOT}/skills/test/scripts/clio-test.sh coverage *)
+allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/bin/clio q *) Bash(${CLAUDE_PLUGIN_ROOT}/bin/clio test coverage *)
 ---
 
 **Run only when the user asked for it, this turn** — by slash command, or in plain words ("plan the checkout area", "chia nhỏ task đi").
@@ -195,8 +195,8 @@ The pre-4.0 row 3.2 above it keeps its task and `Test` cells; only its `Done` be
 For each existing row, check both causes, and write what the table says:
 
 ```bash
-${CLAUDE_PLUGIN_ROOT}/skills/context/scripts/q.sh owed --req <row's req>          # spec moved?
-${CLAUDE_PLUGIN_ROOT}/skills/test/scripts/clio-test.sh coverage <row id>          # tests enough?
+${CLAUDE_PLUGIN_ROOT}/bin/clio q owed --req <row's req>  # spec moved?
+${CLAUDE_PLUGIN_ROOT}/bin/clio test coverage <row id>    # tests enough?
 ```
 
 | Row | Finding | Write |
@@ -211,21 +211,21 @@ ${CLAUDE_PLUGIN_ROOT}/skills/test/scripts/clio-test.sh coverage <row id>        
 | unticked | still wanted | leave it; it is still the plan |
 
 - **Harden by doc.** Group the rows that fall short by the task doc that built them
-  (`q.sh built --task <row>`, `type` `task` only — an ADR is not a unit of work). One sub-task per
+  (`clio q built --task <row>`, `type` `task` only — an ADR is not a unit of work). One sub-task per
   doc: its id is `<highest row id it covers>.<n>`, its `Needs` lists every row it covers, and
   `/clio:memo` finds that doc through the id's parent. A row no task doc claims hardens alone.
   Deltas and reverts stay one per row — each is its own behaviour change.
 - Any other new row's id is `<old id>.<n>`, the next free `n`. A sub-task's `Needs` names the old
   id; a replacement keeps the old row's `Needs`. Each is gated and ticked on its own.
 - A `spec-delta` is carried by `id` in the sub-task: an open delta named in no plan is what
-  `validate.sh all` warns about, and carrying the id silences it.
+  `clio validate all` warns about, and carrying the id silences it.
 - A revert or a hardening is a task like any other. Its cases must fail while the gap is there, or
   nobody can tell a fix from a claim of one.
-- `clio-test.sh gate` refuses a pre-4.0 row; its sub-task is what gets gated.
+- `clio test gate` refuses a pre-4.0 row; its sub-task is what gets gated.
 
 ## 5. Report
 
 Tasks written / superseded / sub-tasks added and why (spec or tests) · the first three with `Needs`
-satisfied and `Done` empty (the queue — `q.sh summary` computes it the same way) · rows skipped as
+satisfied and `Done` empty (the queue — `clio q summary` computes it the same way) · rows skipped as
 ⚠️/❌ and the debt `id` each waits on · any spec value you could not turn into a task. Next:
 `/clio:test <area>` — it designs the queue as one batch and asks once.

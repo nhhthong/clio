@@ -10,19 +10,19 @@ the same `id` with a new `doc` path. Every field is restated in full each run: `
 source file the doc covers, `req`/`specs` its full current claim (retractable to `[]`). Earlier
 records are the timeline — read them for "what changed when", never merge them.
 
-All reads go through `q.sh` — one line per doc, its current state:
+All reads go through `clio q` — one line per doc, its current state:
 
 ```bash
-q.sh built                          # current state, one line per doc
-q.sh built --req 5                  # by requirement row (from hop 1)
-q.sh built --spec order-flow        # by spec file
-q.sh built --file ProductRepo       # by source file
-q.sh built --area account --keyword i18n   # filters are OR'd; a doc prints once
-q.sh built --task 3.3               # by plan task
-q.sh history <id>                   # a doc's timeline, and what its last run added/removed
+clio q built                        # current state, one line per doc
+clio q built --req 5                # by requirement row (from hop 1)
+clio q built --spec order-flow      # by spec file
+clio q built --file ProductRepo     # by source file
+clio q built --area account --keyword i18n  # filters are OR'd; a doc prints once
+clio q built --task 3.3             # by plan task
+clio q history <id>                 # a doc's timeline, and what its last run added/removed
 ```
 A `WARN: … malformed line(s)` on stderr means the ledger is broken, not empty: say so, point at
-`validate.sh all` (it names the line), and never report "nothing on record" off a partial read.
+`clio validate all` (it names the line), and never report "nothing on record" off a partial read.
 
 `req`/`specs` are the join to the requirement but not infallible — `req` the weaker of the two:
 inherited bugs, RBAC, infra structurally map to no requirement row, so `req:[]` can be legitimate.
@@ -47,7 +47,7 @@ awk '/^## /{p = /^## (General Memory|Cross-cutting side effects)/} p' .claude/cl
 ```
 Its bullets bind this task like a path-scoped rule does; quote the ones that apply.
 
-A `doc` path missing on disk → `q.sh history <id>` before concluding anything; a moved doc's current
+A `doc` path missing on disk → `clio q history <id>` before concluding anything; a moved doc's current
 path is in its last record.
 
 Next: [HOP3.md](HOP3.md).

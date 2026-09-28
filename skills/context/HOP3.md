@@ -4,9 +4,9 @@ Every open item lives here: `/clio:ingest` writes spec-moved-code-hasn't deltas,
 writes leftover business from a completed run. Keyed by `id`, one line per `id`.
 
 ```bash
-q.sh owed --req 18                  # the row hop 1 gave you — start here; queue first
-q.sh owed --area account --spec order-flow --req 20   # widen: pair domain with specs/req
-q.sh owed --q "<word>"              # "what do I owe?" — omit --q for everything open
+clio q owed --req 18                # the row hop 1 gave you — start here; queue first
+clio q owed --area account --spec order-flow --req 20  # widen: pair domain with specs/req
+clio q owed --q "<word>"            # "what do I owe?" — omit --q for everything open
 ```
 
 Read two fields first:

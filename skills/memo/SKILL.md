@@ -2,7 +2,7 @@
 name: memo
 description: Record a finished piece of work — update (or create) its sub-task doc under .claude/clio/docs/tasks/<feature>/, append the run to .claude/clio/database/index.jsonl, log what is still owed to .claude/clio/database/debt.jsonl, tick the plan task once /clio:test's gate passes, and propose a path-scoped .claude/rules/ entry or an ADR when warranted. Works on committed or uncommitted work, and backfills the commit hash later. Run after finishing a feature, fix or refactor.
 argument-hint: "[task doc path | plan task id such as 3.3 — optional]"
-allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/skills/context/scripts/q.sh *) Bash(${CLAUDE_PLUGIN_ROOT}/skills/memo/scripts/validate.sh *) Bash(${CLAUDE_PLUGIN_ROOT}/skills/test/scripts/clio-test.sh gate *)
+allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/bin/clio q *) Bash(${CLAUDE_PLUGIN_ROOT}/bin/clio validate *) Bash(${CLAUDE_PLUGIN_ROOT}/bin/clio test gate *)
 ---
 
 **Run only when the user asked for it, this turn** — by slash command, or in plain words ("record
@@ -25,19 +25,19 @@ Classify it once, here; the step files refer to it as **the target** and never r
 
 ## Scripts
 
-The step files name these by basename only. Each Bash call is a fresh shell — no variable survives
+The step files name these by their short form only. Each Bash call is a fresh shell — no variable survives
 to the next call — so always call them by the full path below, never through a variable:
 
 | Name in the step files | Call it as |
 |---|---|
-| `q.sh` | `${CLAUDE_PLUGIN_ROOT}/skills/context/scripts/q.sh` |
-| `validate.sh` | `${CLAUDE_PLUGIN_ROOT}/skills/memo/scripts/validate.sh` |
-| `clio-test.sh` | `${CLAUDE_PLUGIN_ROOT}/skills/test/scripts/clio-test.sh` |
+| `clio q` | `${CLAUDE_PLUGIN_ROOT}/bin/clio q` |
+| `clio validate` | `${CLAUDE_PLUGIN_ROOT}/bin/clio validate` |
+| `clio test` | `${CLAUDE_PLUGIN_ROOT}/bin/clio test` |
 
 ## Commits: record what exists, leave the rest empty
 
 Uncommitted work is normal and is recorded the same way. The commit is simply not known yet:
-- `q.sh commit <files of this run>` prints the commit holding them, or **nothing** — while any of the
+- `clio q commit <files of this run>` prints the commit holding them, or **nothing** — while any of the
   files is still uncommitted, in a repo with no commit yet, or outside git. Nothing is the answer to
   write: `commits` gains no entry, the doc's `Commit:` line and the plan's `Done` cell carry no hash.
 - **Never write `HEAD`** as this run's commit because it exists — HEAD is whatever was committed last,

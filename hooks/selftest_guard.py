@@ -1,0 +1,63 @@
+#!/usr/bin/env python3
+"""selftest_guard.py — the smallest check that fails if clio_guard.py stops guarding runs.jsonl."""
+import json
+import os
+import subprocess
+import sys
+import tempfile
+
+H = os.path.join(os.path.dirname(os.path.abspath(__file__)), "clio_guard.py")
+R = ".claude/clio/database/runs.jsonl"
+bad = 0
+tmp = tempfile.TemporaryDirectory()
+C = os.path.join(tmp.name, "clio")        # a repo with .claude/clio
+N = os.path.join(tmp.name, "none")        # one without
+os.makedirs(os.path.join(C, ".claude/clio/database"))
+os.makedirs(N)
+
+
+def call(tool, key, val, cwd=C):
+    inp = json.dumps({"tool_name": tool, "tool_input": {key: val}, "cwd": cwd})
+    return subprocess.run([sys.executable, H], input=inp, universal_newlines=True,
+                          stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode
+
+
+def deny(*a, **k):
+    global bad
+    if call(*a, **k) != 2:
+        print("expected deny: %s" % (a,))
+        bad = 1
+
+
+def allow(*a, **k):
+    global bad
+    if call(*a, **k) != 0:
+        print("expected allow: %s" % (a,))
+        bad = 1
+
+
+deny("Write", "file_path", "/repo/" + R)
+deny("Edit", "file_path", "/repo/" + R)
+deny("Bash", "command", "echo '{\"case\":\"x\",\"result\":\"pass\"}' >> " + R)
+deny("Bash", "command", "jq -c . x.json | tee -a " + R)
+deny("Bash", "command", "sed -i '$d' " + R)
+deny("Bash", "command", "cd /repo && rm " + R)
+deny("Bash", "command", "cp /tmp/fake " + R)
+allow("Bash", "command", "jq -c 'select(.case==\"3.3-u1\")' %s | tail -1" % R)
+allow("Bash", "command", "cat %s; grep pass %s" % (R, R))
+allow("Bash", "command", "/p/bin/clio test run 3.3-u1   # appends to runs.jsonl")
+deny("Bash", "command", "echo x >> %s && /p/bin/clio test run 3.3-u1" % R)   # the writer excuses its own part only
+deny("Bash", "command", "/p/bin/myclio tests >> " + R)                        # a look-alike name is no writer
+allow("Write", "file_path", "/repo/.claude/clio/docs/tests/auth.md")
+allow("Bash", "command", "git status")
+deny("Bash", "command", "git restore " + R)                       # reverting drops every uncommitted fail
+deny("Bash", "command", "git checkout HEAD -- " + R)
+deny("Bash", "command", "mv %s /tmp/old.jsonl" % R)
+allow("Bash", "command", "cp %s /tmp/backup.jsonl" % R)            # a copy *from* it is a read
+deny("Bash", "command", "echo x >> runs.jsonl", cwd=os.path.join(C, ".claude/clio/database"))   # bare name, inside Clio
+allow("Bash", "command", "python train.py > logs/runs.jsonl", cwd=N)                           # another tool, no Clio
+
+tmp.cleanup()
+if bad == 0:
+    print("OK")
+sys.exit(bad)

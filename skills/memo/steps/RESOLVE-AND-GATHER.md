@@ -8,8 +8,8 @@ gives, in the same Bash command.
 
 Start from git, whatever the target:
 ```bash
-q.sh changed        # uncommitted + untracked files of this work, .claude/ excluded; renames by new path
-q.sh unrecorded     # commits since the last one any index record names: <hash><TAB><docs covering it | ->
+clio q changed      # uncommitted + untracked files of this work, .claude/ excluded; renames by new path
+clio q unrecorded   # commits since the last one any index record names: <hash><TAB><docs covering it | ->
 ```
 
 | `changed` | `unrecorded` | Situation | Go to |
@@ -31,20 +31,20 @@ Do this FIRST, before writing anything.
 **Case B — task target** (a plan task id such as `3.3`). The id lives in the ledger, not in the
 filename:
 ```bash
-q.sh built --task <task>
+clio q built --task <task>
 grep -n "^| <task> " .claude/clio/docs/plans/*.md      # the row: its Levels and Done cells
 ```
 - A doc came back → UPDATE mode.
-- No doc, and the task is a re-plan sub-task (`3.1.1` under `3.1`) → `q.sh built --task <parent id>`.
+- No doc, and the task is a re-plan sub-task (`3.1.1` under `3.1`) → `clio q built --task <parent id>`.
   A doc came back → UPDATE it: a sub-task changes or hardens what its parent's doc describes.
 - No doc, but the plan row exists → CREATE, with the id in `plan_tasks` at step 3.
 - Neither → stop, ask. Don't invent a plan id.
 
-**Case C — no target:** find the existing doc before assuming there isn't one. `q.sh` returns
+**Case C — no target:** find the existing doc before assuming there isn't one. `clio q` returns
 current state only, so a moved doc's old path never shows up as a candidate.
 ```bash
-q.sh built --file <each path from q.sh changed>
-q.sh built --keyword "<feature keyword>"
+clio q built --file <each path from clio q changed>
+clio q built --keyword "<feature keyword>"
 ls -1t .claude/clio/docs/tasks/                       # feature directories, most recent first
 ```
 - One plausible match, same sub-task → UPDATE.
@@ -69,10 +69,10 @@ feature directory → a new doc beside it.
 
 ## Files changed
 
-1. Start from your own edits this run; check each against `q.sh changed` (or the commit's file list).
+1. Start from your own edits this run; check each against `clio q changed` (or the commit's file list).
    Reverted mid-session → drop it.
-2. In `q.sh changed` but not in your edits → show the user, ask. It may be their work, not this task's.
-3. No session memory (compacted or fresh session) → the `q.sh changed` list, or the unrecorded
+2. In `clio q changed` but not in your edits → show the user, ask. It may be their work, not this task's.
+3. No session memory (compacted or fresh session) → the `clio q changed` list, or the unrecorded
    commit's files; say in the report the list came from git, not the run.
 4. Files a subagent edited never appear in your tool calls — take them from its report, check them
    the same way.
@@ -86,7 +86,7 @@ entry `scaffold:<command>`; list only what was hand-edited afterwards.
 ## The commit
 
 ```bash
-q.sh commit <every file from the list above>
+clio q commit <every file from the list above>
 ```
 A hash → this run's commit. Empty → none (`SKILL.md` § Commits).
 

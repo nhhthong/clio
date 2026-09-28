@@ -42,7 +42,7 @@ One sentence.
 - Anything that could affect other features
 
 ## Testing Done
-- YYYY-MM-DD — the `clio-test.sh gate` OK line, or "unverified" and why
+- YYYY-MM-DD — the `clio test gate` OK line, or "unverified" and why
 
 ## Related
 - Prior task docs / ADRs this builds on. "none" if genuinely none.

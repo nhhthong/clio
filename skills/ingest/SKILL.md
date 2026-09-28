@@ -2,7 +2,7 @@
 name: ingest
 description: The only writer of the spec layer. First run — turn a requirement document (contract, PRD, spec.md, ticket export) into one .claude/clio/docs/specs/memory/*.md per area, the requirements.md row table, and the stack as memory/infra.md (row 0, ADR), marking every undecided point ⚠️. Every later run — a new source, or no argument to sweep spec files edited by hand — also works out what the change invalidates in code already built, files spec-delta records, moves row markers and names the areas to re-plan. Run when requirements arrive or change.
 argument-hint: "[source document | spec file or keyword | nothing: sweep spec edits since the last ingest]"
-allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/skills/memo/scripts/validate.sh *) Bash(${CLAUDE_PLUGIN_ROOT}/skills/context/scripts/q.sh *)
+allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/bin/clio validate *) Bash(${CLAUDE_PLUGIN_ROOT}/bin/clio q *)
 ---
 
 **Run only when the user asked for it, this turn** — by slash command, or in plain words ("ingest this spec", "nạp tài liệu này", "spec đổi rồi").
@@ -28,7 +28,7 @@ The baseline a sweep diffs against is a snapshot of the spec files as this skill
 committed or not. Every run ends by taking it and rewriting the line under the title of
 `requirements.md` as `Last ingest: YYYY-MM-DD <what it printed>`:
 ```bash
-${CLAUDE_PLUGIN_ROOT}/skills/context/scripts/q.sh spec-mark     # keeps the snapshot under the local ref refs/clio/ingest (not pushed)
+${CLAUDE_PLUGIN_ROOT}/bin/clio q spec-mark  # keeps the snapshot under the local ref refs/clio/ingest (not pushed)
 ```
 
 ## 1. Read the source, agree the split
@@ -98,7 +98,7 @@ test commands, the version they need, the layout they recommend — each with so
 read. Show them side by side against the constraints, then **ASK**: the user picks one or names their
 own. Never pick silently. Record the choice as an ADR (`${CLAUDE_PLUGIN_ROOT}/skills/memo/steps/WRAP-UP.md`
 § ADR, indexed with `"type":"adr"`, `"domain":"infra"`, `"req":["0"]`, then
-`${CLAUDE_PLUGIN_ROOT}/skills/memo/scripts/validate.sh index`).
+`${CLAUDE_PLUGIN_ROOT}/bin/clio validate index`).
 
 Scope stops at what the scaffold needs. A library for a domain — OCR, image processing, an HTTP
 client — is chosen in that area's spec or plan, not here; the rows it serves are often still ⚠️.
@@ -129,7 +129,7 @@ explaining why. Schema → `${CLAUDE_PLUGIN_ROOT}/skills/memo/steps/DEBT-IT.md`.
 cat >> .claude/clio/database/debt.jsonl <<'EOF'
 {"date":"YYYY-MM-DD","id":"<kebab-key>","kind":"spec-blocked","status":"pending","domain":"<domain>","what":["<what is undecided>"],"req":["7.1"],"specs":[".claude/clio/docs/specs/memory/ocr.md"],"docs":[],"code":[],"action":"<what unblocks it>","source":"<source §n>","blocked_by":"<who owes what>","issue":null}
 EOF
-${CLAUDE_PLUGIN_ROOT}/skills/memo/scripts/validate.sh all
+${CLAUDE_PLUGIN_ROOT}/bin/clio validate all
 ```
 Fix every `FAIL` and every "no open debt record tracks it" before reporting.
 
@@ -150,8 +150,8 @@ Specs move while code stands still. For every decision this run added, altered, 
 **Before and after.** A change this run wrote is known. A hand edit shows against the baseline,
 uncommitted and new files included:
 ```bash
-${CLAUDE_PLUGIN_ROOT}/skills/context/scripts/q.sh spec-diff --stat        # which spec files moved since the last ingest
-${CLAUDE_PLUGIN_ROOT}/skills/context/scripts/q.sh spec-diff               # the lines
+${CLAUDE_PLUGIN_ROOT}/bin/clio q spec-diff --stat  # which spec files moved since the last ingest
+${CLAUDE_PLUGIN_ROOT}/bin/clio q spec-diff         # the lines
 ```
 No baseline in this clone (a fresh checkout, or written before this command existed) → if the
 `Last ingest:` line names a commit, `git diff -M <commit> -- .claude/` and read only the spec files;
@@ -161,8 +161,8 @@ the before-state → write the delta as new-rule-only and say so in the report.
 
 **Who built against it.**
 ```bash
-${CLAUDE_PLUGIN_ROOT}/skills/context/scripts/q.sh built --req <row> --spec <file>
-${CLAUDE_PLUGIN_ROOT}/skills/context/scripts/q.sh owed --req <row> --spec <file>
+${CLAUDE_PLUGIN_ROOT}/bin/clio q built --req <row> --spec <file>
+${CLAUDE_PLUGIN_ROOT}/bin/clio q owed --req <row> --spec <file>
 ```
 Read those docs' `## Decisions`, `## Side Effects`, `## Follow-up`: the code paths named there go in
 `code[]`, the docs themselves in `docs[]`. That list is how `/clio:memo` later marks their sections
@@ -180,7 +180,7 @@ superseded; without it `clio:context` keeps serving a doc the change made untrue
 cat >> .claude/clio/database/debt.jsonl <<'EOF'
 {"date":"YYYY-MM-DD","id":"<kebab-key>","kind":"spec-delta","status":"pending","domain":"checkout","what":["<old> → <new>"],"req":["18"],"specs":[".claude/clio/docs/specs/memory/<file>.md"],"docs":["<task docs built on the old decision>"],"code":["<paths they name>"],"action":"<the rework>","source":"<source §n, date>","blocked_by":null,"issue":null}
 EOF
-${CLAUDE_PLUGIN_ROOT}/skills/memo/scripts/validate.sh debt
+${CLAUDE_PLUGIN_ROOT}/bin/clio validate debt
 ```
 
 **The row marker**, when the *decision* changed — decisions only, never build state:

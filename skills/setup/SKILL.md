@@ -1,7 +1,7 @@
 ---
 name: setup
 description: Set up Clio in the current project — create .claude/clio/docs/ (specs, plans, tests, tasks, decisions) and .claude/clio/database/ (the ledgers), asking the user only what nothing on disk can tell. Never touches CLAUDE.md, CONTEXT.md, .claude/rules/ or the stack. Run once per repository, before any other clio:* skill.
-allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/skills/memo/scripts/validate.sh *)
+allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/bin/clio validate *)
 ---
 
 **Run only when the user asked for it, this turn** — by slash command, or in plain words ("set Clio up here", "cài clio vào repo này").
@@ -25,19 +25,18 @@ session; the skills read it when they need it.
 └── database/
     ├── index.jsonl             built — append-only                    (/clio:memo)
     ├── debt.jsonl              owed — append-only                     (/clio:memo, /clio:ingest)
-    └── runs.jsonl              test evidence — append-only            (clio-test.sh only)
+    └── runs.jsonl              test evidence — append-only            (clio test only)
 ```
 
 ## 0. Take stock, then ASK once
 
 ```bash
-for t in bash jq git awk sed; do command -v $t >/dev/null || echo "MISSING: $t"; done
+for t in bash python3 git awk sed; do command -v $t >/dev/null || echo "MISSING: $t"; done
+python3 -c 'import sys; sys.exit(sys.version_info < (3, 9))' 2>/dev/null || echo "MISSING: python3 >= 3.9"
 git rev-parse --git-dir >/dev/null 2>&1 || echo "NOT A GIT REPO"
 [ -d .claude/clio/database ] && echo "ALREADY SET UP"
-[ -f .claude/clio/index.jsonl ] || [ -d .claude/docs/specs ] && echo "PRE-4.0 LAYOUT"
 ```
-`MISSING` → stop, tell the user. `ALREADY SET UP` → say so and stop. `PRE-4.0 LAYOUT` → stop and
-point at the move commands in CHANGELOG 4.0.0; never move a user's ledgers yourself.
+`MISSING` → stop, tell the user. `ALREADY SET UP` → say so and stop.
 
 **ASK**, one `AskUserQuestion` call, only the items that apply:
 - `NOT A GIT REPO` → `git init`? Never without a yes.
@@ -77,7 +76,7 @@ Ignore → print `.claude/clio/` for the user to add to `.gitignore` themselves;
 ## 3. Verify and stop
 
 ```bash
-${CLAUDE_PLUGIN_ROOT}/skills/memo/scripts/validate.sh all
+${CLAUDE_PLUGIN_ROOT}/bin/clio validate all
 ```
 Then say what comes next, in order:
 - **Full** → `/clio:ingest <file>`: distils the spec into areas, proposes the stack, and writes
