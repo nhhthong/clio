@@ -7,6 +7,8 @@
 - Read-side queries and git facts (changed files, a run's commit): `skills/context/scripts/q.sh`.
   Test evidence: `skills/test/scripts/clio-test.sh`, the only writer of `runs.jsonl`. Status
   semantics: `skills/context/HOP3.md`.
+- Markdown tables (plans, requirements, test cases, `Not applicable` lines): `skills/lib/tables.sh`,
+  the only parser. `clio-test.sh`, `validate.sh` and `q.sh` source it; none splits on `|` itself.
 - `hooks/clio-nudge.sh` and `q.sh unrecorded` read `index.jsonl` `.commits[]` as well, so that field
   lives in several files.
 - Reading an older `.claude/`: `validate.sh` and `q.sh` group on `.id // <the id that later claimed the path>`
@@ -17,13 +19,20 @@
   the command that fixes it. `skills/plan/SKILL.md` § Re-plan holds the rules for re-planning around a
   ticked row, and `/clio:plan` stays the only writer of `docs/plans/*.md`.
 
-Change a field in one place, update the others in the same commit. Two invariants span files the
+Change a field in one place, update the others in the same commit. Three invariants span files the
 same way and are easy to miss:
 
 - A task doc's `id` is its filename prefix. `WRITE-DOC.md` sets the name, `INDEX-IT.md` sets the
-  field, `validate.sh` enforces that they match, `audit/SKILL.md` assigns both when migrating.
+  field, `validate.sh` enforces that they match.
 - `plan_tasks` names rows in `docs/plans/*.md`. `plan/SKILL.md` writes those ids, `RESOLVE-AND-GATHER.md`
   finds them through the table's `req` column, `validate.sh` rejects an id no plan holds.
+- The table formats in `plan/SKILL.md` § 4 and `test/SKILL.md` § 3 are what `tables.sh` reads. A
+  column added, renamed or moved there changes the parser and `skills/lib/selftest.sh` with it. The
+  case-row text is also what `approve` hashes: changing how `case_lines` prints it voids every
+  approval in every repo — don't, unless the CHANGELOG says so as breaking.
+- The `Batch:` line format (`` Batch: `cmd {tests}` · join: `sep` · report: `glob` ``) is written by
+  `test/SKILL.md` § 1b and read by `batches()` in `clio-test.sh`; the JUnit XML it reads is parsed by
+  `junit()` there. Change one, change the other and the batch fixtures in `selftest.sh`.
 
 ## Before opening a PR
 
@@ -32,8 +41,9 @@ claude plugin validate .
 bash skills/memo/scripts/test.sh      # validate.sh fixtures: must print OK
 bash hooks/test-nudge.sh              # clio-nudge.sh fixtures: must print OK
 bash hooks/test-guard.sh              # clio-guard.sh fixtures: must print OK
-bash skills/test/scripts/selftest.sh  # clio-test.sh run/gate fixtures: must print OK
+bash skills/test/scripts/selftest.sh  # clio-test.sh run/red/approve/gate fixtures (~20 s): must print OK
 bash skills/context/scripts/selftest.sh  # q.sh query fixtures: must print OK
+bash skills/lib/selftest.sh           # tables.sh parser, golden output: must print OK
 ```
 
 Nothing runs these for you; there is no CI. A new rule in `validate.sh` or `clio-nudge.sh` lands

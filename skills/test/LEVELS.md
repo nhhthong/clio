@@ -169,6 +169,8 @@ command exits non-zero below the threshold (default 80 %, or the spec's / an ADR
 mutants listed in the output are missing cases — add them, don't lower the threshold. The case's
 command runs a full analysis: incremental history (PIT `withHistory`) is for iterating by hand,
 never for evidence — it is experimental and ignores changes in a class's dependencies.
-The gate does not trust the exit code alone: it also reads the command's own text for a number ≥
-the threshold (80, or the `NN%` on `plans/infra.md`'s `Mutation:` line). A command with no visible
-number, or one lowered to slip past (`--thresholds.break 0`), is refused before it ever runs.
+The gate does not trust the exit code alone: the command must pass the threshold as a flag that
+names it — `--thresholds.break N` (Stryker), `-DmutationThreshold=N` (PIT), or `--threshold N` /
+`--min-score N` for a wrapper script — and every such flag must be ≥ the threshold (80, or the `NN%`
+on `plans/infra.md`'s `Mutation:` line). No such flag, one lowered to slip past
+(`--thresholds.break 0`), or a `#` anywhere in the command, and the gate refuses it.

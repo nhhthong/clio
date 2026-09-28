@@ -9,17 +9,18 @@
   It is not auto-memory. Nothing is written unless you asked for it.
 
   [![Claude Code plugin](https://img.shields.io/badge/Claude_Code-plugin-D97757?logo=anthropic&logoColor=white)](https://code.claude.com/docs/en/plugins)
-  [![Version](https://img.shields.io/badge/version-4.1.1-blue)](CHANGELOG.md)
+  [![Version](https://img.shields.io/badge/version-4.1.2-blue)](CHANGELOG.md)
   [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 </div>
 
 <br>
 
-## New in 4.1.0 — `/clio:test`
+## `/clio:test` — proof before done
 
 ```bash
-/clio:test 3.3   # design cases per test level → run red → green → gate:
-                 # task is done only when every case passed on the current code
+/clio:test orders   # up to 5 ready tasks → cases per level, approved in one question
+                    # → tests + code → one run per task → gate: done only when every case
+                    #   passed on the current code
 ```
 
 `/clio:plan` reads each task against the code it touches and names the levels it needs; `/clio:test`
@@ -47,13 +48,22 @@ The questions that pick the levels are in [`skills/test/LEVELS.md`](skills/test/
 
 **Critical** — a bug would corrupt shared state, grant access or destroy something (money, auth,
 deletes, two writers on one record are the usual shapes): every case must have been seen red.
+So must every `regression` case. `clio-test.sh red` gets that red by running them on the base
+commit's code with today's tests, in a throwaway worktree — nobody breaks code by hand. Other tasks
+have no red phase: the spec-sourced expected values and the approved table already guard them.
 **Beyond critical** — a slipped bug would leave wrong state that compounds silently and is hard to undo (a balance, stock or booking count that drifts),
 held by hand-written logic: `/clio:plan` assesses the task, proposes `mutation` with its reasons and
 asks; it is never added silently. A project can waive mutation once, by ADR, in `/clio:plan infra`.
 
+**Speed** — before the first run on a stack, `/clio:test` looks up (Context7, then the web) how the
+runner takes several tests in one command and where its JUnit XML lands, measures it, and writes a
+`Batch:` line to `.claude/rules/`. From then on a whole batch of cases costs one runner start: on a
+Maven + Spring Boot module, 8 cases went from 72 s to 11 s.
+
 **Gate** — one red run in `Repeat` is a fail, and so is a red on the same code after a pass (flaky =
 failed; re-running to green does not clear it); any code edit after a pass voids it; any change to
-the case table after the user approved it voids it; evidence is written only by the script;
+the case table or its `Not applicable` lines after the user approved them voids it; a red counts
+only if the test files were the same and the code was not; evidence is written only by the script;
 `/clio:memo` ticks the task only on `OK`.
 
 What Claude reads before touching code:
@@ -137,7 +147,7 @@ every session — the skills read it when they need it.
 | | `docs/tasks/<feature>/<id>_<name>.md` | one doc per sub-task, for life; updated, never forked | `/clio:memo` |
 | | `docs/tasks/<feature>/summary.md` | what `ls` cannot say: the domain, the plan and spec it serves, cross-cutting side effects | `/clio:memo` |
 | | `docs/decisions/*.md` | ADRs, flat, read by the features they constrain | `/clio:ingest`, `/clio:memo` |
-| **Proven** | `database/runs.jsonl` | one line per case run (result, repeats, commit, working-tree fingerprint) and per approved case table (its hash) | `clio-test.sh` only |
+| **Proven** | `database/runs.jsonl` | one line per case run (result, repeats, commit, working-tree fingerprint split into test and code halves) and per approved case table (its hash) | `clio-test.sh` only |
 | **Owed** | `database/debt.jsonl` | bugs, unverified work, open questions, append-only | `/clio:memo`, `/clio:ingest` |
 
 What a run learns goes as low as it can, so the always-loaded files do not grow with every task:
@@ -175,7 +185,7 @@ flowchart LR
     A(["new task"]) --> B["clio:context"]
     S & I & D -.-> B
     B -- "open row, no record" --> X(["stop, ask"])
-    B --> T["/clio:test<br/>cases · red → green"]
+    B --> T["/clio:test<br/>cases · run · gate"]
     T -.-> E
     T --> C["gate passes<br/>= done"]
     C --> M["/clio:memo"]
@@ -212,7 +222,7 @@ reads pass, and it acts only in a repo with `.claude/clio`.
 | `/clio:ingest [doc]` | requirement document → spec files + row table + the stack as `memory/infra.md`; on later runs, what the change invalidates in built code (`spec-delta`), row markers (asks before ⚠️ → ✅), areas to re-plan. No argument sweeps hand edits | requirements arrive or change |
 | `/clio:plan <area>` | decided rows → researched, smallest testable tasks with their test levels; `infra` turns the decided stack into tasks and writes `rules/`; a re-plan adds sub-tasks for spec changes and thin tests | `infra` after ingest, then each area; again when ingest names it |
 | `/clio:context [x]` | no arg: where are we · with area / row / id / question: spec, built, owed, quoted · also answers "what do I owe?" | Claude, before work; you, to ask "why?" |
-| `/clio:test [task\|area]` | agree seams, design cases per level with expected values from the spec, run red → green, gate | per task, before `/clio:memo` |
+| `/clio:test [task\|ids\|area]` | design seams and cases per level with expected values from the spec — a batch of up to 5 ready tasks, approved in one question — write tests and code, run each task in one call; red only for regression/critical, from the base commit (`clio-test.sh red`); then gate | per batch, before `/clio:memo` |
 | `/clio:memo [doc\|task id]` | record the work, committed or not (the hash is backfilled later): sub-task doc, ledgers, plan tick on a passing gate, ADR, and each lesson at the lowest level it recurs in | after each feature or fix |
 
 `clio:context` runs before work, `/clio:test` during it and `/clio:memo` after it; the other three

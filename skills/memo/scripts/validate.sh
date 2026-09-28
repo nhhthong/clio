@@ -5,6 +5,8 @@
 #   all    repo-wide audit (the "coverage" hop nothing else computes)
 # Exit 1 if any FAIL. WARN and INFO never fail the run.
 set -uo pipefail
+# Every Markdown table this script reads goes through the shared parser — resolved before the cd below.
+. "$(cd "$(dirname "$0")/../.." && pwd)/lib/tables.sh" || { echo "FAIL: cannot load skills/lib/tables.sh"; exit 1; }
 
 root=$PWD
 while [ ! -d "$root/.claude/clio" ] && [ "$root" != "/" ]; do root=$(dirname "$root"); done
@@ -37,12 +39,13 @@ check_fields(){ # $1 ledger name, $2 field list, $3 line
   [ -z "$missing" ] || "$sev" "$1 record is missing: $missing — append a full record, readers take the last line"
 }
 
-rows=$([ -f "$REQ" ] && awk -F'|' '/^\|/{gsub(/[ \t]/,"",$2); if($2 ~ /^[0-9]+(\.[0-9]+)*$/) print $2}' "$REQ")
-# Same parse over the plan tables: the ids `plan_tasks` is allowed to name. No plan file at all is
-# normal (Lite mode, an area nobody planned), and then nothing here can be checked.
+rows=$(req_rows "$REQ" | cut -f1)
+# The plan tables, parsed once: `tasks` are the ids `plan_tasks` is allowed to name. No plan file at
+# all is normal (Lite mode, an area nobody planned), and then nothing here can be checked.
 shopt -s nullglob
 plans=(.claude/clio/docs/plans/*.md)
-tasks=$([ ${#plans[@]} -gt 0 ] && awk -F'|' '/^\|/{gsub(/[ \t]/,"",$2); if($2 ~ /^[0-9]+(\.[0-9]+)*$/) print $2}' "${plans[@]}")
+planrows=$(plan_rows "${plans[@]}")
+tasks=$(cut -f2 <<<"$planrows" | grep -v '^$')
 
 check_req(){   # $1 ledger name, $2 line
   while read -r n; do
@@ -185,27 +188,20 @@ case $mode in
     done < <(jq -r 'select(.id | not) | .doc' <<<"$idxjson" 2>/dev/null | sort -u)
     # One id, one row. A re-plan supersedes an unticked row *in place*; appending a second row with
     # the same id instead leaves two, and `Done` then depends on which one a reader hits first.
-    for pl in .claude/clio/docs/plans/*.md; do
-      [ -e "$pl" ] || continue
-      while read -r dup; do
-        [ -n "$dup" ] && fail "$pl has task id $dup twice — supersede a row in place, never append a copy"
-      done < <(awk -F'|' 'NF>5 && $2 ~ /^ *[0-9]+(\.[0-9]+)* *$/ {gsub(/^ +| +$/,"",$2); print $2}' "$pl" | sort | uniq -d)
-    done
+    while IFS=$'\t' read -r pl dup; do
+      [ -n "$dup" ] && fail "$pl has task id $dup twice — supersede a row in place, never append a copy"
+    done < <(cut -f1,2 <<<"$planrows" | sort | uniq -d)
 
     # A pre-4.0 table (Test column) with no table in today's format after it: never re-planned, so its
     # ticked rows were never brought under /clio:test and the gate refuses its unticked ones.
-    for pl in .claude/clio/docs/plans/*.md; do
-      [ -e "$pl" ] || continue
-      grep -qE '^\| *# *\|.*\| *Test' "$pl" && ! grep -qE '^\| *# *\|.*\| *Levels *\|' "$pl" \
-        && warn "$pl is a pre-4.0 plan (Test column) — /clio:plan re-plans it into sub-tasks"
-    done
-    # Test cases: one id, one row — clio-test.sh refuses to run a duplicated id, say so before it does.
-    for tf in .claude/clio/docs/tests/*.md; do
-      [ -e "$tf" ] || continue
-      while read -r dup; do
-        [ -n "$dup" ] && fail "$tf has case id $dup twice"
-      done < <(awk -F'|' 'NF>=9 {g=$2; gsub(/^[ \t]+|[ \t]+$/,"",g); if(g!="Case" && g !~ /^-+$/) print g}' "$tf" | sort | uniq -d)
-    done
+    while read -r pl; do
+      [ -n "$pl" ] && warn "$pl is a pre-4.0 plan (Test column) — /clio:plan re-plans it into sub-tasks"
+    done < <(awk -F'\t' '$8=="old"{o[$1]=1} $8=="row"{r[$1]=1} END{for(f in o) if(!(f in r)) print f}' <<<"$planrows")
+    # Test cases: one id, one row across every tests doc — clio-test.sh refuses to run a duplicated
+    # id, say so before it does. Level names are not judged here (the gate does), hence the wildcard list.
+    while read -r dup; do
+      [ -n "$dup" ] && fail "case id $dup appears in more than one row of .claude/clio/docs/tests/*.md"
+    done < <(case_rows "" .claude/clio/docs/tests/*.md | cut -f1 | sort | uniq -d)
     RUNS=.claude/clio/database/runs.jsonl
     if [ -f "$RUNS" ]; then
       n=0; while IFS= read -r l; do n=$((n+1))
@@ -222,9 +218,7 @@ case $mode in
     # line naming the debt it waits on, so "a plan row exists for an undecided row" is the correct
     # state, not a finding; and "✅ with no plan task" overlaps the ✅-with-no-index-record INFO below.
     if [ -f "$REQ" ] && compgen -G '.claude/clio/docs/plans/*.md' >/dev/null; then
-      planreq=$(awk -F'|' 'NF>5 && $2 ~ /^ *[0-9]+(\.[0-9]+)* *$/ {
-        n=split($4,a,","); for(i=1;i<=n;i++){gsub(/^ +| +$/,"",a[i]); if(a[i] ~ /^[0-9]/) print a[i]}
-      }' .claude/clio/docs/plans/*.md | sort -u)
+      planreq=$(cut -f4 <<<"$planrows" | tr ',' '\n' | sed 's/^ *//;s/ *$//' | grep -E '^[0-9]' | sort -u)
       while read -r n; do
         [ -z "$n" ] && continue
         printf '%s\n' "$rows" | grep -qx "$n" \
@@ -257,9 +251,7 @@ case $mode in
 
     # requirements.md markers vs the ledgers
     if [ -f "$REQ" ]; then
-      while IFS='|' read -r _ num _ _ status _; do
-        num=$(echo "$num" | tr -d ' \t'); status=$(echo "$status" | tr -d ' \t')
-        case $num in ''|*[!0-9.]*) continue ;; esac
+      while IFS=$'\t' read -r num status; do
         case $status in
           *⚠*|*❌*)
             jq -s -e --arg n "$num" 'map(select(.req != null))
@@ -269,7 +261,7 @@ case $mode in
             jq -s -e --arg n "$num" 'any(.[]; (.req[]?|tostring) == $n)' >/dev/null 2>&1 <<<"$idxjson" \
               || info "requirements.md row $num is ✅ (decided) with no index record — decided but not built" ;;
         esac
-      done < "$REQ"
+      done < <(req_rows "$REQ")
     fi
     ;;
   *) echo "usage: validate.sh [index|debt|all]"; exit 1 ;;

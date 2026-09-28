@@ -1,5 +1,27 @@
 # Changelog
 
+## 4.1.2 — 2026-09-28
+
+Not breaking. Tasks with a `Not applicable` line need `approve` once more.
+
+- `/clio:test` runs a whole task in one call (`run-task <ids>`), not case by case. No red phase
+  unless it proves something: `regression` cases and `critical` tasks only.
+- New `clio-test.sh red <task> [--base <rev>]`: runs those cases on the base commit's code with
+  today's tests, in a throwaway worktree — red without breaking code by hand. The gate no longer
+  warns about other cases never seen red.
+- Batch run: a `Batch:` line in `.claude/rules/` (`/clio:test` § 1b researches it with Context7 and
+  measures it once per stack) lets `run-task`/`red` start the runner once for every case and read
+  each result from the JUnit XML. Maven + Spring, 8 cases: 72 s → 11 s; with red: 113 s → 22 s.
+- Batches: an area → up to 5 ready tasks, seams + cases approved in one question, critical first.
+  `approve`/`run-task` take several ids; each task keeps its own hash.
+- Gate: `Not applicable` lines are part of the approved table · mutation threshold must be a named
+  flag, no `#` · red counts only with tests unchanged and code changed (`tfp`/`cfp`).
+- New `skills/lib/tables.sh`: one Markdown-table parser for `clio-test.sh`, `validate.sh`, `q.sh`;
+  columns found by header name; `validate.sh` now skips tables inside `<!-- -->`, like the gate.
+- `q.sh summary`: `next` respects `Needs`.
+- `run`: `CLIO_TIMEOUT` per repeat (default 600 s).
+- Fixed: fingerprint missed a same-size edit right after `git add`.
+
 ## 4.1.1 — 2026-09-25
 
 Hot fix. Not breaking.

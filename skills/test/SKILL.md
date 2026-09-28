@@ -1,7 +1,9 @@
 ---
 name: test
-description: Design, run and gate the tests for a plan task — cases per test level the plan named, expected values from the spec, evidence recorded by a script; the task passes only when every case passed on the current code. Use when the user asks to test, design test cases or run tests.
-argument-hint: "[task id such as 3.3 | area | run <case-id> | gate <task-id>]"
+description: Design, write, run and gate the tests for plan tasks, in batches — cases per test level the plan named, expected values from the spec, approved in one question; one run per task, red only where it proves something (regression, critical), produced from the base commit instead of breaking code by hand. Before the first run on a stack it
+researches (Context7, web) and measures the fastest way to run many cases in one runner start, and
+records it as a `Batch:` line in `.claude/rules/`. The script records the evidence; a task passes only when every case passed on the current code. Use when the user asks to test, design test cases or run tests.
+argument-hint: "[task id such as 3.3 | several ids | area | gate <task-id>]"
 allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/skills/test/scripts/clio-test.sh *)
 ---
 
@@ -9,32 +11,75 @@ allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/skills/test/scripts/clio-test.sh *)
 
 `/clio:plan` said *which* levels a task needs. This skill says *what* each level tests, proves it, and
 refuses a task whose proof is missing. It writes the tests, and only the least code that turns each
-approved case from red to green (§ 4) — nothing the case list does not ask for. It never ticks a plan
-row — `/clio:memo` ticks, and only after the gate here passes.
+approved case pass (§ 4) — nothing the case list does not ask for. It never ticks a plan row —
+`/clio:memo` ticks, and only after the gate here passes.
 
 Target: $ARGUMENTS
 
 ```bash
-${CLAUDE_PLUGIN_ROOT}/skills/test/scripts/clio-test.sh run <case-id>     # runs the case's command Repeat times, appends one line to runs.jsonl
-${CLAUDE_PLUGIN_ROOT}/skills/test/scripts/clio-test.sh gate <task-id>    # exit 0 only when every case of the task has fresh, complete, passing evidence
+${CLAUDE_PLUGIN_ROOT}/skills/test/scripts/clio-test.sh run-task <task-id>...          # every case of each task, Repeat times each, one runs.jsonl line per case
+${CLAUDE_PLUGIN_ROOT}/skills/test/scripts/clio-test.sh red <task-id>... [--base <rev>]  # the cases that need red, on the base commit's code with today's tests
+${CLAUDE_PLUGIN_ROOT}/skills/test/scripts/clio-test.sh run <case-id>                    # one case on its own
+${CLAUDE_PLUGIN_ROOT}/skills/test/scripts/clio-test.sh gate <task-id>                   # exit 0 only when every case of the task has fresh, complete, passing evidence
 ```
 Each Bash call is a fresh shell: call the script by that full path every time, never through a
-variable. Below it is written `clio-test.sh`.
+variable. Below it is written `clio-test.sh`. Run test cases **only through the script** — a command
+from the case table run directly records nothing, and a pass the script did not record does not
+exist. The repo's own build / typecheck command (from `.claude/rules/*.md`) you may run directly.
 **Never write `runs.jsonl` yourself** (a hook refuses it)**, and never report a pass the script did
 not print.** Evidence is
 bound to a fingerprint of the working tree: edit any code after a pass and that pass stops counting.
 
-## 1. Load
+## 1. Load — and pick the batch
 
-Run the `clio:context` skill for the task. Read its plan row — `Levels` and `Touches` — the spec's
-`## Decisions`, the code in `Touches`, and `.claude/rules/*.md` for the repo's real test commands.
-Existing `.claude/clio/docs/tests/<area>.md` → read it; this is a re-design.
+Run the `clio:context` skill for the target. Read each task's plan row — `Levels` and `Touches` — the
+spec's `## Decisions`, the code in `Touches`, and `.claude/rules/*.md` for the repo's real test
+commands. Existing `.claude/clio/docs/tests/<area>.md` → read it; this is a re-design.
 
-## 2. Agree the seams
+**One task, several ids, or an area.** An area → the batch is its open rows whose `Needs` are all
+ticked (`q.sh summary` names the first; read the plan for the rest), in plan order. Cap a batch at
+**5 tasks or ~30 cases**, whichever comes first — past that the user skims, and a skimmed yes is not
+an approval. The rest waits for the next batch; say which.
 
-Before any case, write down the **seams** — the public boundaries the tests observe: a function's
-signature, a route, a CLI command, a message on a queue, a page. Show them and **ASK**. Tests go only
-through agreed seams:
+## 1b. The fastest way to run — found once per stack
+
+How cases run costs more than anything else here. Measured on a Maven + Spring Boot repo: 8 cases
+each as its own `mvn` took 72 s (Maven + JVM + Spring context boot ~7 s every time, test bodies under
+0.5 s); the same 8 in one `mvn` took 11 s. So before writing a command into a case table:
+
+- **A `Batch:` line in `.claude/rules/*.md` already covers this stack** → use it, skip the rest. Each
+  case's `Command` is that template with `{tests}` replaced by the one test it runs — word for word,
+  or the script will not merge it (it then runs alone, correct but slow).
+- **None yet** → find it, before designing commands:
+  1. Read the build's own test config (Surefire/Failsafe in `pom.xml`, `build.gradle`'s `test {}`,
+     `jest.config.*`, `pytest.ini`/`pyproject.toml`, `go.mod` + how tests are invoked in CI).
+  2. Look the runner up in **Context7** (web search if it has nothing; say which): how one command
+     selects several named tests (`-Dtest=A#m,B#n`, `--tests`, `-t`, `-k "a or b"`, `-run '^(A|B)$'`);
+     where it writes a **JUnit XML** report (Surefire does by default; jest needs `jest-junit`, pytest
+     `--junitxml`, Go `gotestsum --junitfile`); how to repeat a test **inside one process**
+     (`@RepeatedTest(n)`, `-count=n`, `pytest-repeat`); what keeps a heavy fixture warm across tests
+     (Spring's test-context cache — same config, one boot; Testcontainers reuse).
+  3. **Measure**, don't assume: one existing test on its own, then several in one command. Show both
+     numbers.
+  4. Propose the line for `.claude/rules/<stack>.md` and **ASK** before writing it:
+     ```
+     - Batch: `mvn -q -pl cafefin-api test -Dtest={tests}` · join: `,` · report: `cafefin-api/target/surefire-reports/TEST-*.xml`
+     ```
+     `{tests}` is where the joined test ids go, `join` the separator the runner wants, `report` the
+     glob of the JUnit XML it leaves. One line per runner (per module when modules test apart).
+  5. No way to select several tests in one command, no XML report, or the measurement shows no gain
+     → no line; say why. Cases then run one command each, as before.
+- **Repeat without restarting.** A `concurrency` case needs `Repeat` ≥ 20: write the test to repeat
+  itself (`@RepeatedTest(20)`, `-count=20`) so the report shows 20 entries — the script counts them.
+  A test that does not repeat itself still works: the script sees fewer entries than `Repeat` and
+  runs that case alone, 20 times over, at 20 boots' cost.
+
+## 2. Seams
+
+Write down the **seams** — the public boundaries the tests observe: a function's signature, a route,
+a CLI command, a message on a queue, a page. They go on the tests doc's header line (`Seams:`) and are
+shown **in the same question as the cases** (§ 3), not asked on their own. Tests go only through
+agreed seams:
 - No private methods, no internal collaborators mocked, no asserting through a side channel the user
   never sees. Mock only what the task does not own: a third-party API, the clock, randomness.
 - A test that breaks on a refactor that kept behaviour is wrong, not the refactor.
@@ -93,52 +138,80 @@ Not applicable:
   appends to it, never edits a line, same as the plan's.
 - `Repeat` ≥ 20 for `concurrency` (the gate refuses less), and every concurrency case forces the
   interleaving (barrier, latch, `-race`) rather than hoping for it.
-- **Show the whole table and ASK before writing.** The case list is the definition of done. Once
-  the user says yes, write it and record that yes — nothing else runs `approve`:
+- **One question for the whole batch — seams, cases, `Not applicable` lines — and ASK before
+  writing.** The case list is the definition of done. Lay it out so the risky part is read first:
+  1. The seams.
+  2. **Critical tasks first**, each under its own heading marked `critical`, with what must be seen
+     red (§ 4).
+  3. The other tasks, one table each.
+  4. Levels you would send back to `/clio:plan`, and ⚠️ values that blocked a case.
+
+  The user may accept all, or all but some ("ok, trừ 3.2: thêm case X"). Write what was accepted and
+  record that yes, for exactly those tasks — nothing else runs `approve`:
   ```bash
-  clio-test.sh approve 3.3    # hashes the task's case rows; the gate fails if they change after
+  clio-test.sh approve 3.1 3.3 3.4   # one record and hash per task; the gate fails a task whose rows change after
   ```
-  Adding, removing or editing a case later — a looser Expected, a lower Repeat, a deleted red case —
-  voids the approval: show the change, ASK, approve again.
+  A task sent back is redesigned and asked again on its own. Adding, removing or editing a case
+  later — a looser Expected, a lower Repeat, a deleted red case, a new `Not applicable` line — voids
+  that task's approval only: show the change, ASK, approve it again.
 
-## 4. Red, then green — one case at a time
+## 4. Write, run once — red only where it proves something
 
-Vertical slices: write **one** case's test, run it, see it fail for the right reason, make it pass,
-then the next case. Never write every test first — tests written ahead of the code test an imagined
-interface.
-```bash
-clio-test.sh run 3.3-u1     # red: it must fail, and the output must show why
-# … implement the least code that makes it pass …
-clio-test.sh run 3.3-u1     # green
-```
-- **Regression** cases must be seen red before green: the gate rejects one that never failed, because
-  it never reproduced the bug. Red counts only with the **same command**, on **other code** (before the
-  fix), before a pass on this code — a `false` swapped for the real command proves nothing.
-- A case red for the wrong reason (compile error, missing fixture) is not a red run — fix the test.
-- A case that passes on its first run — a hardened old test, code written before the case: on a
-  **critical** task the gate refuses it until it has been seen red, so break the code on purpose
-  once (as a concurrency case is proven: undo the lock, watch it fail, restore it). Elsewhere it
-  only warns.
-- Refactor after green, then re-run every case of the task.
+A test that never failed may pass by construction. For most cases the spec-sourced `Expected` and
+the approved table already guard against that, so **only two kinds need to be seen red**, and the
+gate asks for no other:
+- every `regression` case — it must reproduce the bug;
+- every case of a `critical` task, except `mutation` (its red is a score below threshold).
+
+**Tasks with neither** (most of them): write the tests and the least code that makes them pass, run
+the build, then one call — `clio-test.sh run-task 3.1 3.3 3.4` for the whole batch. With a `Batch:`
+line (§ 1b) that is one runner start for every case of every task in it; the output marks each case
+`— batch`. Failures → fix
+the code (never loosen a test) and re-run the failing task. Refactor, re-run once.
+
+**Tasks that need red.** Write the tests first, then:
+- **The code does not exist yet** → add the bare seam (the signature, a route returning 501, a stub
+  returning the zero value), run the build, `run-task` → every case fails **on its assertion**. Then
+  implement and `run-task` again.
+- **The code exists, or the fix is written** → `clio-test.sh red <task>`: it runs those cases on the
+  code of the base commit (default `HEAD`, i.e. before your uncommitted change) in a throwaway
+  worktree holding today's test files, and records the red. Nobody edits code to break it. Already
+  committed the change → `--base <the commit before it>`. Then `run-task` on today's code.
+
+Read every red's output: a red counts only if it failed **on its assertion** — a build error, a
+missing fixture or a wrong path is a red for the wrong reason; fix the test and redo it. A case the
+script reports `NOT RED` passed on the old code: it cannot tell the bug from the fix — strengthen it
+(show the user the changed row, approve again) rather than moving on.
+
+- Red must come from **the code, never the test**: the script fingerprints test files and code
+  separately. Test files are recognised by path (`_test.`, `.test.`, `.spec.`, `test_*.py`, `tests/`,
+  `spec/`, `src/test/`, `__tests__/`…); a test named otherwise counts as code — name it the usual way.
+- Long levels (`load`, `stress`, `perf`, `mutation`, e2e with a UI, `concurrency` with a big
+  `Repeat`): run them with a Bash timeout that covers them (up to 600000 ms) or `run_in_background`;
+  each repeat is capped at `CLIO_TIMEOUT` seconds (default 600) — raise it for those
+  (`CLIO_TIMEOUT=1800 clio-test.sh run-task …`). Never start infra (docker, a staging target), use a
+  secret or hit a paid or shared service on your own: say what is needed and ask.
+- One case to re-run on its own (a flaky suspect) → `clio-test.sh run <case-id>`.
 
 ## 5. Gate
 
 ```bash
-clio-test.sh gate 3.3
+clio-test.sh gate 3.1    # one call per task of the batch — it reads runs.jsonl, it runs no test
 ```
 `OK` is the only pass. Anything else — never run, failed, code changed since, command changed, fewer
-runs than `Repeat`, a case table changed since `approve`, a malformed row, a level outside LEVELS.md,
+runs than `Repeat`, a case table changed since `approve` (a `Not applicable` line added or edited counts), a malformed row, a level outside LEVELS.md,
 a superseded row, two cases sharing a command, a plan level with no case, a LEVELS.md id of a named
 level covered by no case and excused by no `Not applicable` line, `mutation` named while
-`plans/infra.md` says `Mutation: none`, a mutation command whose own text shows no threshold at or
-above the required number, a critical or regression
+`plans/infra.md` says `Mutation: none`, a mutation command with no named threshold flag at or
+above the required number (or a `#` in it), a critical or regression
 case never seen red — the task is not done. **Flaky is failed**: one red run in `Repeat` fails the
-case, and so does a fail on this same code after it once passed — re-running until green does not
-clear it; only a code change does. `/clio:memo` files it as `code-debt` with `what` starting `flaky:`.
+case, and so does a fail on this same code after it once passed — re-running until green
+does not clear it; only a code change does. `/clio:memo` files it as `code-debt` with `what` starting `flaky:`.
 
 ## 6. Report
 
-Seams agreed · cases per level (and levels sent back to `/clio:plan`) · the `Not applicable` ids
-written and why · the gate output verbatim ·
-cases never seen red · ⚠️ values that blocked a case · tools proposed. Then: `/clio:memo <task>`
+Batch: tasks approved, sent back, left for the next batch · seams agreed · cases per level (and
+levels sent back to `/clio:plan`) · the `Not applicable` ids
+written and why · reds seen (and any `NOT RED`) · the gate output of each task, verbatim ·
+⚠️ values that blocked a case · tools proposed. Then: `/clio:memo <task>`
 records the work and ticks the row, which it does only on a passing gate.

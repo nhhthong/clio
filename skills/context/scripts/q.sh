@@ -13,6 +13,8 @@
 #   spec-diff [git-diff args]                 spec files now vs that baseline — hand edits since the last ingest
 # Filters are OR'd; none given → everything. `req` compares as a string, so 7.1 and 7.10 stay apart.
 set -uo pipefail
+# Plan tables are read through the shared parser — resolved before the cd below.
+. "$(cd "$(dirname "$0")/../.." && pwd)/lib/tables.sh" || { echo "cannot load skills/lib/tables.sh" >&2; exit 1; }
 
 root=$PWD
 while [ ! -d "$root/.claude/clio" ] && [ "$root" != "/" ]; do root=$(dirname "$root"); done
@@ -90,13 +92,33 @@ case $cmd in
     shopt -s nullglob
     plans=("$PLANS"/*.md)
     [ ${#plans[@]} -gt 0 ] || echo "no plans — /clio:plan has not been run"
+    # Every plan's rows at once: `next` may wait on a task ticked in another area (0.4 in infra).
+    rows=$([ ${#plans[@]} -gt 0 ] && plan_rows "${plans[@]}")
     for p in "${plans[@]}"; do
-      # A plan lifted from an old requirements.md may still be bullets; cutting columns out of a
-      # bullet prints the whole line, so pick the shape per file.
-      n=$(grep -m1 '\[ \]' "$p")
-      case $n in '|'*) n=$(cut -d'|' -f2,3,5 <<<"$n") ;; *) n=${n:0:80} ;; esac
-      printf '%s: done=%s open=%s next:%s\n' "$(basename "$p" .md)" \
-        "$(grep -c '\[x\]' "$p")" "$(grep -c '\[ \]' "$p")" "$(tr -s ' ' <<<"$n")"
+      if grep -qF "$p"$'\t' <<<"$rows"; then
+        # next = the first open row whose Needs are all ticked; none ready → the first open row, and
+        # what it waits on. A superseded row is neither open nor done.
+        awk -F'\t' -v f="$p" -v name="$(basename "$p" .md)" '
+          $7 ~ /^\[x\]/ {ok[$2]=1}
+          $1==f {rows[++n]=$0}
+          END {
+            for(i=1;i<=n;i++){ split(rows[i],r,"\t")
+              if (r[7] ~ /^\[x\]/) d++
+              else if (r[7] ~ /^\[ \]/) { o++; w=""
+                m=split(r[6],need,/[ ,]+/)
+                for(j=1;j<=m;j++) if (need[j] ~ /^[0-9]/ && !(need[j] in ok)) w=w (w==""?"":", ") need[j]
+                line=r[2] " | " r[3] " | " r[5]
+                if (w=="" && ready=="") ready=line
+                if (first=="") { first=line; firstw=w } } }
+            nx = ready!="" ? ready : (first=="" ? "" : first " (waits on " firstw ")")
+            printf "%s: done=%d open=%d next: %s\n", name, d, o, nx }' <<<"$rows"
+      else
+        # A plan lifted from an old requirements.md may still be bullets: no table to parse, so show
+        # the first open bullet, cut short.
+        n=$(grep -m1 '\[ \]' "$p")
+        printf '%s: done=%s open=%s next: %s\n' "$(basename "$p" .md)" \
+          "$(grep -c '\[x\]' "$p")" "$(grep -c '\[ \]' "$p")" "$(tr -s ' ' <<<"${n:0:80}")"
+      fi
     done
     valid "$DEBT" | jq -s -r '[group_by(.id)[] | last | select(.status!="done")]
       | "debt: queue=\(map(select(.blocked_by==null))|length) blocked=\(map(select(.blocked_by!=null))|length)"'

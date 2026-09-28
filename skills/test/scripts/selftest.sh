@@ -30,6 +30,7 @@ ko "$S" run 1.3-r1                   # red: bug not fixed yet
 touch fixed; ok "$S" run 1.3-r1; okg 1.3   # then green
 ok "$S" run 1.4-c1; ko "$S" gate 1.4  # concurrency repeat 5 < floor
 ko "$S" run nope                     # unknown case
+ko "$S" run-task 7.7                 # a task with no cases
 [ "$(wc -l < .claude/clio/database/runs.jsonl)" -ge 6 ] || { echo "runs.jsonl not appended"; bad=1; }
 
 # committing the same code keeps the evidence; an artifact the test writes does not invalidate it
@@ -172,6 +173,133 @@ echo '| 4.5-s2 | 4.5 | security | security.6 | biz | x | `true c8` | 1 |' >> $T 
 "$S" approve 4.5 >/dev/null; "$S" run 4.5-s1 >/dev/null; "$S" run 4.5-s2 >/dev/null
 out=$("$S" gate 4.5)
 grep -q 'no case covering security.1' <<<"$out" || { echo "a malformed row leaked another task's Covers value: $out"; bad=1; }
+
+# run-task: every case of a task in one call — what /clio:test hands the user — then the gate holds
+out=$("$S" run-task 1.1); grep -q 'task 1.1: 2/2 cases passed' <<<"$out" || { echo "run-task 1.1: $out"; bad=1; }
+okg 1.1
+echo '| 8.1-u1 | 8.1 | unit | red | exit 0 | `false` | 1 |' >> $T
+echo '| 8.1-u2 | 8.1 | unit | green | exit 0 | `true` | 1 |' >> $T
+out=$("$S" run-task 8.1) && { echo "run-task with a red case exited 0"; bad=1; }
+grep -q 'task 8.1: 1/2 cases passed' <<<"$out" || { echo "run-task stopped at the first red: $out"; bad=1; }
+
+# 4.1.2 — a `Not applicable` line added after approve voids the approval, like an edited case
+printf '| 9.1 | na | 1 | unit | – | – | [ ] |\n| 9.2 | mut | 1 | mutation | – | – | [ ] |\n| 9.3 | fake red | 1 | critical · unit | – | – | [ ] |\n| 9.4 | real red | 1 | critical · unit | – | – | [ ] |\n| 9.5 | hang | 1 | unit | – | – | [ ] |\n' >> .claude/clio/docs/plans/p.md
+T2=.claude/clio/docs/tests/q.md
+printf '| Case | Task | Level | Covers | Behaviour | Expected | Command | Repeat |\n|---|---|---|---|---|---|---|---|\n' > $T2
+echo '| 9.1-u1 | 9.1 | unit | unit.1 | x | x | `true` | 1 |' >> $T2
+ok "$S" run 9.1-u1; okg 9.1
+printf '\nNot applicable:\n- 9.1 · unit.1 — slipped in after the yes\n' >> $T2
+has 9.1 'changed since it was approved'
+okg 9.1                                  # the user approves the excuse too: holds again
+
+# mutation: only a named threshold flag counts, every one of them, and a `#` is refused
+printf '# Plan — infra\nMutation: stryker (ADR 1790000000_stryker)\n' > .claude/clio/docs/plans/infra.md
+mut(){ sed -i '/^| 9.2-m1 /d' $T2; echo "| 9.2-m1 | 9.2 | mutation | – | x | x | \`$1\` | 1 |" >> $T2
+       "$S" approve 9.2 >/dev/null; "$S" run 9.2-m1 >/dev/null; }
+mut 'true --thresholds.break 0 # 80';            has 9.2 'contains `#`'
+mut 'true --thresholds.break 0 --min-score 90';  has 9.2 'no threshold >= 80%'
+mut 'true --port 8080 --thresholds.break 0';     has 9.2 'no threshold >= 80%'
+mut 'true -DmutationThreshold=85';               ok "$S" gate 9.2
+
+# red counts only with the test unchanged and the code different: breaking the test proves nothing
+echo '| 9.3-u1 | 9.3 | unit | unit.1 | x | x | `bash chk_test.sh` | 1 |' >> $T2
+echo 'exit 1' > chk_test.sh; ko "$S" run 9.3-u1
+echo 'exit 0' > chk_test.sh; ok "$S" run 9.3-u1
+"$S" approve 9.3 >/dev/null; has 9.3 'never seen red on a critical task'
+echo '| 9.4-u1 | 9.4 | unit | unit.1 | x | x | `bash impl_test.sh` | 1 |' >> $T2
+echo 'test -f impl94' > impl_test.sh; ko "$S" run 9.4-u1
+touch impl94; ok "$S" run 9.4-u1; okg 9.4
+
+# a hung case fails at CLIO_TIMEOUT instead of blocking the run
+if command -v timeout >/dev/null; then
+  echo '| 9.5-u1 | 9.5 | unit | unit.1 | x | x | `sleep 5` | 1 |' >> $T2
+  out=$(CLIO_TIMEOUT=1 "$S" run 9.5-u1) && { echo "hung case passed"; bad=1; }
+  grep -q 'timed out after 1s' <<<"$out" || { echo "timeout not reported: $out"; bad=1; }
+fi
+
+# fp: a same-size edit in the same second as its `git add`, fingerprinted a second later, still moves
+# it — the index copy keeps its mtime, so git re-hashes the racily-clean file instead of trusting stat
+echo 'aaa' > racy.txt; git add racy.txt; echo 'bbb' > racy.txt; sleep 1; f2=$("$S" fp)
+git add racy.txt; f3=$("$S" fp)   # the same content, now staged for real: the fp it must equal
+[ "$f2" = "$f3" ] || { echo "fp missed a same-size edit to a staged file ($f2 != $f3)"; bad=1; }
+
+# batch: one approve and one run-task over several tasks; a bad id in the batch approves/runs nothing
+printf '| 9.6 | b1 | 1 | unit | – | – | [ ] |\n| 9.7 | b2 | 1 | unit | – | – | [ ] |\n' >> .claude/clio/docs/plans/p.md
+echo '| 9.6-u1 | 9.6 | unit | unit.1 | x | x | `true` | 1 |' >> $T2
+echo '| 9.7-u1 | 9.7 | unit | unit.1 | x | x | `test -d .` | 1 |' >> $T2
+n0=$(grep -c . .claude/clio/database/runs.jsonl)
+ko "$S" approve 9.6 9.9x; ko "$S" run-task 9.6 9.9x
+[ "$(grep -c . .claude/clio/database/runs.jsonl)" -eq "$n0" ] || { echo "a batch with a bad id still wrote records"; bad=1; }
+out=$("$S" run-task 9.6 9.7); grep -q 'all: 2/2 cases passed across 2 tasks' <<<"$out" || { echo "batch run-task: $out"; bad=1; }
+ok "$S" approve 9.6 9.7; ok "$S" gate 9.6; ok "$S" gate 9.7
+sed -i 's#| `test -d .` |#| `test -d ./` |#' $T2          # edit 9.7's table: only its approval is void
+ok "$S" gate 9.6; has 9.7 'changed since it was approved'
+
+# red: the cases that must be seen red run on the base commit's code with today's tests — no hand edits
+printf '| 8.8 | crit red | 1 | critical · unit | – | – | [ ] |\n| 8.9 | plain | 1 | unit | – | – | [ ] |\n' >> .claude/clio/docs/plans/p.md
+echo old > impl99.txt; git add impl99.txt; git commit -qm "impl99 before the change"
+echo new > impl99.txt                                      # the change, uncommitted
+echo 'grep -q new impl99.txt' > chk99_test.sh              # its test, a test file by name
+echo '| 8.8-u1 | 8.8 | unit | unit.1 | x | x | `bash chk99_test.sh` | 1 |' >> $T2
+echo '| 8.9-u1 | 8.9 | unit | unit.1 | x | x | `test -f impl99.txt` | 1 |' >> $T2
+ok "$S" run 8.8-u1; "$S" approve 8.8 >/dev/null
+has 8.8 'clio-test.sh red 8.8'                             # green alone is not enough on a critical task
+out=$("$S" red 8.8); grep -q 'red on .*: 1/1 cases failed as they must' <<<"$out" || { echo "red 8.8: $out"; bad=1; }
+[ -z "$(git worktree list | sed 1d)" ] || { echo "red left a worktree behind"; bad=1; }
+ok "$S" run 8.8-u1; ok "$S" gate 8.8                       # red then green, same tests: the gate counts it
+"$S" red 8.9 | grep -q 'nothing needs red' || { echo "red on a plain task ran something"; bad=1; }
+git add impl99.txt chk99_test.sh; git commit -qm "change committed"
+"$S" red 8.8 | grep -q 'NOT RED: 8.8-u1.*--base' || { echo "committed change not explained"; bad=1; }  # base == today's code
+out=$("$S" red 8.8 --base HEAD~1); grep -q '1/1 cases failed as they must' <<<"$out" || { echo "red --base: $out"; bad=1; }
+echo 'true' > pass99_test.sh; echo '| 8.8-u2 | 8.8 | unit | unit.1 | y | y | `bash pass99_test.sh` | 1 |' >> $T2
+"$S" red 8.8 --base HEAD~1 | grep -q 'NOT RED: 8.8-u2' || { echo "a case passing on the base not flagged"; bad=1; }
+
+# batch: cases whose command is a `Batch:` template run in ONE runner start; results come from the
+# JUnit XML it writes. fakeunit.sh stands in for mvn/jest/pytest: `fail*` tests fail, `rep*` report
+# three repetitions, `gone*` are left out of the report, and every start is counted.
+mkdir -p .claude/rules; echo 'reports/' >> .gitignore
+cat > fakeunit.sh <<'SH'
+echo x >> starts.log
+mkdir -p reports; out=reports/TEST-fake.xml; echo '<testsuite>' > $out
+IFS=, read -ra ts <<<"$1"
+for t in "${ts[@]}"; do c=${t%%#*}; m=${t#*#}
+  case $m in
+    gone*) ;;
+    fail*) printf '<testcase name="%s" classname="pkg.%s">\n<failure message="x"/>\n</testcase>\n' "$m" "$c" >> $out ;;
+    rep*)  for k in 1 2 3; do printf '<testcase name="%s()[%d]" classname="pkg.%s"/>\n' "$m" $k "$c" >> $out; done ;;
+    *)     printf '<testcase name="%s" classname="pkg.%s" time="0.1"/>\n' "$m" "$c" >> $out ;;
+  esac
+done
+echo '</testsuite>' >> $out
+SH
+echo 'starts.log' >> .gitignore
+printf -- '- Batch: `bash fakeunit.sh {tests}` · join: `,` · report: `reports/TEST-*.xml`\n' > .claude/rules/fake.md
+printf '| 7.1 | batch | 1 | unit, concurrency | – | – | [ ] |\n' >> .claude/clio/docs/plans/p.md
+T3=.claude/clio/docs/tests/r.md
+printf '| Case | Task | Level | Covers | Behaviour | Expected | Command | Repeat |\n|---|---|---|---|---|---|---|---|\n' > $T3
+echo '| 7.1-u1 | 7.1 | unit | unit.1 | a | a | `bash fakeunit.sh K#okOne` | 1 |' >> $T3
+echo '| 7.1-u2 | 7.1 | unit | unit.1 | b | b | `bash fakeunit.sh K#okTwo` | 1 |' >> $T3
+echo '| 7.1-u3 | 7.1 | unit | unit.1 | c | c | `bash fakeunit.sh K#failThree` | 1 |' >> $T3
+echo '| 7.1-c1 | 7.1 | concurrency | concurrency.1 | d | d | `bash fakeunit.sh K#repFour` | 3 |' >> $T3
+: > starts.log
+out=$("$S" run-task 7.1)
+[ "$(wc -l < starts.log)" -eq 1 ] || { echo "batch started the runner $(wc -l < starts.log) times, not once"; bad=1; }
+grep -q '^pass: 7.1-u1 (unit) 1/1 — batch' <<<"$out" || { echo "batch pass not read from the report: $out"; bad=1; }
+grep -q '^fail: 7.1-u3 (unit) 0/1 — batch' <<<"$out" || { echo "batch failure not read from the report: $out"; bad=1; }
+grep -q '^pass: 7.1-c1 (concurrency) 3/3 — batch' <<<"$out" || { echo "repetitions not counted: $out"; bad=1; }
+grep -q 'task 7.1: 3/4 cases passed' <<<"$out" || { echo "task summary: $out"; bad=1; }
+jq -e 'select(.case=="7.1-u1") | .cmd=="bash fakeunit.sh K#okOne" and (.batch|test("K#okOne,K#okTwo"))' .claude/clio/database/runs.jsonl >/dev/null \
+  || { echo "batch record lacks the case's own cmd or the batch cmd"; bad=1; }
+# a case the report leaves out fails; one reported fewer times than its Repeat runs on its own
+echo '| 7.1-u4 | 7.1 | unit | unit.1 | e | e | `bash fakeunit.sh K#goneFive` | 1 |' >> $T3
+sed -i 's/K#repFour` | 3 |/K#repFour` | 5 |/' $T3
+out=$("$S" run-task 7.1)
+grep -q '^fail: 7.1-u4 (unit) 0/0 — batch — not in the report' <<<"$out" || { echo "missing testcase not failed: $out"; bad=1; }
+grep -q "7.1-c1's report shows fewer runs than its Repeat" <<<"$out" || { echo "short repeat did not fall back: $out"; bad=1; }
+# a command that is not the template, word for word, is never merged into the batch
+echo '| 7.1-u5 | 7.1 | unit | unit.1 | f | f | `bash fakeunit.sh K#okSix --verbose` | 1 |' >> $T3
+: > starts.log; "$S" run-task 7.1 >/dev/null
+[ "$(wc -l < starts.log)" -ge 3 ] || { echo "a non-template command was merged into the batch"; bad=1; }
 
 [ $bad -eq 0 ] && echo OK
 exit $bad

@@ -42,7 +42,14 @@ b=$(grep '^blt:' <<<"$out"); [ "${#b}" -le 120 ] || { echo "bullet plan dumped w
 # a pre-4.0 row superseded by its replacement counts as neither open nor done
 printf '| # | Task | req | Test that proves it | Needs | Done |\n|---|---|---|---|---|---|\n| 3.2 | 401 | 3 | `go test` | – | superseded 2026-09-24 → 3.2.1 |\n\n| # | Task | req | Levels | Needs | Touches | Done |\n|---|---|---|---|---|---|---|\n| 3.2.1 | 401 | 3 | api | – | – | [ ] |\n' > .claude/clio/docs/plans/sup.md
 grep -q '^sup: done=0 open=1 next: 3.2.1 ' <<<"$("$Q" summary)" || { echo "superseded row counted or replacement not next: $("$Q" summary | grep sup)"; bad=1; }
-rm .claude/clio/docs/plans/tbl.md .claude/clio/docs/plans/blt.md .claude/clio/docs/plans/sup.md
+# next skips a row whose Needs are not ticked yet — across plans (0.4 lives in infra) — and says so
+# when nothing is ready
+printf '| # | Task | req | Levels | Needs | Touches | Done |\n|---|---|---|---|---|---|---|\n| 0.4 | smoke suite | 0 | smoke | – | – | [ ] |\n' > .claude/clio/docs/plans/inf.md
+printf '| # | Task | req | Levels | Needs | Touches | Done |\n|---|---|---|---|---|---|---|\n| 4.1 | create | 4 | unit | 0.4 | – | [ ] |\n| 4.2 | list | 4 | api | 0.4, 4.1 | – | [ ] |\n' > .claude/clio/docs/plans/nd.md
+grep -q '^nd: done=0 open=2 next: 4.1 | create | unit (waits on 0.4)' <<<"$("$Q" summary)" || { echo "unmet Needs not reported: $("$Q" summary | grep '^nd')"; bad=1; }
+sed -i.bak 's/| smoke | – | – | \[ \] |/| smoke | – | – | [x] 2026-09-01 |/' .claude/clio/docs/plans/inf.md; rm -f .claude/clio/docs/plans/inf.md.bak
+grep -q '^nd: done=0 open=2 next: 4.1 | create | unit$' <<<"$("$Q" summary)" || { echo "ready row not next: $("$Q" summary | grep '^nd')"; bad=1; }
+rm .claude/clio/docs/plans/tbl.md .claude/clio/docs/plans/blt.md .claude/clio/docs/plans/sup.md .claude/clio/docs/plans/inf.md .claude/clio/docs/plans/nd.md
 
 echo 'not json' >> $D
 "$Q" owed 2>err >/dev/null; grep -q malformed err || { echo "malformed line not reported"; bad=1; }

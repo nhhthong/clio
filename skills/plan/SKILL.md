@@ -106,6 +106,7 @@ For each bullet the repo has to show it:
 - **Generated vs source** — only pairs you can point at: the generator config, the output directory,
   and the command that regenerates it. `/clio:memo` reads this to drop build output.
 - **Frozen artefacts** — applied migrations, committed lockfiles, vendored directories.
+- Not a `Batch:` line — `/clio:test` § 1b researches, measures and proposes that one itself.
 - **The one convention this repo already follows** that a new file must match; read 2–3 existing
   files rather than stating the language's general advice.
 
@@ -225,5 +226,6 @@ ${CLAUDE_PLUGIN_ROOT}/skills/test/scripts/clio-test.sh coverage <row id>        
 ## 5. Report
 
 Tasks written / superseded / sub-tasks added and why (spec or tests) · the first three with `Needs`
-satisfied and `Done` empty (the queue) · rows skipped as ⚠️/❌ and the debt `id` each waits on · any spec value you could not
-turn into a task. Next: `/clio:test <task>` for the first task in the queue.
+satisfied and `Done` empty (the queue — `q.sh summary` computes it the same way) · rows skipped as
+⚠️/❌ and the debt `id` each waits on · any spec value you could not turn into a task. Next:
+`/clio:test <area>` — it designs the queue as one batch and asks once.
