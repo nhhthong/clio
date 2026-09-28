@@ -46,11 +46,17 @@ an approval. The rest waits for the next batch; say which.
 How cases run costs more than anything else here, whatever the stack: a runner that boots something
 (a JVM, a framework, a container, a bundler) pays it once per command. One example, measured on a
 Maven + Spring Boot repo: 8 cases each as its own `mvn` took 72 s (boot ~7 s every time, test bodies
-under 0.5 s); the same 8 in one `mvn` took 11 s. So before writing a command into a case table:
+under 0.5 s); the same 8 in one `mvn` took 11 s. So **before the first run** — a new case table, and
+just as much an existing one (a re-run, a table written before 4.1.2) — check for a `Batch:` line:
 
 - **A `Batch:` line in `.claude/rules/*.md` already covers this stack** → use it, skip the rest. Each
   case's `Command` is that template with `{tests}` replaced by the one test it runs — word for word,
   or the script will not merge it (it then runs alone, correct but slow).
+- **The case table already exists and no `Batch:` line does** → do the steps below now, before
+  running anything, and write the template **in the exact form the existing commands already use**
+  (`mvn -pl cafefin-api test -Dtest={tests}` for rows reading `mvn -pl cafefin-api test -Dtest=X#y`):
+  those rows then merge as they are — no row edited, no approval voided. A row that does not fit the
+  template runs alone; say which.
 - **None yet** → find it, before designing commands:
   1. **Identify the stack and its runner from the repo**, not from habit: the manifests present
      (`pom.xml`, `build.gradle*`, `package.json` scripts + `jest`/`vitest` config, `pyproject.toml` /
@@ -79,7 +85,9 @@ under 0.5 s); the same 8 in one `mvn` took 11 s. So before writing a command int
 - **Repeat without restarting.** A `concurrency` case needs `Repeat` ≥ 20: write the test to repeat
   itself (`@RepeatedTest(20)`, `-count=20`) so the report shows 20 entries — the script counts them.
   A test that does not repeat itself still works: the script sees fewer entries than `Repeat` and
-  runs that case alone, 20 times over, at 20 boots' cost.
+  runs that case alone, 20 times over, at 20 boots' cost. An existing concurrency test written that
+  way → propose the one-line change (`@Test` → `@RepeatedTest(20)`) before running it: the case row
+  stays as it is, only the test file changes.
 
 ## 2. Seams
 
@@ -134,7 +142,9 @@ Not applicable:
 - 3.3 · security.2 — the route is public; there is no owner to check horizontally
 ```
 - One case, one command, one behaviour. The command runs exactly that case (`-run TestX$`, `-t "name"`,
-  `-k name`) and exits non-zero on failure. No `|` inside a command — wrap it in a script. A test
+  `-k name`) and exits non-zero on failure. This is the case's **identity**, not how it is run: with a
+  `Batch:` line (§ 1b) the script starts the runner once for many such commands and still records
+  one line per case. Never tell the user cases cannot be batched because of this rule. No `|` inside a command — wrap it in a script. A test
   that already proves one level does not also prove another under a second case id: the gate
   refuses two cases of a task with the same command — write the second test.
 - `Covers` names the LEVELS.md id (`level.n`) the case proves; `–` for a level whose bullets carry no
@@ -198,6 +208,12 @@ script reports `NOT RED` passed on the old code: it cannot tell the bug from the
   each repeat is capped at `CLIO_TIMEOUT` seconds (default 600) — raise it for those
   (`CLIO_TIMEOUT=1800 clio-test.sh run-task …`). Never start infra (docker, a staging target), use a
   secret or hit a paid or shared service on your own: say what is needed and ask.
+- **One runner at a time per build.** Never start a test or build command while another one runs
+  on the same module — Maven, Gradle, cargo and most bundlers share one output directory
+  (`target/`, `build/`, `dist/`) and a second writer corrupts it (half-written class files, then
+  failures that are not the code's). A long run in `run_in_background` means nothing else touches
+  that build until it has finished; with a `Batch:` line the slow cases are in the same single run
+  anyway, so there is nothing to put in the background.
 - One case to re-run on its own (a flaky suspect) → `clio-test.sh run <case-id>`.
 
 ## 5. Gate
