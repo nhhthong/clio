@@ -262,9 +262,12 @@ cat > fakeunit.sh <<'SH'
 echo x >> starts.log
 mkdir -p reports; out=reports/TEST-fake.xml; echo '<testsuite>' > $out
 IFS=, read -ra ts <<<"$1"
-for t in "${ts[@]}"; do c=${t%%#*}; m=${t#*#}
+for t in "${ts[@]}"; do c=${t%%#*}; m=${t#*#}; [[ $c == *.* ]] && c=${c##*.}
   case $m in
     gone*) ;;
+    hang*) sleep 30 ;;
+    dup*)  printf '<testcase name="%s" classname="pkg.a.%s"/>\n<testcase name="%s" classname="pkg.b.%s">\n<failure/>\n</testcase>\n' "$m" "$c" "$m" "$c" >> $out ;;
+    par*)  for k in 1 2 3; do printf '<testcase name="%s(String)[%d]" classname="pkg.%s"/>\n' "$m" $k "$c" >> $out; done ;;
     fail*) printf '<testcase name="%s" classname="pkg.%s">\n<failure message="x"/>\n</testcase>\n' "$m" "$c" >> $out ;;
     rep*)  for k in 1 2 3; do printf '<testcase name="%s()[%d]" classname="pkg.%s"/>\n' "$m" $k "$c" >> $out; done ;;
     *)     printf '<testcase name="%s" classname="pkg.%s" time="0.1"/>\n' "$m" "$c" >> $out ;;
@@ -295,11 +298,48 @@ echo '| 7.1-u4 | 7.1 | unit | unit.1 | e | e | `bash fakeunit.sh K#goneFive` | 1
 sed -i 's/K#repFour` | 3 |/K#repFour` | 5 |/' $T3
 out=$("$S" run-task 7.1)
 grep -q '^fail: 7.1-u4 (unit) 0/0 — batch — not in the report' <<<"$out" || { echo "missing testcase not failed: $out"; bad=1; }
-grep -q "7.1-c1's report shows fewer runs than its Repeat" <<<"$out" || { echo "short repeat did not fall back: $out"; bad=1; }
+grep -q "7.1-c1's report shows fewer repetitions than its Repeat" <<<"$out" || { echo "short repeat did not fall back: $out"; bad=1; }
 # a command that is not the template, word for word, is never merged into the batch
 echo '| 7.1-u5 | 7.1 | unit | unit.1 | f | f | `bash fakeunit.sh K#okSix --verbose` | 1 |' >> $T3
 : > starts.log; "$S" run-task 7.1 >/dev/null
 [ "$(wc -l < starts.log)" -ge 3 ] || { echo "a non-template command was merged into the batch"; bad=1; }
+
+# #6 a full classname picks one package; a short one covers every package's class of that name
+printf '| 7.2 | pkgs | 1 | unit | – | – | [ ] |\n' >> .claude/clio/docs/plans/p.md
+echo '| 7.2-u1 | 7.2 | unit | unit.1 | a | a | `bash fakeunit.sh pkg.a.K#dupOne` | 1 |' >> $T3
+echo '| 7.2-u2 | 7.2 | unit | unit.1 | b | b | `bash fakeunit.sh K#dupTwo` | 1 |' >> $T3
+out=$("$S" run-task 7.2)
+grep -q '^pass: 7.2-u1 (unit) 1/1 — batch' <<<"$out" || { echo "full classname matched another package: $out"; bad=1; }
+grep -q '^fail: 7.2-u2 (unit) 0/1 — batch' <<<"$out" || { echo "short classname missed a failing package: $out"; bad=1; }
+
+# #9 parameter sets are not repetitions: Repeat 1 passes, Repeat 3 falls back to its own command
+printf '| 7.3 | params | 1 | unit, concurrency | – | – | [ ] |\n' >> .claude/clio/docs/plans/p.md
+echo '| 7.3-u1 | 7.3 | unit | unit.1 | a | a | `bash fakeunit.sh K#parOne` | 1 |' >> $T3
+echo '| 7.3-c1 | 7.3 | concurrency | concurrency.1 | b | b | `bash fakeunit.sh K#parTwo` | 3 |' >> $T3
+out=$("$S" run-task 7.3)
+grep -q '^pass: 7.3-u1 (unit) 1/1 — batch' <<<"$out" || { echo "parameterised Repeat 1: $out"; bad=1; }
+grep -q "7.3-c1's report shows fewer repetitions" <<<"$out" || { echo "parameter sets counted as repeats: $out"; bad=1; }
+
+# #7 the batch is capped too, also where only gtimeout exists (macOS + coreutils)
+if command -v timeout >/dev/null; then
+  echo 'fakebin/' >> .gitignore; fb=$d/fakebin; mkdir -p "$fb"; for d0 in ${PATH//:/ }; do for f in "$d0"/*; do n=${f##*/}
+    [ "$n" = timeout ] || [ -e "$fb/$n" ] || ln -s "$f" "$fb/$n" 2>/dev/null; done; done
+  # a wrapper, not a symlink: a multicall coreutils (uutils) refuses to run under another name
+  printf '#!/bin/sh\nexec %s "$@"\n' "$(command -v timeout)" > "$fb/gtimeout"; chmod +x "$fb/gtimeout"
+  printf '| 7.4 | hang | 1 | unit | – | – | [ ] |\n' >> .claude/clio/docs/plans/p.md
+  echo '| 7.4-u1 | 7.4 | unit | unit.1 | a | a | `bash fakeunit.sh K#hangOne` | 1 |' >> $T3
+  s0=$(date +%s); out=$(PATH=$fb CLIO_TIMEOUT=2 "$S" run-task 7.4); s1=$(date +%s)
+  [ $((s1-s0)) -lt 20 ] || { echo "batch not capped with only gtimeout on PATH ($((s1-s0)) s)"; bad=1; }
+  grep -q 'timed out after 2s (whole batch)' <<<"$out" || { echo "batch timeout not reported: $out"; bad=1; }
+fi
+
+# #1 an artifact that later gets tracked is source again: editing it moves the fp
+echo '| 7.5-u1 | 7.5 | unit | unit.1 | a | a | `mkdir -p gen && echo v1 > gen/api.ts` | 1 |' >> $T3
+printf '| 7.5 | promote | 1 | unit | – | – | [ ] |\n' >> .claude/clio/docs/plans/p.md
+"$S" run 7.5-u1 >/dev/null
+git add gen/api.ts; git commit -qm "gen/api.ts is source now"
+f1=$("$S" fp); echo 'export const x = 2' > gen/api.ts; f2=$("$S" fp)
+[ "$f1" != "$f2" ] || { echo "edit to a tracked former artifact did not move the fp"; bad=1; }
 
 [ $bad -eq 0 ] && echo OK
 exit $bad

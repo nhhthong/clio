@@ -47,7 +47,9 @@ fp_tree(){
   # git"). A plain cp stamps the copy "now", so a same-size edit made in the second after a `git add`
   # passed as unchanged and the fp did not move.
   if [ -f "$gi" ]; then cp -p "$gi" "$idx"; else rm -f "$idx"; fi
-  while IFS= read -r a; do [ -n "$a" ] && ex+=(":(exclude,literal)$a"); done < <(artifacts)
+  # An artifact that has since been tracked is source now (a generated file committed, a snapshot
+  # kept): it counts again, or edits to it would never move the fp.
+  while IFS= read -r a; do [ -n "$a" ] && ex+=(":(exclude,literal)$a"); done < <(comm -23 <(artifacts) <(git -c core.quotePath=false ls-files | sort -u))
   # -f: without it git refuses a path staged and then edited again (a ledger mid-memo), silently
   # leaving its staged copy in the tree — every later `git add` of that ledger then moves the fp.
   GIT_INDEX_FILE=$idx git rm -r -q -f --cached --ignore-unmatch -- .claude >/dev/null 2>&1
@@ -55,6 +57,13 @@ fp_tree(){
   GIT_INDEX_FILE=$idx git add -A -- . ':(exclude).claude' "${ex[@]}" >/dev/null 2>&1
   GIT_INDEX_FILE=$idx git write-tree
   rm -f "$idx"
+}
+
+# The cap every run uses — run() per repeat, run_batch() per batch: CLIO_TIMEOUT seconds (default
+# 600) through coreutils `timeout`, or `gtimeout` (Homebrew coreutils on macOS). Prints nothing when
+# neither exists; callers then run uncapped and say so.
+timeout_cmd(){
+  local t; for t in timeout gtimeout; do command -v "$t" >/dev/null && { echo "$t ${CLIO_TIMEOUT:-600}"; return; }; done
 }
 
 # Paths that are test code, not the code under test. A red run counts only if these were the same as
@@ -110,10 +119,8 @@ run(){
   log=$(mktemp); before=$(untracked)
   # Each repeat is capped at CLIO_TIMEOUT seconds (default 600), so a deadlocked case fails instead
   # of hanging the run. `timeout` is coreutils; without it (stock macOS) the cap is skipped, said once.
-  local to=()
-  if command -v timeout >/dev/null; then to=(timeout "${CLIO_TIMEOUT:-600}")
-  elif command -v gtimeout >/dev/null; then to=(gtimeout "${CLIO_TIMEOUT:-600}")
-  else echo "note: no timeout/gtimeout on PATH — case runs uncapped (brew install coreutils)"; fi
+  local to=(); read -ra to <<<"$(timeout_cmd)"
+  [ ${#to[@]} -gt 0 ] || echo "note: no timeout/gtimeout on PATH — case runs uncapped (brew install coreutils)"
   for ((i=1; i<=rep; i++)); do
     ${to[@]+"${to[@]}"} bash -c "$cmd" </dev/null >"$log" 2>&1; code=$?
     [ "$code" -ne 124 ] || [ ${#to[@]} -eq 0 ] || echo "timed out after ${CLIO_TIMEOUT:-600}s (run $i of $rep)" >>"$log"
@@ -167,18 +174,22 @@ batch_id(){
   [[ -n $id && $id != *[[:space:],+*]* ]] || return 1   # one plain test id, not a list or a pattern
   printf '%s\n' "$id"
 }
-# JUnit XML → class<TAB>test<TAB>status (0 pass, 1 failure/error, 2 skipped), one line per <testcase>.
-# class is the simple name; test drops `()` and `[n]`, so a @RepeatedTest's 20 entries share one name.
+# JUnit XML → class<TAB>test<TAB>status<TAB>rep, one line per <testcase>. class is the full classname
+# (two packages' OrderTest stay apart); test drops `(…)` and `[n]`; status 0 pass, 1 failure/error,
+# 2 skipped; rep is 1 when the entry is a repetition of the same call — a bare name (go -count) or
+# `name()[k]` (JUnit 5 @RepeatedTest) — and 0 for a parameterised one (`name(String)[k]`, `name[k]`):
+# ten parameter sets are ten different calls, not ten repeats of one.
 junit(){
   awk '
     function attr(k,   m){ if (match($0, k "=\"[^\"]*\"")) { m=substr($0,RSTART,RLENGTH); sub(/^[^"]*"/,"",m); sub(/"$/,"",m); return m } return "" }
     /<testcase[ \t>]/ {
-      c=attr("classname"); sub(/.*\./,"",c); n=attr("name"); sub(/[\(\[].*/,"",n); st=0; open=1
-      if ($0 ~ /<testcase[^>]*\/>/) { print c "\t" n "\t" st; open=0 }
+      c=attr("classname"); n=attr("name"); r=n; sub(/[\(\[].*/,"",n); r=substr(r, length(n)+1)
+      rp = (r=="" || r ~ /^\(\)\[[0-9]+\]$/) ? 1 : 0; st=0; open=1
+      if ($0 ~ /<testcase[^>]*\/>/) { print c "\t" n "\t" st "\t" rp; open=0 }
       next }
     open && /<(failure|error)[ \t>\/]/ { st=1 }
     open && /<skipped[ \t>\/]/ && st==0 { st=2 }
-    open && /<\/testcase>/ { print c "\t" n "\t" st; open=0 }' "$@"
+    open && /<\/testcase>/ { print c "\t" n "\t" st "\t" rp; open=0 }' "$@"
 }
 
 # run_batch dir base tpl join report — stdin: case<TAB>test-id lines. Records one runs.jsonl line
@@ -192,33 +203,44 @@ run_batch(){
     [ -z "$dir" ] || cd "$dir" || exit 1
     tree=$(fp_tree); f=${tree:0:12}; read -r tfp cfp < <(split_fp "$tree")
     marker=$(mktemp); log=$(mktemp); sleep 1   # reports must be newer than the marker, to the second
-    local to=(); command -v timeout >/dev/null && to=(timeout "${CLIO_TIMEOUT:-600}")
+    local to=(); read -ra to <<<"$(timeout_cmd)"
+    [ ${#to[@]} -gt 0 ] || echo "note: no timeout/gtimeout on PATH — the batch runs uncapped (brew install coreutils)"
     ${to[@]+"${to[@]}"} bash -c "$full" </dev/null >"$log" 2>&1; code=$?
-    shopt -s nullglob; local reps=() r
-    for r in $report; do [ "$r" -nt "$marker" ] && reps+=("$r"); done
-    local rows=""; [ ${#reps[@]} -eq 0 ] || rows=$(junit "${reps[@]}")
-    local id tid row task level cmd rep cnt bad result fall=() shown=0
+    [ "$code" -ne 124 ] || [ ${#to[@]} -eq 0 ] || echo "timed out after ${CLIO_TIMEOUT:-600}s (whole batch)" >>"$log"
+    shopt -s nullglob; local xmls=() r
+    for r in $report; do [ "$r" -nt "$marker" ] && xmls+=("$r"); done
+    local rows=""; [ ${#xmls[@]} -eq 0 ] || rows=$(junit "${xmls[@]}")
+    local id tid row task level cmd rep cnt bad reps result fall=() shown=0
     while IFS=$'\t' read -r id tid; do
       row=$(cases | awk -F'\t' -v c="$id" '$1==c'); IFS=$'\t' read -r _ task level _ cmd rep _ _ <<<"$row"
-      read -r cnt bad < <(awk -F'\t' -v t="$tid" '
-        { hit = index(t,"#") ? ($1 "#" $2 == t) : ($2 == t || $1 == t) }
-        hit { n++; if ($3 != 0) b++ } END { print n+0, b+0 }' <<<"$rows")
-      if [ "$cnt" -gt 0 ] && [ "$bad" -eq 0 ] && [ "$cnt" -lt "$rep" ]; then fall+=("$id"); continue; fi
+      # A test id matches a classname in full or by its trailing `.Simple` part — `OrderTest#x`
+      # matches every package's OrderTest (as `-Dtest=OrderTest#x` runs them all), `com.a.OrderTest#x`
+      # only that one. cnt: entries seen; bad: failed or skipped; reps: repetitions of one call —
+      # the fewest any matched class shows, a parameterised test's sets counting once — which is
+      # what `Repeat` asks for.
+      read -r cnt bad reps < <(awk -F'\t' -v t="$tid" '
+        function cls(want) { return $1 == want || substr($1, length($1)-length(want)) == "." want }
+        { if (index(t,"#")) { k=t; sub(/#.*/,"",k); m=t; sub(/^[^#]*#/,"",m); hit = ($2 == m && cls(k)) }
+          else hit = ($2 == t || cls(t)) }
+        hit { n++; if ($3 != 0) b++; rc[$1] += $4; seen[$1] = 1 }
+        END { r = -1; for (k in seen) { v = rc[k] > 0 ? rc[k] : 1; if (r < 0 || v < r) r = v }  # per class: two
+              print n+0, b+0, (r < 0 ? 0 : r) }' <<<"$rows")   # packages are not two repetitions
+      if [ "$cnt" -gt 0 ] && [ "$bad" -eq 0 ] && [ "$reps" -lt "$rep" ]; then fall+=("$id"); continue; fi
       result=fail; [ "$cnt" -gt 0 ] && [ "$bad" -eq 0 ] && result=pass
       jq -nc --arg date "$(date +%Y-%m-%d)" --arg case "$id" --arg task "$task" --arg level "$level" \
         --arg cmd "$cmd" --arg batch "$full" --arg commit "$(git rev-parse --short HEAD 2>/dev/null)" \
         --arg fp "$f" --arg tfp "$tfp" --arg cfp "$cfp" --arg result "$result" \
-        --argjson runs "$cnt" --argjson passed "$((cnt-bad))" --argjson exit "$code" --arg base "$base" \
+        --argjson runs "$reps" --argjson passed "$([ "$bad" -eq 0 ] && echo "$reps" || echo 0)" --argjson exit "$code" --arg base "$base" \
         '{date:$date,case:$case,task:$task,level:$level,cmd:$cmd,batch:$batch,commit:($commit|select(.!="")//null),
           fp:$fp,tfp:$tfp,cfp:$cfp,result:$result,runs:$runs,passed:$passed,exit:$exit,artifacts:[]}
           + (if $base=="" then {} else {red_base:$base} end)' >> "$RUNS"
-      echo "$result: $id ($level) $((cnt-bad))/$cnt — batch${base:+ — on $base}$([ "$cnt" -gt 0 ] || echo ' — not in the report')"
+      echo "$result: $id ($level) $([ "$bad" -eq 0 ] && echo "$reps" || echo 0)/$reps — batch${base:+ — on $base}$([ "$cnt" -gt 0 ] || echo ' — not in the report')"
       if [ "$result" = fail ] && [ "$shown" -eq 0 ]; then echo "--- last output"; tail -30 "$log"; shown=1; fi
     done <<<"$pairs"
     rm -f "$marker" "$log"
     local fb bad2=0
     for fb in ${fall[@]+"${fall[@]}"}; do
-      echo "note: $fb's report shows fewer runs than its Repeat — running it on its own"
+      echo "note: $fb's report shows fewer repetitions than its Repeat (parameter sets are not repeats) — running it on its own"
       ( run "$fb" "$dir" "$base" ) || bad2=1
     done
     [ "$bad2" -eq 0 ]

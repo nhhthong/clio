@@ -43,21 +43,28 @@ an approval. The rest waits for the next batch; say which.
 
 ## 1b. The fastest way to run — found once per stack
 
-How cases run costs more than anything else here. Measured on a Maven + Spring Boot repo: 8 cases
-each as its own `mvn` took 72 s (Maven + JVM + Spring context boot ~7 s every time, test bodies under
-0.5 s); the same 8 in one `mvn` took 11 s. So before writing a command into a case table:
+How cases run costs more than anything else here, whatever the stack: a runner that boots something
+(a JVM, a framework, a container, a bundler) pays it once per command. One example, measured on a
+Maven + Spring Boot repo: 8 cases each as its own `mvn` took 72 s (boot ~7 s every time, test bodies
+under 0.5 s); the same 8 in one `mvn` took 11 s. So before writing a command into a case table:
 
 - **A `Batch:` line in `.claude/rules/*.md` already covers this stack** → use it, skip the rest. Each
   case's `Command` is that template with `{tests}` replaced by the one test it runs — word for word,
   or the script will not merge it (it then runs alone, correct but slow).
 - **None yet** → find it, before designing commands:
-  1. Read the build's own test config (Surefire/Failsafe in `pom.xml`, `build.gradle`'s `test {}`,
-     `jest.config.*`, `pytest.ini`/`pyproject.toml`, `go.mod` + how tests are invoked in CI).
+  1. **Identify the stack and its runner from the repo**, not from habit: the manifests present
+     (`pom.xml`, `build.gradle*`, `package.json` scripts + `jest`/`vitest` config, `pyproject.toml` /
+     `pytest.ini`, `go.mod`, `Cargo.toml`, `*.csproj` / `*.sln`, `composer.json`…), the test config in
+     them, and how CI invokes the tests.
   2. Look the runner up in **Context7** (web search if it has nothing; say which): how one command
      selects several named tests (`-Dtest=A#m,B#n`, `--tests`, `-t`, `-k "a or b"`, `-run '^(A|B)$'`);
-     where it writes a **JUnit XML** report (Surefire does by default; jest needs `jest-junit`, pytest
-     `--junitxml`, Go `gotestsum --junitfile`); how to repeat a test **inside one process**
-     (`@RepeatedTest(n)`, `-count=n`, `pytest-repeat`); what keeps a heavy fixture warm across tests
+     where it writes a **machine-readable report** — the script reads JUnit XML, which most runners
+     emit (Surefire by default; jest via `jest-junit`, pytest `--junitxml`, Go `gotestsum
+     --junitfile`, Rust `cargo nextest` JUnit profile, .NET `--logger junit`); no JUnit XML → no
+     batch line. How to repeat a test **inside one process** so the report shows repetitions of the
+     same call — JUnit 5 `@RepeatedTest(n)` (`name()[k]`), Go `-count=n` (the same name n times);
+     anything else (`pytest-repeat`'s `name[k-n]`, parameter sets) reads as different calls and the
+     case falls back to its own command. What keeps a heavy fixture warm across tests
      (Spring's test-context cache — same config, one boot; Testcontainers reuse).
   3. **Measure**, don't assume: one existing test on its own, then several in one command. Show both
      numbers.

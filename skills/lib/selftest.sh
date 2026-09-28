@@ -56,9 +56,16 @@ cat > tests.md <<'EOF'
 <!-- | 3.1-c1 | 3.1 | unit | unit.1 | commented | x | `true` | 1 | -->
 | 2.1-u1 | 2.1 | unit | old format | x | `true` | 3 |
 
+- 3.1 · api.9 — a bullet before any Not applicable list is not an excuse
+
 Not applicable:
 - 3.1 · api.2 — read-only route
+  wrapped onto a second line
 -   3.1·unit.3   —   spaced oddly
+
+## Notes
+
+- 3.1 · unit.1 — already covered elsewhere (a note, not an excuse)
 EOF
 eq "$(case_rows "unit api smoke" tests.md)" "$(printf '%s\n' \
 '3.1-u1	3.1	unit	unit.1	go test -run A$	1	1	' \

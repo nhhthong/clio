@@ -82,13 +82,20 @@ case_lines(){
     /^[ \t]*\|/ {g=$3; gsub(/^[ \t]+|[ \t]+$/,"",g); if(g==t){gsub(/[ \t]+/," "); print}}' "$@"
 }
 
-# `- <task> · <level.n> — <reason>` bullets (a tests doc's Not applicable list). One line each:
-#   task  id  line (whitespace-normalised)
+# `- <task> · <level.n> — <reason>` bullets of a tests doc's `Not applicable:` list — only those: the
+# list starts at that line and ends at the next heading, table row or paragraph, so a bullet under
+# `## Notes` is never read as an excuse. A wrapped bullet's indented continuation stays inside it.
+# One line each:  task  id  line (whitespace-normalised)
 # `·` is multi-byte; tr in the C locale turns each of its bytes into a space on its own.
 na_rows(){
   [ $# -gt 0 ] || return 0
   local raw
-  raw=$(awk "$CLIO_NOCOMMENT"'/^-[ \t]*[^ \t]/ {gsub(/[ \t]+/," "); print}' "$@")
+  raw=$(awk "$CLIO_NOCOMMENT"'
+    FNR==1 { in_na=0 }
+    /^(#+[ \t]*)?[*_]*Not applicable[*_]*:?[*_]*[ \t]*$/ { in_na=1; next }
+    !in_na || /^[ \t]*$/ || /^[ \t]+[^ \t-]/ { next }
+    /^-[ \t]*[^ \t]/ { gsub(/[ \t]+/," "); print; next }
+    { in_na=0 }' "$@")
   [ -n "$raw" ] || return 0
   paste <(LC_ALL=C tr '·' ' ' <<<"$raw" | sed -E 's/^-[ \t]*//' | awk '{print $1 "\t" $2}') <(printf '%s\n' "$raw")
 }

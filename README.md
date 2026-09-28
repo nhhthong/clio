@@ -55,10 +55,11 @@ have no red phase: the spec-sourced expected values and the approved table alrea
 held by hand-written logic: `/clio:plan` assesses the task, proposes `mutation` with its reasons and
 asks; it is never added silently. A project can waive mutation once, by ADR, in `/clio:plan infra`.
 
-**Speed** — before the first run on a stack, `/clio:test` looks up (Context7, then the web) how the
-runner takes several tests in one command and where its JUnit XML lands, measures it, and writes a
-`Batch:` line to `.claude/rules/`. From then on a whole batch of cases costs one runner start: on a
-Maven + Spring Boot module, 8 cases went from 72 s to 11 s.
+**Speed** — before the first run on a stack, `/clio:test` reads the repo's manifests to find its
+test runner, looks up (Context7, then the web) how that runner takes several tests in one command
+and where it writes a machine-readable report (JUnit XML, which most runners emit), measures it, and
+writes a `Batch:` line to `.claude/rules/`. From then on a whole batch of cases costs one runner
+start. Example, a Maven + Spring Boot module: 8 cases went from 72 s to 11 s.
 
 **Gate** — one red run in `Repeat` is a fail, and so is a red on the same code after a pass (flaky =
 failed; re-running to green does not clear it); any code edit after a pass voids it; any change to
