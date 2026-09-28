@@ -12,7 +12,18 @@ Not breaking. Tasks with a `Not applicable` line need `approve` once more.
 - Batch run: a `Batch:` line in `.claude/rules/` (`/clio:test` § 1b researches it with Context7 and
   measures it once per stack) lets `run-task`/`red` start the runner once for every case and read
   each result from the JUnit XML (full classnames; parameter sets are not repetitions). Maven +
-  Spring, 8 cases: 72 s → 11 s; with red: 113 s → 22 s.
+  Spring, 8 cases: 72 s → 11 s; with red: 113 s → 22 s. When two or more cases still run one start
+  each, `run-task` says why (no line, or no row matches it word for word) and prints the template
+  their own commands fit. `run-task` prints how long it took.
+- Gate: a `red` run is never taken as today's "last run" (red after a pass no longer reads as
+  failing); a batch red whose test is not in the report (base did not compile) is not a red.
+- Fixed: a batch `red` read the case table inside the worktree and recorded no command, so the
+  gate never counted it.
+- `clio-test.sh` split: the fingerprint and the batch/JUnit code moved to `skills/lib/fingerprint.sh`
+  and `skills/lib/junit.sh`, each with a golden selftest; the script's selftest split into gate,
+  red and batch files, one throwaway repo each. The JUnit golden test found and fixed four report
+  shapes the parser misread: vitest (`classname` before `name`), gotestsum (`<testcase></testcase>`
+  on one line), a one-line `<skipped/>`, and `<error>` text inside a captured log's CDATA.
 - Batches: an area → up to 5 ready tasks, seams + cases approved in one question, critical first.
   `approve`/`run-task` take several ids; each task keeps its own hash.
 - Gate: `Not applicable` lines (read only from the `Not applicable:` list) are part of the approved

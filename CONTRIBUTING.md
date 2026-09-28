@@ -31,8 +31,9 @@ same way and are easy to miss:
   case-row text is also what `approve` hashes: changing how `case_lines` prints it voids every
   approval in every repo — don't, unless the CHANGELOG says so as breaking.
 - The `Batch:` line format (`` Batch: `cmd {tests}` · join: `sep` · report: `glob` ``) is written by
-  `test/SKILL.md` § 1b and read by `batches()` in `clio-test.sh`; the JUnit XML it reads is parsed by
-  `junit()` there. Change one, change the other and the batch fixtures in `selftest.sh`.
+  `test/SKILL.md` § 1b and read by `batches()` in `skills/lib/junit.sh`; the JUnit XML it reads is
+  parsed by `junit()` there. Change one, change the other, `selftest-junit.sh` and the batch
+  fixtures in `selftest-batch.sh`.
 
 ## Before opening a PR
 
@@ -41,9 +42,11 @@ claude plugin validate .
 bash skills/memo/scripts/test.sh      # validate.sh fixtures: must print OK
 bash hooks/test-nudge.sh              # clio-nudge.sh fixtures: must print OK
 bash hooks/test-guard.sh              # clio-guard.sh fixtures: must print OK
-bash skills/test/scripts/selftest.sh  # clio-test.sh run/red/approve/gate fixtures (~20 s): must print OK
+bash skills/test/scripts/selftest.sh  # clio-test.sh: selftest-gate/-red/-batch.sh, a repo each (~40 s): must print OK
 bash skills/context/scripts/selftest.sh  # q.sh query fixtures: must print OK
 bash skills/lib/selftest.sh           # tables.sh parser, golden output: must print OK
+bash skills/lib/selftest-junit.sh     # junit.sh: real runners' report shapes, batch templates: must print OK
+bash skills/lib/selftest-fingerprint.sh  # fingerprint.sh: what moves the fp, test/code split: must print OK
 ```
 
 Nothing runs these for you; there is no CI. A new rule in `validate.sh` or `clio-nudge.sh` lands

@@ -76,8 +76,11 @@ just as much an existing one (a re-run, a table written before 4.1.2) — check 
      numbers.
   4. Propose the line for `.claude/rules/<stack>.md` and **ASK** before writing it:
      ```
-     - Batch: `mvn -q -pl cafefin-api test -Dtest={tests}` · join: `,` · report: `cafefin-api/target/surefire-reports/TEST-*.xml`
+     - Batch: `mvn -pl cafefin-api test -Dtest={tests}` · join: `,` · report: `cafefin-api/target/surefire-reports/TEST-*.xml`
      ```
+     The template is the case commands' own text with the test id cut out — **copy it from the rows,
+     never from this example**: one extra flag (`-q`) and not a single row matches. `run-task` prints
+     a `note:` with the template the rows actually fit when two or more cases end up running alone.
      `{tests}` is where the joined test ids go, `join` the separator the runner wants, `report` the
      glob of the JUnit XML it leaves. One line per runner (per module when modules test apart).
   5. No way to select several tests in one command, no XML report, or the measurement shows no gain
@@ -196,7 +199,12 @@ the code (never loosen a test) and re-run the failing task. Refactor, re-run onc
   committed the change → `--base <the commit before it>`. Then `run-task` on today's code.
 
 Read every red's output: a red counts only if it failed **on its assertion** — a build error, a
-missing fixture or a wrong path is a red for the wrong reason; fix the test and redo it. A case the
+missing fixture or a wrong path is a red for the wrong reason; fix the test and redo it. Under a
+`Batch:` line the script checks part of this itself: a test the runner's report does not show (the
+base did not compile) is `NOT RED … did not run`, and the gate never counts it. When the base cannot
+compile the tests at all (they call code the base lacks), `red` cannot help — use the stub route
+above on today's code instead, and say so. A `red` run is never read as today's result: the gate's
+"last run" is the last run on this code, so run `run-task` after `red`, not the other way round. A case the
 script reports `NOT RED` passed on the old code: it cannot tell the bug from the fix — strengthen it
 (show the user the changed row, approve again) rather than moving on.
 

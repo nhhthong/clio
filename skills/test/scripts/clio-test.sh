@@ -18,7 +18,10 @@ export LC_ALL=C   # sort and comm must agree on order; awk matches bytes
 # by full path every time; a relative invocation only breaks the id-coverage check, not run/gate.
 LEVELS_FILE=$(cd "$(dirname "$0")/.." && pwd)/LEVELS.md
 # Every Markdown table this script reads goes through the shared parser — resolved before the cd below.
-. "$(cd "$(dirname "$0")/../.." && pwd)/lib/tables.sh" || { echo "FAIL: cannot load skills/lib/tables.sh"; exit 1; }
+LIB=$(cd "$(dirname "$0")/../.." && pwd)/lib
+for f in tables fingerprint junit; do
+  . "$LIB/$f.sh" || { echo "FAIL: cannot load skills/lib/$f.sh"; exit 1; }
+done
 
 root=$PWD
 while [ ! -d "$root/.claude/clio" ] && [ "$root" != "/" ]; do root=$(dirname "$root"); done
@@ -30,59 +33,6 @@ TESTS=.claude/clio/docs/tests
 PLANS=.claude/clio/docs/plans
 touch "$RUNS"
 
-# Files earlier runs created (coverage files, mutation reports): outputs of a test, not code.
-# Files only: a directory entry (ends in /, written before 4.1) would hide any source added to it later.
-artifacts(){ jq -Rr 'fromjson? | .artifacts[]? | select(endswith("/") | not)' "$RUNS" 2>/dev/null | sort -u; }
-
-# The working tree's content as a git tree id: every tracked and untracked, non-ignored file, minus
-# .claude/ and known test artifacts. Content-addressed, so committing the same code keeps the id;
-# any edit to code changes it. Built in a copy of the real index so git reuses its stat cache.
-# ponytail: re-hashes changed files on each call; fine for repos git itself handles quickly.
-# fp_tree prints the full tree id (its objects land in .git, so split_fp can list it); fp the short form.
-fp(){ fp_tree | cut -c1-12; }
-fp_tree(){
-  local idx gi ex=()
-  idx=$(mktemp); gi=$(git rev-parse --git-path index)
-  # -p keeps the index's mtime: git re-hashes a file whose mtime is not older than the index ("racy
-  # git"). A plain cp stamps the copy "now", so a same-size edit made in the second after a `git add`
-  # passed as unchanged and the fp did not move.
-  if [ -f "$gi" ]; then cp -p "$gi" "$idx"; else rm -f "$idx"; fi
-  # An artifact that has since been tracked is source now (a generated file committed, a snapshot
-  # kept): it counts again, or edits to it would never move the fp.
-  while IFS= read -r a; do [ -n "$a" ] && ex+=(":(exclude,literal)$a"); done < <(comm -23 <(artifacts) <(git -c core.quotePath=false ls-files | sort -u))
-  # -f: without it git refuses a path staged and then edited again (a ledger mid-memo), silently
-  # leaving its staged copy in the tree — every later `git add` of that ledger then moves the fp.
-  GIT_INDEX_FILE=$idx git rm -r -q -f --cached --ignore-unmatch -- .claude >/dev/null 2>&1
-  for a in "${ex[@]}"; do GIT_INDEX_FILE=$idx git rm -r -q -f --cached --ignore-unmatch -- "${a#*)}" >/dev/null 2>&1; done
-  GIT_INDEX_FILE=$idx git add -A -- . ':(exclude).claude' "${ex[@]}" >/dev/null 2>&1
-  GIT_INDEX_FILE=$idx git write-tree
-  rm -f "$idx"
-}
-
-# The cap every run uses — run() per repeat, run_batch() per batch: CLIO_TIMEOUT seconds (default
-# 600) through coreutils `timeout`, or `gtimeout` (Homebrew coreutils on macOS). Prints nothing when
-# neither exists; callers then run uncapped and say so.
-timeout_cmd(){
-  local t; for t in timeout gtimeout; do command -v "$t" >/dev/null && { echo "$t ${CLIO_TIMEOUT:-600}"; return; }; done
-}
-
-# Paths that are test code, not the code under test. A red run counts only if these were the same as
-# at the pass and the rest was not — "same test, other code" — so breaking the test instead of the code
-# proves nothing. Covers the usual layouts: Go `_test.go`, JS/TS `.test.`/`.spec.`, pytest `test_*.py`,
-# JVM `src/test/`, Rails `spec/`, `tests/`, `__tests__/`, `testdata/`, `*Test.java`.
-# ponytail: one fixed pattern; make it a per-repo setting when a real layout falls outside it.
-TEST_PATHS='(^|/)(tests?|__tests__|specs?|testdata|e2e|cypress)/|[_.](test|spec)\.[^/]*$|(^|/)(test_[^/]*|conftest)\.py$|Tests?\.(java|kt|scala|cs|swift|php)$'
-# "<test-fp> <code-fp>" of a tree from fp_tree: each is a hash of that half's `ls-tree` listing.
-split_fp(){
-  local ls; ls=$(git ls-tree -r "$1")
-  printf '%s %s\n' \
-    "$(awk -F'\t' -v re="$TEST_PATHS" '$2 ~ re' <<<"$ls" | git hash-object --stdin | cut -c1-12)" \
-    "$(awk -F'\t' -v re="$TEST_PATHS" '$2 !~ re' <<<"$ls" | git hash-object --stdin | cut -c1-12)"
-}
-# Untracked files right now — diffed around a run to find what it created. Files, not directories:
-# excluding a whole new directory would hide code written into it after the run.
-# ponytail: a run that emits thousands of non-ignored files makes a long exclude list; gitignore them.
-untracked(){ git ls-files -o --exclude-standard -- . ':(exclude).claude' 2>/dev/null | sort; }
 
 
 # The only level names a plan or a case may use — LEVELS.md's catalog, lowercase.
@@ -145,53 +95,6 @@ run(){
   [ "$result" = pass ]
 }
 
-# --- Batch mode: one runner start for many cases -------------------------------------------------
-# A runner that boots something heavy (Maven + JVM + Spring: ~7 s) pays it once per case when every
-# case is its own command. A `Batch:` line in .claude/rules/*.md (test/SKILL.md § 1b finds and writes
-# it) names the one command that runs many tests and the JUnit XML it leaves behind:
-#   Batch: `mvn -q -pl api test -Dtest={tests}` · join: `,` · report: `api/target/surefire-reports/TEST-*.xml`
-# A case joins a batch only if its own command IS that template with {tests} = its test id, so the
-# batch runs exactly the cases' commands, merged. Each case's result is read from the report; nothing
-# is inferred from the batch's exit code alone. A case the report does not show, or shows fewer times
-# than its Repeat, falls back to its own command.
-
-# One line per template: template<TAB>join<TAB>report glob.
-batches(){
-  shopt -s nullglob; local files=(.claude/rules/*.md)
-  [ ${#files[@]} -gt 0 ] || return 0
-  awk "$CLIO_NOCOMMENT"'/^[-* \t]*Batch:/' "${files[@]}" | sed -E 's/^[-* \t]*Batch:[ \t]*//' \
-    | awk -F' · ' '{ t=$1; j=","; r=""
-        for(i=2;i<=NF;i++){ if($i ~ /^join:/){j=$i; sub(/^join:[ \t]*/,"",j)} else if($i ~ /^report:/){r=$i; sub(/^report:[ \t]*/,"",r)} }
-        gsub(/^`|`[ \t]*$/,"",t); gsub(/^`|`[ \t]*$/,"",j); gsub(/^`|`[ \t]*$/,"",r)
-        if (index(t,"{tests}") && r!="") print t "\t" j "\t" r }'
-}
-# The test id a case command fills a template with; fails when the command is not that template.
-batch_id(){
-  local cmd=$1 tpl=$2 pre suf id
-  pre=${tpl%%\{tests\}*}; suf=${tpl#*\{tests\}}
-  [[ $cmd == "$pre"* && $cmd == *"$suf" ]] || return 1
-  id=${cmd#"$pre"}; id=${id%"$suf"}
-  [[ -n $id && $id != *[[:space:],+*]* ]] || return 1   # one plain test id, not a list or a pattern
-  printf '%s\n' "$id"
-}
-# JUnit XML → class<TAB>test<TAB>status<TAB>rep, one line per <testcase>. class is the full classname
-# (two packages' OrderTest stay apart); test drops `(…)` and `[n]`; status 0 pass, 1 failure/error,
-# 2 skipped; rep is 1 when the entry is a repetition of the same call — a bare name (go -count) or
-# `name()[k]` (JUnit 5 @RepeatedTest) — and 0 for a parameterised one (`name(String)[k]`, `name[k]`):
-# ten parameter sets are ten different calls, not ten repeats of one.
-junit(){
-  awk '
-    function attr(k,   m){ if (match($0, k "=\"[^\"]*\"")) { m=substr($0,RSTART,RLENGTH); sub(/^[^"]*"/,"",m); sub(/"$/,"",m); return m } return "" }
-    /<testcase[ \t>]/ {
-      c=attr("classname"); n=attr("name"); r=n; sub(/[\(\[].*/,"",n); r=substr(r, length(n)+1)
-      rp = (r=="" || r ~ /^\(\)\[[0-9]+\]$/) ? 1 : 0; st=0; open=1
-      if ($0 ~ /<testcase[^>]*\/>/) { print c "\t" n "\t" st "\t" rp; open=0 }
-      next }
-    open && /<(failure|error)[ \t>\/]/ { st=1 }
-    open && /<skipped[ \t>\/]/ && st==0 { st=2 }
-    open && /<\/testcase>/ { print c "\t" n "\t" st "\t" rp; open=0 }' "$@"
-}
-
 # run_batch dir base tpl join report — stdin: case<TAB>test-id lines. Records one runs.jsonl line
 # per case, like run() does, with the batch command beside the case's own.
 run_batch(){
@@ -199,6 +102,9 @@ run_batch(){
   pairs=$(cat)
   tests=$(cut -f2 <<<"$pairs" | awk -v j="$join" 'NR>1{printf "%s", j} {printf "%s", $0}')
   full=${tpl//\{tests\}/$tests}
+  # The case table is read here, in the repo, before any cd: a `red` worktree holds the base commit's
+  # .claude/ (or none), so rows read there would come back empty and the record would name no command.
+  local all; all=$(cases)
   (
     [ -z "$dir" ] || cd "$dir" || exit 1
     tree=$(fp_tree); f=${tree:0:12}; read -r tfp cfp < <(split_fp "$tree")
@@ -212,7 +118,7 @@ run_batch(){
     local rows=""; [ ${#xmls[@]} -eq 0 ] || rows=$(junit "${xmls[@]}")
     local id tid row task level cmd rep cnt bad reps result fall=() shown=0
     while IFS=$'\t' read -r id tid; do
-      row=$(cases | awk -F'\t' -v c="$id" '$1==c'); IFS=$'\t' read -r _ task level _ cmd rep _ _ <<<"$row"
+      row=$(awk -F'\t' -v c="$id" '$1==c' <<<"$all"); IFS=$'\t' read -r _ task level _ cmd rep _ _ <<<"$row"
       # A test id matches a classname in full or by its trailing `.Simple` part — `OrderTest#x`
       # matches every package's OrderTest (as `-Dtest=OrderTest#x` runs them all), `com.a.OrderTest#x`
       # only that one. cnt: entries seen; bad: failed or skipped; reps: repetitions of one call —
@@ -263,12 +169,30 @@ run_cases(){
     left=(${keep[@]+"${keep[@]}"})
     [ -z "$pairs" ] || { run_batch "$dir" "$base" "$tpl" "$join" "$report" <<<"${pairs%$'\n'}" || bad=1; }
   done 3<<<"$tpls"
+  # Say so when two or more cases are about to pay a runner start each: that is where the time goes,
+  # and the cause is usually one flag between a template and the rows (`-q`), which nothing else shows.
+  if [ ${#left[@]} -ge 2 ]; then
+    local cmds guess
+    cmds=$(for id in "${left[@]}"; do awk -F'\t' -v c="$id" '$1==c {print $5}' <<<"$all"; done)
+    guess=$(suggest_template <<<"$cmds")
+    if [ -n "$tpls" ]; then
+      echo "note: ${#left[@]} cases run one runner start each — their commands match no \`Batch:\` template word for word."
+      echo "      template: $(cut -f1 <<<"$tpls" | head -1)"
+      echo "      a case:   $(head -1 <<<"$cmds")"
+    else
+      echo "note: ${#left[@]} cases run one runner start each — no \`Batch:\` line in .claude/rules (/clio:test § 1b)."
+    fi
+    [ -z "$guess" ] || echo "      their own commands fit: Batch: \`$guess\` · join: … · report: …"
+  fi
   for id in ${left[@]+"${left[@]}"}; do ( run "$id" "$dir" "$base" ) || bad=1; done
   [ "$bad" -eq 0 ]
 }
 # The last recorded result per case id given on stdin: id<TAB>pass|fail|never.
+# `notrun` for a batch record whose report did not show the test at all (the build failed, the id is
+# wrong) — a fail, but not one that proves anything about the code.
 last_results(){ jq -Rn -r --arg ids "$(cat)" '($ids | split("\n") | map(select(.!=""))) as $w
-  | reduce (inputs | fromjson? | select(.case)) as $r ({}; .[$r.case] = $r.result)
+  | reduce (inputs | fromjson? | select(.case)) as $r ({};
+      .[$r.case] = (if $r.batch and $r.runs == 0 then "notrun" else $r.result end))
   | . as $m | $w[] | "\(.)\t\($m[.] // "never")"' "$RUNS"; }
 
 # Every runnable case of each task given — all tasks' cases in one run_cases, so a batch template
@@ -283,6 +207,7 @@ run_task(){
     ids+=$(awk -F'\t' -v t="$task" '$2==t && $5!~/^(|–|-)$/ {print $1}' <<<"$all")$'\n'
   done
   local list=(); while IFS= read -r id; do [ -n "$id" ] && list+=("$id"); done <<<"$ids"
+  local t0=$SECONDS
   run_cases "" "" "${list[@]}"
   res=$(printf '%s\n' "${list[@]}" | last_results)
   for task in "$@"; do
@@ -292,6 +217,7 @@ run_task(){
     total=$((total+n)); totalbad=$((totalbad+bad))
   done
   [ $# -eq 1 ] || echo "all: $((total-totalbad))/$total cases passed across $# tasks"
+  echo "took $((SECONDS-t0)) s"
   [ "$totalbad" -eq 0 ]
 }
 
@@ -345,6 +271,8 @@ red(){
     n=$((n+1))
     if [ "$r" = pass ]; then
       echo "NOT RED: $id passed on $label — it cannot tell that code from yours (change already committed? --base <the commit before it>)"; bad=$((bad+1))
+    elif [ "$r" = notrun ]; then
+      echo "NOT RED: $id did not run on $label — the report does not show it (build error?); a red must fail an assertion"; bad=$((bad+1))
     else echo "red: $id failed on $label"; fi
   done <<<"$res"
   echo "red on $label: $((n-bad))/$n cases failed as they must"
@@ -465,7 +393,9 @@ gate(){
         fail "$id: mutation command shows no threshold >= ${mutation_req}% (lowest threshold flag: ${m/#-1/none}) — pass it as --thresholds.break N / -DmutationThreshold=N / --threshold N / --min-score N; default is $MUTATION_MIN_THRESHOLD, override with \`NN%\` on the \`Mutation:\` line in plans/infra.md"
       fi
     fi
-    last=$(jq -Rc --arg c "$id" 'fromjson? | select(.case==$c)' "$RUNS" | tail -1)
+    # The last run of THIS code: a `red` run (red_base) ran on the base commit's code in a worktree —
+    # it feeds the red check below, never the "is it passing now" one.
+    last=$(jq -Rc --arg c "$id" 'fromjson? | select(.case==$c and (.red_base|not))' "$RUNS" | tail -1)
     [ -n "$last" ] || { fail "$id: never run"; continue; }
     jq -e '.result=="pass"' >/dev/null <<<"$last" || { fail "$id: last run failed"; continue; }
     jq -e --arg f "$cur" '.fp==$f' >/dev/null <<<"$last" || fail "$id: code changed since the last pass — re-run (see \`git status --short\`; a test output that is not gitignored counts as code)"
@@ -484,6 +414,7 @@ gate(){
       | [ ($p|length>0) and any($r[]; .key>$p[0] and .value.fp==$f and .value.result=="fail"),
           (if ($p|length)==0 then false else ($r[$p[-1]].value) as $ok
             | any($r[]; .key<$p[-1] and .value.result=="fail" and
+                ((.value.batch and .value.runs==0) | not) and   # not in the report: it never ran
                 (if .value.tfp and $ok.tfp then .value.tfp==$ok.tfp and .value.cfp!=$ok.cfp
                  else .value.fp!=$f end)) end) ]
       | "\(.[0]) \(.[1])"' "$RUNS")
@@ -509,7 +440,7 @@ coverage(){
   rows=$(cases | awk -F'\t' -v t="$task" '$2==t && $5!~/^(|–|-)$/')
   [ -n "$rows" ] || { echo "no cases"; return 0; }
   while IFS=$'\t' read -r id _ level covers cmd _ _ _; do
-    last=$(jq -Rr --arg c "$id" 'fromjson? | select(.case==$c) | .result' "$RUNS" | tail -1)
+    last=$(jq -Rr --arg c "$id" 'fromjson? | select(.case==$c and (.red_base|not)) | .result' "$RUNS" | tail -1)
     printf '%s\t%s\t%s\n' "$id" "$level" "${last:-never}"
   done <<<"$rows"
 }
