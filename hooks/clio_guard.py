@@ -1,25 +1,36 @@
 #!/usr/bin/env python3
 """clio_guard.py — PreToolUse hook. runs.jsonl is test evidence: only `clio test` may append to it.
 Refuses an Edit/Write on it and a Bash command that writes, deletes or reverts it any other way
-(redirect, tee, sed -i, rm, truncate, dd, mv, cp/install onto it, git restore/checkout). Reads —
-cat, jq, grep, a cp *from* it — pass. Acts only in a repo with .claude/clio, so another tool's
-runs.jsonl elsewhere is never touched. Exit 2 blocks the call and hands stderr to Claude.
+(redirect, tee, sed -i, rm, truncate, dd, mv, cp/install, git restore/checkout). Reads — cat, jq,
+grep, `cp runs.jsonl <somewhere outside the database dir>` — pass. Acts only in a repo with
+.claude/clio, so another tool's runs.jsonl elsewhere is never touched. Exit 2 blocks the call and
+hands stderr to Claude.
+The command is tokenized with shlex (quotes and `#` comments as bash reads them), split into simple
+commands, and each judged on its own. A `clio test ...` call is an excuse only when it leads its
+command and carries no `$(...)`, backtick or `<(...)` substitution. cp/install fail closed: the one
+shape allowed is `cp <this runs.jsonl> <destination outside .claude/clio/database>`.
 ponytail: pattern match on the command text — a script that opens the file itself gets past it.
 It stops the shortcut, not a determined bypass; the gate's fingerprint and approval do the rest.
 Python 3.9+, standard library only."""
 import json
 import os
 import re
+import shlex
 import sys
 
+B = r"(^|[\s(){}!`])"                                             # a command word starts here
+REDIRECT = re.compile(r">[>|]?\s*\S*runs\.jsonl")                 # > >> >| &> 2> onto it — raw text
 WRITES = [
-    re.compile(r">>?\s*\S*runs\.jsonl"),                                                   # > or >> onto it
-    re.compile(r"(^|\s)(tee|truncate|rm|dd)(\s|$)|sed\s+(-[a-zA-Z]*i|--in-place)"),
-    re.compile(r"(^|\s)mv(\s|$)"),
-    re.compile(r"git\s+(restore|checkout)(\s|$)"),
+    re.compile(B + r"(tee|truncate|rm|dd|shred)(\s|$)|" + B + r"sed\s+(\S+\s+)*(-[a-zA-Z]*i|--in-place)"),
+    re.compile(B + r"mv(\s|$)"),
+    re.compile(B + r"git\s+(restore|checkout)(\s|$)"),
 ]
-COPY = re.compile(r"(^|\s)(cp|install)(\s|$)")
-WRITER = re.compile(r"(^|[\s/])clio\s+test(\s|$)")                                    # bin/clio test …
+COPY = re.compile(r"^(\S*/)?(cp|install)$")
+WRITER = re.compile(r"^(\S*/)?clio\s+test(\s|$)")
+SUBST = ("$(", "`", "<(", ">(")
+SEPS = {";", "&", "&&", "|", "||", "\n", ";;", "|&"}
+DB = "/.claude/clio/database"
+ARG_OPTS = {"-S", "-m", "-o", "-g", "-t", "--suffix", "--mode", "--owner", "--group", "--target-directory"}
 
 
 def refuse(msg):
@@ -36,6 +47,76 @@ def clio_above(d):
         if parent == d:
             return False
         d = parent
+
+
+def commands(cmd):
+    """Simple commands as token lists. Quotes stay on the tokens (non-posix) so a quoted `#` is never
+    taken for a comment; an unquoted token starting with `#` ends its command, as in bash."""
+    lx = shlex.shlex(cmd, posix=False, punctuation_chars=";&|\n")
+    lx.whitespace = " \t\r"
+    lx.commenters = ""
+    lx.whitespace_split = True
+    out, cur, comment = [], [], False
+    for t in lx:
+        if t in SEPS or set(t) <= set(";&|\n"):
+            out.append(cur)
+            cur, comment = [], False
+        elif not comment:
+            if t.startswith("#"):
+                comment = True
+            else:
+                cur.append(t)
+    out.append(cur)
+    return [c for c in out if c]
+
+
+def unquote(t):
+    try:
+        parts = shlex.split(t)
+    except ValueError:
+        return t
+    return parts[0] if len(parts) == 1 else t
+
+
+def copy_ok(args, cwd):
+    """True only for `cp [opts] <this runs.jsonl> <dest outside the database dir>`. Anything else —
+    a target-directory option, not exactly two operands, the evidence file as destination — False."""
+    operands, skip, end = [], False, False
+    for a in (unquote(t) for t in args):
+        if skip:
+            skip = False
+        elif end or not a.startswith("-") or a == "-":
+            operands.append(a)
+        elif a == "--":
+            end = True
+        elif a.startswith("--target-directory") or (not a.startswith("--") and "t" in a[1:]):
+            return False
+        elif a in ARG_OPTS:
+            skip = True
+    if len(operands) != 2:
+        return False
+    src, dst = (os.path.normpath(os.path.join(cwd, p)) for p in operands)
+    return src.endswith(DB + "/runs.jsonl") and not (dst.endswith(DB) or DB + "/" in dst + "/")
+
+
+def check(cmd, cwd):
+    if REDIRECT.search(cmd):
+        refuse("a redirect onto runs.jsonl refused")
+    try:
+        cmds = commands(cmd)
+    except ValueError:
+        refuse("a command naming runs.jsonl that cannot be parsed refused")
+    for toks in cmds:
+        text = " ".join(toks)
+        if "runs.jsonl" not in text:
+            continue
+        if WRITER.match(text) and not any(s in text for s in SUBST):
+            continue
+        for i, t in enumerate(toks):
+            if COPY.match(unquote(t)) and not copy_ok(toks[i + 1:], cwd):
+                refuse("a cp/install touching runs.jsonl refused — only `cp runs.jsonl <outside the database dir>` passes: " + text)
+        if any(r.search(text) for r in WRITES):
+            refuse("a command writing, deleting or reverting runs.jsonl refused: " + text)
 
 
 def main():
@@ -55,17 +136,12 @@ def main():
         cmd = inp.get("command") or ""
         if not isinstance(cmd, str) or "runs.jsonl" not in cmd:
             return
-        # Clio's runs.jsonl only: named by its path, or a bare name inside a repo that has .claude/clio.
-        if "clio/database/runs.jsonl" not in cmd and not clio_above(data.get("cwd") or os.getcwd()):
+        cwd = data.get("cwd") or os.getcwd()
+        # Clio's runs.jsonl only: its directory named in the command, or a bare name inside a repo that
+        # has .claude/clio. The directory, not the full path: `cp x/runs.jsonl <db dir>/` names no file.
+        if "clio/database" not in cmd and not clio_above(cwd):
             return
-        # Split on ; && || | and newlines, then judge each simple command on its own.
-        for part in re.sub(r"(\|\||&&|;|\|)", "\n", cmd).split("\n"):
-            if "runs.jsonl" not in part or WRITER.search(part):
-                continue
-            words = part.split()
-            last = words[-1] if words else ""
-            if any(r.search(part) for r in WRITES) or (COPY.search(part) and last.endswith("runs.jsonl")):
-                refuse("a command writing, deleting or reverting runs.jsonl refused: " + part)
+        check(cmd, cwd)
 
 
 if __name__ == "__main__":

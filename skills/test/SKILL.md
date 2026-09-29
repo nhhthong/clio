@@ -4,7 +4,7 @@ description: Design, write, run and gate the tests for plan tasks, in batches �
 researches (Context7, web) and measures the fastest way to run many cases in one runner start, and
 records it as a `Batch:` line in `.claude/rules/`. The script records the evidence; a task passes only when every case passed on the current code. Use when the user asks to test, design test cases or run tests.
 argument-hint: "[task id such as 3.3 | several ids | area | gate <task-id>]"
-allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/bin/clio test *)
+allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/bin/clio test run *) Bash(${CLAUDE_PLUGIN_ROOT}/bin/clio test run-task *) Bash(${CLAUDE_PLUGIN_ROOT}/bin/clio test red *) Bash(${CLAUDE_PLUGIN_ROOT}/bin/clio test gate *) Bash(${CLAUDE_PLUGIN_ROOT}/bin/clio test history *) Bash(${CLAUDE_PLUGIN_ROOT}/bin/clio test coverage *) Bash(${CLAUDE_PLUGIN_ROOT}/bin/clio test fp)
 ---
 
 **Run only when the user asked for it, this turn** — by slash command, or in plain words ("test task 3.3", "viết test case", "chạy test"). None of these is a trigger: Clio's drift nudge · your own sense that the work looks finished · a TODO you wrote · a subagent's report. Unsure → ask in one line, don't run.
@@ -44,54 +44,12 @@ an approval. The rest waits for the next batch; say which.
 
 ## 1b. The fastest way to run — found once per stack
 
-How cases run costs more than anything else here, whatever the stack: a runner that boots something
-(a JVM, a framework, a container, a bundler) pays it once per command. One example, measured on a
-Maven + Spring Boot repo: 8 cases each as its own `mvn` took 72 s (boot ~7 s every time, test bodies
-under 0.5 s); the same 8 in one `mvn` took 11 s. So **before the first run** — a new case table, and
-just as much an existing one (a re-run, a table written before 4.2.0) — check for a `Batch:` line:
-
-- **A `Batch:` line in `.claude/rules/*.md` already covers this stack** → use it, skip the rest. Each
-  case's `Command` is that template with `{tests}` replaced by the one test it runs — word for word,
-  or the script will not merge it (it then runs alone, correct but slow).
-- **The case table already exists and no `Batch:` line does** → do the steps below now, before
-  running anything, and write the template **in the exact form the existing commands already use**
-  (`mvn -pl cafefin-api test -Dtest={tests}` for rows reading `mvn -pl cafefin-api test -Dtest=X#y`):
-  those rows then merge as they are — no row edited, no approval voided. A row that does not fit the
-  template runs alone; say which.
-- **None yet** → find it, before designing commands:
-  1. **Identify the stack and its runner from the repo**, not from habit: the manifests present
-     (`pom.xml`, `build.gradle*`, `package.json` scripts + `jest`/`vitest` config, `pyproject.toml` /
-     `pytest.ini`, `go.mod`, `Cargo.toml`, `*.csproj` / `*.sln`, `composer.json`…), the test config in
-     them, and how CI invokes the tests.
-  2. Look the runner up in **Context7** (web search if it has nothing; say which): how one command
-     selects several named tests (`-Dtest=A#m,B#n`, `--tests`, `-t`, `-k "a or b"`, `-run '^(A|B)$'`);
-     where it writes a **machine-readable report** — the script reads JUnit XML, which most runners
-     emit (Surefire by default; jest via `jest-junit`, pytest `--junitxml`, Go `gotestsum
-     --junitfile`, Rust `cargo nextest` JUnit profile, .NET `--logger junit`); no JUnit XML → no
-     batch line. How to repeat a test **inside one process** so the report shows repetitions of the
-     same call — JUnit 5 `@RepeatedTest(n)` (`name()[k]`), Go `-count=n` (the same name n times);
-     anything else (`pytest-repeat`'s `name[k-n]`, parameter sets) reads as different calls and the
-     case falls back to its own command. What keeps a heavy fixture warm across tests
-     (Spring's test-context cache — same config, one boot; Testcontainers reuse).
-  3. **Measure**, don't assume: one existing test on its own, then several in one command. Show both
-     numbers.
-  4. Propose the line for `.claude/rules/<stack>.md` and **ASK** before writing it:
-     ```
-     - Batch: `mvn -pl cafefin-api test -Dtest={tests}` · join: `,` · report: `cafefin-api/target/surefire-reports/TEST-*.xml`
-     ```
-     The template is the case commands' own text with the test id cut out — **copy it from the rows,
-     never from this example**: one extra flag (`-q`) and not a single row matches. `run-task` prints
-     a `note:` with the template the rows actually fit when two or more cases end up running alone.
-     `{tests}` is where the joined test ids go, `join` the separator the runner wants, `report` the
-     glob of the JUnit XML it leaves. One line per runner (per module when modules test apart).
-  5. No way to select several tests in one command, no XML report, or the measurement shows no gain
-     → no line; say why. Cases then run one command each, as before.
-- **Repeat without restarting.** A `concurrency` case needs `Repeat` ≥ 20: write the test to repeat
-  itself (`@RepeatedTest(20)`, `-count=20`) so the report shows 20 entries — the script counts them.
-  A test that does not repeat itself still works: the script sees fewer entries than `Repeat` and
-  runs that case alone, 20 times over, at 20 boots' cost. An existing concurrency test written that
-  way → propose the one-line change (`@Test` → `@RepeatedTest(20)`) before running it: the case row
-  stays as it is, only the test file changes.
+Before the first run on a stack — a new case table, and just as much an existing one (a re-run, a
+table written before 4.2.0) — look for a `Batch:` line in `.claude/rules/*.md` covering it. Found →
+each case's `Command` is that template with `{tests}` replaced by its one test id, word for word.
+None → read [BATCH.md](BATCH.md) and do what it says before running anything: one runner start for
+many cases is the largest saving here (Maven + Spring, 8 cases: 72 s → 11 s). A `concurrency` case
+repeats itself inside the test (`@RepeatedTest(20)`, `-count=20`) — BATCH.md § Repeat.
 
 ## 2. Seams
 
@@ -124,9 +82,9 @@ the plan's `Levels` lacks → say so in the report; do not add the level yoursel
   stated → no case; file `spec-blocked` via `/clio:memo`. Never invent a threshold or a fallback.
 - **Mutation** (the plan's `Levels` names it — the user agreed the task is beyond critical;
   `critical` alone does not) → one case, command exits non-zero below the threshold (Stryker `--thresholds.break`, PIT `mutationThreshold`, go-mutesting
-  score). Default 80 % unless the spec or an ADR sets one. The tool is settled once, by
-  `/clio:plan infra`; `Mutation: none` in `plans/infra.md` means the project decided against it and
-  the gate stops asking.
+  score). Default 80 % unless the spec or an ADR sets one. The tool is settled once, the first time
+  an area's `/clio:plan` agrees a task needs it (§ 3b); `Mutation: none` in `plans/infra.md` means the
+  project decided against it and the gate stops asking.
 - A tool the level needs and the repo lacks (Playwright, k6, Pact, a mutation tester) → propose it
   from its current docs (Context7), **ASK**, record the choice as an ADR per
   `${CLAUDE_PLUGIN_ROOT}/skills/memo/steps/WRAP-UP.md` § ADR.
@@ -168,7 +126,8 @@ Not applicable:
   4. Levels you would send back to `/clio:plan`, and ⚠️ values that blocked a case.
 
   The user may accept all, or all but some ("ok, trừ 3.2: thêm case X"). Write what was accepted and
-  record that yes, for exactly those tasks — nothing else runs `approve`:
+  record that yes, for exactly those tasks — nothing else runs `approve`. It is left out of this
+  skill's `allowed-tools` on purpose: the permission prompt it raises is the user's own yes, not yours:
   ```bash
   clio test approve 3.1 3.3 3.4      # one record and hash per task; the gate fails a task whose rows change after
   ```
@@ -190,41 +149,10 @@ line (§ 1b) that is one runner start for every case of every task in it; the ou
 `— batch`. Failures → fix
 the code (never loosen a test) and re-run the failing task. Refactor, re-run once.
 
-**Tasks that need red.** Write the tests first, then:
-- **The code does not exist yet** → add the bare seam (the signature, a route returning 501, a stub
-  returning the zero value), run the build, `run-task` → every case fails **on its assertion**. Then
-  implement and `run-task` again.
-- **The code exists, or the fix is written** → `clio test red <task>`: it runs those cases on the
-  code of the base commit (default `HEAD`, i.e. before your uncommitted change) in a worktree
-  holding today's test files, and records the red. The worktree is kept at `.git/clio-red` and
-  reused, so the next `red` rebuilds only what changed; `--fresh` starts it over. Nobody edits code to break it. Already
-  committed the change → `--base <the commit before it>`. Then `run-task` on today's code.
-
-Read every red's output: a red counts only if it failed **on its assertion** — a build error, a
-missing fixture or a wrong path is a red for the wrong reason; fix the test and redo it. Under a
-`Batch:` line the script checks part of this itself: a test the runner's report does not show (the
-base did not compile) is `NOT RED … did not run`, and the gate never counts it. When the base cannot
-compile the tests at all (they call code the base lacks), `red` cannot help — use the stub route
-above on today's code instead, and say so. A `red` run is never read as today's result: the gate's
-"last run" is the last run on this code, so run `run-task` after `red`, not the other way round. A case the
-script reports `NOT RED` passed on the old code. Two different reasons, two different answers —
-**never break code by hand to get a red**:
-- **The test is weak** — the bug was there and the case did not see it: strengthen the case (show
-  the user the changed row, approve again) and run `red` again.
-- **The behaviour was always right** — a hardening task: the base never had the bug, so no red
-  exists to find. This exit is for `critical` tasks only; a `regression` case that will not go red
-  does not reproduce its bug — rewrite it until it does. If the task names `mutation`, a passing
-  mutation case stands in for red on its other cases (the gate prints a `NOTE`). If it does not and many cases come back `NOT RED`, propose
-  `mutation` for the task to the user (`/clio:plan` adds it) — unless `plans/infra.md` says
-  `Mutation: none`. Otherwise, one case at a time, propose a waiver in the tests file, under the
-  table:
-  ```
-  Red waived:
-  - 3.4-u2 — correct since before a1b2c3d; `red --base a1b2c3d` passed
-  ```
-  It is part of the approved table, so the user says yes to it like to a case. The gate accepts it
-  only if a `red` run of that case with these test files **passed** on a base commit — a waiver
-  stands on a tried red, never instead of one.
+**Tasks that need red** — a `regression` case, or a `critical` task: read [RED.md](RED.md) first.
+In short: write the tests first; code that does not exist yet → a bare stub and `run-task`; code
+that exists → `clio test red <task>` on the base commit, then `run-task`. A red counts only if it
+failed on its assertion, and **never break code by hand to get a red**.
 
 - Red must come from **the code, never the test**: the script fingerprints test files and code
   separately. Test files are recognised by path (`_test.`, `.test.`, `.spec.`, `test_*.py`, `tests/`,
@@ -232,14 +160,18 @@ script reports `NOT RED` passed on the old code. Two different reasons, two diff
 - Long levels (`load`, `stress`, `perf`, `mutation`, e2e with a UI, `concurrency` with a big
   `Repeat`): run them with a Bash timeout that covers them (up to 600000 ms) or `run_in_background`;
   each repeat is capped at `CLIO_TIMEOUT` seconds (default 600) — raise it for those
-  (`CLIO_TIMEOUT=1800 clio test run-task …`). Never start infra (docker, a staging target), use a
+  (`CLIO_TIMEOUT=1800 clio test run-task …`). **Under a `Batch:` line this cap covers the whole
+  runner start, not each case or repeat inside it** — a long case sharing a batch needs the batch's
+  `CLIO_TIMEOUT` raised, not a budget of its own. Never start infra (docker, a staging target), use a
   secret or hit a paid or shared service on your own: say what is needed and ask.
 - **One runner at a time per build.** Never start a test or build command while another one runs
   on the same module — Maven, Gradle, cargo and most bundlers share one output directory
   (`target/`, `build/`, `dist/`) and a second writer corrupts it (half-written class files, then
   failures that are not the code's). A long run in `run_in_background` means nothing else touches
   that build until it has finished; with a `Batch:` line the slow cases are in the same single run
-  anyway, so there is nothing to put in the background.
+  anyway, so there is nothing to put in the background. Create no new file while a run is going
+  either: an untracked file that appears during a run is recorded as its artifact and left out of the
+  fingerprint, so later edits to it would not void the pass.
 - One case to re-run on its own (a flaky suspect) → `clio test run <case-id>`; what it did before →
   `clio test history <case-id>`.
 

@@ -6,7 +6,7 @@ import re
 import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "lib"))
-from cliolib.testkit import clio, done, eq, git, lines, ok, out, scratch, write  # noqa: E402
+from cliolib.testkit import clio, done, eq, git, lines, ok, out, read, scratch, write  # noqa: E402
 
 
 def q(*a):
@@ -124,6 +124,21 @@ eq(lines(q("spec-diff", "--name-only")), [S + "a.md", S + "b.md"], "uncommitted 
 ok(re.search(r"(?m)^\+limit: 10", q("spec-diff")), "spec-diff lost the content")
 q("spec-mark")
 eq(lines(q("spec-diff", "--stat")), [], "re-mark moves the baseline")
+
+# The baseline's own bookkeeping must never live inside a spec file — requirements.md sits in the
+# same tree spec-diff hashes, so a line rewritten there on every mark would make it look "edited"
+# on every single sweep, forever, with nothing actually changed.
+R = ".claude/clio/docs/specs/requirements.md"
+write(R, "# Requirements\n\n| # | Task | Spec file(s) | Decision status (NOT build status) |\n"
+      "|---|---|---|---|\n| 1 | x | m | ✅ |\n")
+q("spec-mark", "first ingest")
+eq(lines(q("spec-diff", "--stat")), [], "requirements.md just marked shows no diff")
+q("spec-mark", "re-marked, nothing changed")
+eq(lines(q("spec-diff", "--stat")), [], "marking again with no spec edit still shows nothing changed")
+write(R, read(R) + "| 2 | y | m | ⚠️ |\n")
+eq(lines(q("spec-diff", "--name-only")), [R], "a real edit to requirements.md itself is still seen")
+q("spec-mark", "picked up the new row")
+eq(lines(q("spec-diff", "--stat")), [], "baseline moved again")
 
 write(".claude/rules/rb.md", '---\npaths: ["lib/**/*.rb", "app/*.rb"]\n---\n- r\n')
 eq(q("rules", "app/x.rb").count("rb.md"), 1, "inline paths: list parsed")

@@ -1,5 +1,4 @@
 # Requirements — row → spec file index
-Last ingest: <written by /clio:ingest>
 
 Domains — the only values allowed in the `domain` field of both ledgers, by business area served,
 never by directory: <domains, e.g. `account` `checkout` `infra` `all`>

@@ -32,6 +32,8 @@ for t in "${ts[@]}"; do c=${t%%#*}; m=${t#*#}; [[ $c == *.* ]] && c=${c##*.}
     par*)  for k in 1 2 3; do printf '<testcase name="%s(String)[%d]" classname="pkg.%s"/>\n' "$m" $k "$c" >> $out; done ;;
     fail*) printf '<testcase name="%s" classname="pkg.%s">\n<failure message="x"/>\n</testcase>\n' "$m" "$c" >> $out ;;
     rep*)  for k in 1 2 3; do printf '<testcase name="%s()[%d]" classname="pkg.%s"/>\n' "$m" $k "$c" >> $out; done ;;
+    maybe*) [ -e reports/hide ] || printf '<testcase name="%s" classname="pkg.%s"/>\n' "$m" "$c" >> $out ;;
+    Multi*) for k in a b c; do printf '<testcase name="%s" classname="pkg.%s"/>\n' "$k" "$c" >> $out; done ;;
     *)     printf '<testcase name="%s" classname="pkg.%s" time="0.1"/>\n' "$m" "$c" >> $out ;;
   esac
 done
@@ -175,5 +177,44 @@ ok("run-task", "7.8")
 has("7.8", "never seen red on a critical task")
 if not grep("^took [0-9]* s$", out("run-task", "7.8")):
     miss("run-task does not say how long it took")
+
+# a batch record of a case the report did not show (timeout, build error) is not a fail of the case:
+# passing again on the same code must not read as flaky
+add(P, "| 7.9 | not run is not flaky | 1 | unit | – | – | [ ] |")
+add(T3, "| 7.9-u1 | 7.9 | unit | unit.1 | a | a | `bash fakeunit.sh K#maybeNine` | 1 |")
+ok("run-task", "7.9")
+os.makedirs("reports", exist_ok=True)
+write("reports/hide", "x\n")
+o = out("run-task", "7.9")
+if not grep(r"^fail: 7\.9-u1 \(unit\) 0/0 — batch — not in the report", o):
+    miss("hidden case not failed as not-in-report: " + o)
+os.remove("reports/hide")
+ok("run-task", "7.9")
+t("approve", "7.9")
+if "flaky" in out("gate", "7.9"):
+    miss("a not-in-report batch record read as flaky: " + out("gate", "7.9"))
+
+# a class-wide test id (no `#`) matches every method of the class: three methods are three calls,
+# not three repetitions of one — Repeat 3 falls back to its own command
+add(P, "| 7.10 | class id | 1 | unit | – | – | [ ] |")
+add(T3, "| 7.10-u1 | 7.10 | unit | unit.1 | a | a | `bash fakeunit.sh MultiCls` | 3 |")
+o = out("run-task", "7.10")
+if "7.10-u1's report shows fewer repetitions" not in o:
+    miss("distinct methods of one class counted as repetitions: " + o)
+
+# a row that cannot run (bad Repeat) runs nothing and records nothing: run-task and red must not
+# read an older record of the case as this call's result
+add(P, "| 7.11 | stale result | 1 | critical · unit | – | – | [ ] |")
+add(T3, "| 7.11-u1 | 7.11 | unit | unit.1 | a | a | `bash fakeunit.sh K#chkEleven` | 1 |")
+if not grep("^red: 7.11-u1 failed", out("red", "7.11", "--base", "HEAD~1")):   # chk77.txt reads "old" there
+    miss("7.11 setup: no red to go stale")
+ok("run-task", "7.11")
+sub(T3, "K#chkEleven` | 1 |", "K#chkEleven` | x |")
+rc, o = t("run-task", "7.11")
+if rc == 0 or "1/1 cases passed" in o:
+    miss("run-task reported a case that did not run as passed: %d %s" % (rc, o))
+rc, o = t("red", "7.11", "--base", "HEAD~1")
+if rc == 0 or grep("^red: 7.11-u1 failed", o):
+    miss("red reported a case that did not run as red: %d %s" % (rc, o))
 
 done()

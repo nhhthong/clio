@@ -2,7 +2,7 @@
 name: plan
 description: "Break a spec area into the smallest independently testable tasks — one observable behaviour each, researched against the code and the library docs, with the test levels it needs (unit, api, security, concurrency…) — written to .claude/clio/docs/plans/<area>.md in dependency order. `infra` goes first: it turns the stack /clio:ingest decided (memory/infra.md), or the stack the repo already has, into toolchain and scaffold tasks and writes .claude/rules/<stack>.md. Never chooses a stack. Run `infra` after /clio:ingest, an area after that, and again after /clio:ingest moves a row."
 argument-hint: "[infra | memory/<area>.md | a requirements.md row number | a keyword]"
-allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/bin/clio q *) Bash(${CLAUDE_PLUGIN_ROOT}/bin/clio test coverage *)
+allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/bin/clio q *) Bash(${CLAUDE_PLUGIN_ROOT}/bin/clio test coverage *) Bash(${CLAUDE_PLUGIN_ROOT}/bin/clio validate *)
 ---
 
 **Run only when the user asked for it, this turn** — by slash command, or in plain words ("plan the checkout area", "chia nhỏ task đi").
@@ -13,8 +13,8 @@ don't run.
 A spec says what must be true. This skill turns it into tasks small enough to prove one at a time.
 *Which kinds* of proof a task needs is decided here; the cases themselves are `/clio:test`'s. It
 writes `.claude/clio/docs/plans/<area>.md`, for `infra` also `.claude/rules/<stack>.md`, and once
-per project the `Mutation:` line in `plans/infra.md` (§ 3b) and its ADR; ledgers, specs and settings
-stay untouched. Nothing is implemented here.
+per project the `Mutation:` line in `plans/infra.md` (§ 3b) and its ADR. Except for indexing that
+mutation ADR, ledgers, specs and settings stay untouched. Nothing is implemented here.
 
 Target (may be empty — then ask which area): $ARGUMENTS
 
@@ -130,11 +130,15 @@ first time the user agrees to `mutation` for a task (§ 3) and `plans/infra.md` 
 settle the tool for the whole project right there: look up this stack's mutation tester in Context7
 (PIT for JVM, Stryker for JS/TS/.NET, mutmut for Python, go-mutesting…), show the install and the
 threshold flag, and **ASK**.
-- Yes → an ADR, `Mutation: <tool> (ADR <file>)` under `plans/infra.md`'s header — append `, NN%`
+
+Either way, record the choice as an ADR (`${CLAUDE_PLUGIN_ROOT}/skills/memo/steps/WRAP-UP.md` § ADR,
+indexed with `"type":"adr"`, `"domain":"infra"`, `"req":["0"]`, then
+`${CLAUDE_PLUGIN_ROOT}/bin/clio validate index`).
+- Yes → the ADR, `Mutation: <tool> (ADR <file>)` under `plans/infra.md`'s header — append `, NN%`
   after the file when the threshold differs from LEVELS.md's 80% default; `/clio:test`'s gate reads
   that number and refuses a mutation case whose command doesn't show it — and a re-plan row there
   installing it (`Levels` `smoke`); the area task keeps `mutation`.
-- No → an ADR saying so and `Mutation: none (ADR <file>)` under `plans/infra.md`'s header; the area
+- No → the ADR saying so and `Mutation: none (ADR <file>)` under `plans/infra.md`'s header; the area
   task drops `mutation`. From then on no task is proposed it, and the gate refuses a plan row that
   still names it.
 Either way the question is not asked again.

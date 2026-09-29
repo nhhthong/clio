@@ -9,7 +9,9 @@ USAGE = """# clio q — every read of Clio's ledgers, in one place. Read-only.
 #   changed                                   files this work touched: uncommitted + untracked, .claude/ excluded
 #   commit <file>...                          the commit holding these files — empty while any is uncommitted
 #   unrecorded [N]                            commits since the last one any index record names: hash<TAB>docs|-
-#   spec-mark                                 snapshot the spec files (committed or not) as ingest's baseline
+#   spec-mark [summary...]                    snapshot the spec files (committed or not) as ingest's baseline,
+#                                              printed with when + the summary — the only record of it, never
+#                                              written into a spec file itself
 #   spec-diff [git-diff args]                 spec files now vs that baseline — hand edits since the last ingest
 # Filters are OR'd; none given → everything. `req` compares as a string, so 7.1 and 7.10 stay apart."""
 import fnmatch
@@ -272,22 +274,28 @@ def spec_tree():
             os.remove(idx)
 
 
-def spec_mark():
+def spec_mark(args):
+    """The baseline lives here, never as a line inside a spec file: anything under docs/specs/ is
+    specification, and a bookkeeping line there would be part of its own diff. `summary` (this run's
+    ingest report, one line) rides the commit message — the commit's own date is when."""
     if not c.is_git():
         print("not a git repository — no baseline to keep", file=sys.stderr)
         sys.exit(1)
+    summary = " ".join(args) if args else "clio: ingest baseline"
     # A commit object under a local ref keeps the tree from `git gc`; refs/clio/* is not pushed by default.
     tree = spec_tree()
     commit_id = c.git_out(["-c", "user.name=clio", "-c", "user.email=clio@localhost",
-                           "commit-tree", tree, "-m", "clio: ingest baseline"])
+                           "commit-tree", tree, "-m", summary])
     c.git(["update-ref", "refs/clio/ingest", commit_id])
-    print(c.git_out(["rev-parse", "--short", tree]))
+    when = c.git_out(["log", "-1", "--format=%cd", "--date=format:%Y-%m-%d %H:%M", "refs/clio/ingest"])
+    print("Baseline: %s" % c.git_out(["rev-parse", "--short", tree]))
+    print("Last ingest: %s — %s" % (when, summary))
 
 
 def spec_diff(args):
     base = c.git_out(["rev-parse", "-q", "--verify", "refs/clio/ingest^{tree}"])
     if not base:
-        print("no ingest baseline in this clone — fall back to the Last ingest commit, or reconstruct",
+        print("no ingest baseline in this clone (it is clone-local, never pushed) — reconstruct, see /clio:ingest § 6",
               file=sys.stderr)
         sys.exit(1)
     sys.exit(subprocess.call(["git", "diff"] + args + [base, spec_tree()]))
@@ -357,7 +365,7 @@ def main(argv):
     elif cmd == "unrecorded":
         unrecorded(args)
     elif cmd == "spec-mark":
-        spec_mark()
+        spec_mark(args)
     elif cmd == "spec-diff":
         spec_diff(args)
     elif cmd == "rules":

@@ -56,6 +56,24 @@ deny("Bash", "command", "mv %s /tmp/old.jsonl" % R)
 allow("Bash", "command", "cp %s /tmp/backup.jsonl" % R)            # a copy *from* it is a read
 deny("Bash", "command", "echo x >> runs.jsonl", cwd=os.path.join(C, ".claude/clio/database"))   # bare name, inside Clio
 allow("Bash", "command", "python train.py > logs/runs.jsonl", cwd=N)                           # another tool, no Clio
+deny("Bash", "command", "/p/bin/clio test run 3.3-u1 $(rm %s)" % R)          # a substitution is its own command
+deny("Bash", "command", "/p/bin/clio test run 3.3-u1\nrm %s" % R)            # a newline starts another command
+deny("Bash", "command", "rm %s  # clio test cleanup" % R)                    # naming the writer in a comment excuses nothing
+deny("Bash", "command", "(rm %s)" % R)                                       # a subshell is still rm
+deny("Bash", "command", "echo x >| " + R)                                    # clobber redirect
+deny("Bash", "command", "sed -E -i s/a/b/ " + R)                             # -i need not come first
+# cp/install fail closed: the only pass is `cp <this runs.jsonl> <outside the database dir>`
+deny("Bash", "command", "cp /tmp/fake %s  # restoring last week's backup" % R)   # a trailing comment hides no destination
+deny("Bash", "command", "cp /tmp/fake %s --preserve=mode" % R)               # an option after the destination
+deny("Bash", "command", "cp '/tmp/fake #1' " + R)                            # a quoted # is no comment
+deny("Bash", "command", "cp 'a;b' " + R)                                     # a quoted ; splits nothing
+deny("Bash", "command", "cp -t .claude/clio/database /tmp/runs.jsonl")       # target-directory form
+deny("Bash", "command", "cp /tmp/runs.jsonl .claude/clio/database/")         # a directory destination
+deny("Bash", "command", "install -m 644 /tmp/fake " + R)
+deny("Bash", "command", "cp 'unbalanced " + R)                               # unparseable → refused
+allow("Bash", "command", "cp -p %s /tmp/" % R)
+allow("Bash", "command", "ls .claude/clio/database  # runs.jsonl is there")   # a comment is not a write
+allow("Bash", "command", "grep pass %s > /tmp/out.txt" % R)
 
 tmp.cleanup()
 if bad == 0:
