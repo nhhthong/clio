@@ -1,8 +1,13 @@
 ---
 name: test
-description: Design, write, run and gate the tests for plan tasks, in batches — cases per test level the plan named, expected values from the spec, approved in one question; one run per task, red only where it proves something (regression, critical), produced from the base commit instead of breaking code by hand. Before the first run on a stack it
-researches (Context7, web) and measures the fastest way to run many cases in one runner start, and
-records it as a `Batch:` line in `.claude/rules/`. The script records the evidence; a task passes only when every case passed on the current code. Use when the user asks to test, design test cases or run tests.
+description: >
+  Design, write, run and gate the tests for plan tasks, in batches — cases per test level the plan named,
+  expected values from the spec, approved in one question; one run per task, red only where it proves
+  something (regression, critical), produced from the base commit instead of breaking code by hand.
+  Before the first run on a stack it researches (Context7, web) and measures the fastest way to run many
+  cases in one runner start, and records it as a `Batch:` line in `.claude/rules/`. The script records
+  the evidence; a task passes only when every case passed on the current code. Use when the user asks
+  to test, design test cases or run tests.
 argument-hint: "[task id such as 3.3 | several ids | area | gate <task-id>]"
 allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/bin/clio test run *) Bash(${CLAUDE_PLUGIN_ROOT}/bin/clio test run-task *) Bash(${CLAUDE_PLUGIN_ROOT}/bin/clio test red *) Bash(${CLAUDE_PLUGIN_ROOT}/bin/clio test gate *) Bash(${CLAUDE_PLUGIN_ROOT}/bin/clio test history *) Bash(${CLAUDE_PLUGIN_ROOT}/bin/clio test coverage *) Bash(${CLAUDE_PLUGIN_ROOT}/bin/clio test fp)
 ---
