@@ -24,9 +24,9 @@ Clio doesn't change the model — it changes how project knowledge is organized.
 
 ## `/clio:context` — back to work in seconds
 
-<video src="resources/demo.mp4" controls muted width="100%"></video>
+![Clio context demo](resources/demo.gif)
 
-*[Watch the demo](resources/demo.mp4): `/clio:context` loads the spec, prior task docs, and open debt for an area in about 4 seconds.*
+*`/clio:context` loads the spec, prior task docs, and open debt for an area in about 4 seconds.*
 
 ## `/clio:test` — done means proven
 
