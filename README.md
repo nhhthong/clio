@@ -22,6 +22,12 @@ Every Claude Code session starts cold. `CLAUDE.md` turns into a dumping ground, 
 
 Clio doesn't change the model — it changes how project knowledge is organized. Each kind of knowledge has one place. "Unverified" is a valid answer. A short loop writes the session back to disk when you're done.
 
+## `/clio:context` — back to work in seconds
+
+<video src="resources/demo.mp4" controls muted width="100%"></video>
+
+*[Watch the demo](resources/demo.mp4): `/clio:context` loads the spec, prior task docs, and open debt for an area in about 4 seconds.*
+
 ## `/clio:test` — done means proven
 
 ```text
