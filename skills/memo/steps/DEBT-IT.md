@@ -1,96 +1,39 @@
-# Step 4 — Log open items: `.claude/clio/database/debt.jsonl`
+# Step 4 — Log open items: `debt.jsonl`
 
-`index.jsonl` = what was built, `debt.jsonl` = what is owed. Keyed by `id`, **append-only**: an
-update is a new line under the same `id` restating the record **in full** (readers take the last
-line per `id`, so a field you leave out is a field you erased). Never rewrite, reorder or delete a
-line.
+`index.jsonl` = what was built, `debt.jsonl` = what is owed. Keyed by `id`, append-only, last line per `id` wins. Write with `clio add debt`: a record names only what is its own or what changes, the rest is carried over, the lines are validated and removed again on a `FAIL`. Never edit a line by hand.
 
 ## 1. Close what this run finished
+`clio q owed --req <req>` (and what `clio:context` flagged for the area, not only your diff). Resolved → `{"id":"<id>","status":"done","action":"…<commit hash>"}`. Partly → `{"id":"<id>","status":"in-process","what":["<what is left>"]}`. Unblocked but not finished → `{"id":"<id>","blocked_by":null}`.
 
-```bash
-clio q owed --req <req>
-```
-Fully resolved → append with `status:"done"`, and the commit hash, if any, in `action`. Partly → `status:"in-process"`,
-narrow `what` to what is left. Unblocked but not finished → `blocked_by:null`, keep `status`. Include
-the items `clio:context` flagged for this area, not only your diff.
-
-**A `spec-delta` also names the docs it invalidated, in `docs[]`.** `/clio:ingest` put them there
-because it read them to work out the delta. Closing or narrowing one, open every doc in that list
-that is **not** the doc this run wrote, and relabel the section the change made untrue —
-`## [SUPERSEDED YYYY-MM-DD] <heading>`, plus `— REVERTED, DO NOT RE-IMPLEMENT` when the code is gone
-(`WRITE-DOC.md` § UPDATE). Keep the body; it is still the record of what was built and why.
-
-**A withdrawn task works the same way**: `clio test withdraw` prints `doc: <path> [tasks] relabel …` for each doc
-that describes it. A doc whose tasks are all withdrawn gets `## Summary` and `## Decisions` relabelled in full
-(`## [SUPERSEDED YYYY-MM-DD] <heading> — REVERTED, DO NOT RE-IMPLEMENT`); a doc that also covers live tasks
-gets only the bullets about the withdrawn ones relabelled. Each doc touched gets its `## Change Log` line and
-a restated index record (`clio validate index <N>`). Close the `spec-delta` the withdrawal answers.
-
-Skip this and hop 2 keeps returning that doc as current state, because nothing in a ledger record
-says its subject was replaced — a reader asking how the feature works opens a doc describing code
-this run just removed. Cannot tell which section went stale → file a `doc-stale` record naming the
-doc rather than guessing, and say so in the report.
+**A `spec-delta` names the docs it invalidated in `docs[]`.** Closing or narrowing one, relabel the section the change made untrue in every doc of that list that this run did not write: `clio doc` with `"relabel":[…]` (`## [SUPERSEDED date] … — REVERTED, DO NOT RE-IMPLEMENT`; the body stays). Skip it and `clio:context` keeps serving a doc about code that is gone. Cannot tell which section went stale → file a `doc-stale` record naming the doc, and say so. A withdrawn task: `RARE.md`.
 
 ## 2. Was this run verified?
-
-Verification is `/clio:test`'s evidence, never your account of it. For each id in `plan_tasks`:
-```bash
-clio test gate <task-id>
-```
-- `OK` → `clio test tick <task-id>` (+ `--commit <hash>` if step 1 found one): it runs the gate
-  again and records the task done — the only way a task becomes done. Paste the `OK` line under
-  `## Testing Done`.
-- Anything else → leave `[ ]`, file an `unverified` record naming the gate's FAIL lines, and tell the
-  user `/clio:test <task-id>` is owed. A gate line `flaky —` is `code-debt` with `what`
-  starting `flaky:`.
-- `plan_tasks` empty (work outside any plan) → no gate to run; `unverified` unless the user names the
-  check that ran. Never tick a task step 1 was unsure about.
+Verification is `/clio:test`'s evidence, never your account of it. For each id in `plan_tasks`: `clio test gate <id>`.
+- `OK` → `clio test tick <id>` (+ `--commit <hash>` if step 1 found one): it gates again and records the task done, the only way a task becomes done. Put the `OK` line in `testing`.
+- Anything else → leave it open, file an `unverified` record naming the FAIL lines, tell the user `/clio:test <id>` is owed. A `flaky —` line is `code-debt` with `what` starting `flaky:`.
+- `plan_tasks` empty → no gate; `unverified` unless the user names the check that ran. Never tick a task step 1 was unsure about.
 
 ## 3. New records
-
-One per `## Follow-up` bullet that outlives this session. Existing `id` for the same problem →
-reuse it (`clio q owed --all --id <id>`); else pick a new one.
-Group by problem, never mix kinds in one record.
+One per `## Follow-up` bullet that outlives this session, grouped by problem, never mixing kinds. The same problem as an existing record → reuse its `id` (`clio q owed --all --id <id>`).
 
 | `kind` | Meaning |
 |---|---|
-| `code-debt` | known-wrong code; prefix `what` with `perf:` or `flaky:` when that is the nature |
-| `unverified` | shipped, never verified by any test, build or recorded manual run |
+| `code-debt` | known-wrong code; `what` starts `perf:` or `flaky:` when that is the nature |
+| `unverified` | shipped, never verified by a test, build or recorded manual run |
 | `doc-stale` | a doc describes something untrue |
-| `spec-delta` | spec moved, code hasn't — `/clio:ingest` writes these |
-| `spec-blocked` | waiting on an outside answer — the filing record names it in `blocked_by`; a later line nulls it once unblocked (§ 1) |
+| `spec-delta` | spec moved, code hasn't (`/clio:ingest` writes these) |
+| `spec-blocked` | waits on an outside answer; the filing record names it in `blocked_by`, a later line nulls it |
 
-All 14 fields, always present (`null` / `[]`, never omitted):
-
-| Field | Meaning |
-|---|---|
-| `date` | today |
-| `id` | short kebab-case key, stable across updates |
-| `kind` | one of the five above |
-| `status` | `pending` / `in-process` / `done` |
-| `domain` | same vocabulary as `index.jsonl` |
-| `what` | array — what is actually wrong or unclear |
-| `req` | `requirements.md` rows this blocks, as strings (`["7.10"]`), `[]` if none |
-| `specs` | spec file paths this depends on |
-| `docs` | task/decision docs where it was raised, incl. this run's |
-| `code` | files/paths that must change, `[]` only if genuinely unknown |
-| `action` | best-guess fix, 1–2 sentences |
-| `source` | where it came from (thread, meeting, `<doc> #n`), `null` if own work |
-| `blocked_by` | the concrete missing thing, or `null` |
-| `issue` | related `id` in this file, else `null` |
-
+A **new** record names `id`, `kind`, `domain`, `what`, plus what it has: `req` (strings, `["7.10"]`), `specs`, `docs` (incl. this run's), `code`, `action` (best-guess fix), `source`, `blocked_by` (the concrete missing thing, or null), `issue` (a related `id`). `status` starts `pending`, `date` is today; the rest start empty.
 ```bash
-cat >> .claude/clio/database/debt.jsonl <<'EOF'
-{"date":"YYYY-MM-DD","id":"<kebab-key>","kind":"code-debt","status":"pending","domain":"cart","what":["<what is wrong>"],"req":["15"],"specs":[".claude/clio/docs/specs/memory/products-pricing.md"],"docs":[".claude/clio/docs/tasks/<feature>/<id>_<name>.md"],"code":["app/Services/CartService.php:52"],"action":"<fix>","source":null,"blocked_by":null,"issue":null}
+clio add debt <<'EOF'
+{"id":"<kebab-key>","kind":"code-debt","domain":"cart","what":["<what is wrong>"],"req":["15"],"specs":[".claude/clio/docs/specs/memory/pricing.md"],"docs":[".claude/clio/docs/tasks/<feature>/<id>_<name>.md"],"code":["app/CartService.php:52"],"action":"<fix>"}
+{"id":"<an existing id>","status":"done"}
 EOF
-clio validate debt
 ```
-Appended several → `clio validate debt <N>`. `FAIL` → remove exactly the lines you appended (`sed -i.bak '$d'` once per line, then `rm` the `.bak`), fix, re-append.
+Several records go in one call; one bad record refuses all. A `spec-blocked` must name its blocker when filed.
 
-## 4. Ledger honesty, scoped to this area only
-
-A ⚠️/❌ row you served with no open record tracking it → write one. A record in this area whose
-`blocked_by` was answered long ago, or a reverted fix filed as `spec-blocked` → append a corrected
-line under the same `id`. Records outside this area → leave alone, mention in the report.
+## 4. Ledger honesty, this area only
+A ⚠️/❌ row you served with no open record → write one. A record whose `blocked_by` was answered long ago, or a reverted fix filed as `spec-blocked` → update it. Records outside this area: leave alone, mention in the report.
 
 Next: `WRAP-UP.md`.

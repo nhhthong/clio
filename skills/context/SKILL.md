@@ -1,82 +1,24 @@
 ---
 name: context
 description: Load the spec, prior task docs and open debt for an area before working in it. Use before any non-trivial task, and when the user asks "where are we", "what's next", "what should I do now", "which clio skill", "why is X like this" or "any history on this".
-argument-hint: "[area | requirements row | debt id | question — omit for the overview]"
+argument-hint: "[area | requirements row | task id | debt id | file | word — omit for the overview]"
 allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/bin/clio q *) Bash(${CLAUDE_PLUGIN_ROOT}/bin/clio validate all)
 ---
 
-# Related Context
-
 Target (may be empty): $ARGUMENTS
 
-Every ledger read goes through one read-only script. The hop files call it `clio q`; each Bash call is
-a fresh shell, so always run it by its full path, never through a variable:
-`${CLAUDE_PLUGIN_ROOT}/bin/clio q`.
+**One call:** `${CLAUDE_PLUGIN_ROOT}/bin/clio q context $ARGUMENTS` (~50 ms). It gives the requirement rows and their spec files, what was built (the last docs' `Decisions`, `Side Effects`, `Follow-up`), the feature's shared memory, what is owed, the rules that bind the files, the plan, and a `looks wrong:` list. Several targets merge (`q context 3.5 ui`); none prints the overview.
 
-Also the answer to "what do I still owe?" — hop 3 alone, filtered, is the whole of it.
+- **Overview** (the user asked "where are we / what's next / continue", no area): run it with no target and report in ≤ 10 lines: per area `done/open` and the first open task with its levels · debt `queue` vs `blocked` · last memo. A `next:` whose `needs` are not done is not next: say what it waits on. End with the `suggest:` lines **verbatim**: a script computed them from the ledgers and git, so do not reword them or add your own; they are how a user who does not know which skill fits finds out.
+- **A target** (an area, row, task, debt id, file or word; or you triggered this before a task, then its area or rows): run it and answer from the report. Open a spec file or doc **only** when the report points at a decision you need whole. A follow-up digs from where the report stopped; never re-run the overview, never read `.claude/clio/docs/` whole. Nothing on record → say so in a line; do not rebuild an answer from the code.
 
-**Two depths.** The *user* asked "where are we / what's next / continue" with no area named →
-**hop 0**: run `clio q summary` and open nothing else. Report in ≤ 10 lines: per area `done/open` and
-the first open task with its levels · debt `queue` vs `blocked` · last memo. A `next:` whose `Needs`
-is unticked is not next — say which task it waits on. End with the `suggest:` lines of the summary,
-verbatim: a script computed them from the ledgers and git, so do not reword them or add your own. They are
-how a user who does not know which skill fits finds out. Stop there. Anything
-else — a target (area, row, debt `id`, file), a "why is X like this?" question, or **you triggered
-this yourself before a task** (then the target is that task's area; an empty `$ARGUMENTS` is not a
-reason for hop 0) → hops 1–4 below, then open **only** the docs those records point at and answer
-with `file:line` quotes. A follow-up question in the same session
-digs from where the last hop stopped; never re-run hop 0, never fall back to reading `.claude/clio/docs/`
-whole. Nothing on record → say so; do not reconstruct an answer from the code.
+## Reading the report
+- **A row marker decides what happens next.** ✅ → a decision exists, build against it. ⚠️/❌ → something is undecided: stop and ask, naming the row. A debt record overrides the coarse marker for its own piece: `actionable now` lets you build that piece, `BLOCKED by …` keeps the stop. `blocked_by` is the only field that says whether you may act.
+- **`built`**: docs newest first. A section marked `[SUPERSEDED …] — do not follow` is reverted work, never the pattern.
+- **`owed`**: actionable first. A `code-debt` or `spec-delta` that is `actionable now` in your area is a live landmine and your work queue at once: surface it before you start.
+- **`rules`** bind this task; one with no `paths:` loads every session. **`plan`** shows each open task `ready` or `waits on …`, and `no cases yet` before `/clio:test`; its cases are the success criterion.
 
-Three things decide whether a change is correct: what the customer asked for (`.claude/clio/docs/specs/`),
-what was already built and why (`.claude/clio/docs/tasks/`, `.claude/clio/docs/decisions/`), and what is known
-broken/undecided (`.claude/clio/database/debt.jsonl`). This skill loads all three cheaply, in that order,
-without reading the whole archive.
+## Report, including what looks wrong
+Summarise the governing rows and status, the docs worth knowing, the feature's memory, the area's debt, the rules, the next task. A question ("why X?", "what is `<id>`?") is answered from the section the report quotes, with the path. Then the `looks wrong:` list, **without fixing it**: a debt waiting on a row that already reads ✅; a ⚠️/❌ row no debt tracks; a ✅ row nothing implements. Add what only reading shows: a doc whose `## Decisions` contradicts the spec, or a `req` tag that does not survive reading the doc (a wrong `req` on a ⚠️ row sends the next session to ask about something settled). Never write a ledger or a spec: `/clio:memo` and `/clio:ingest` write, and a finding nobody carries there is lost.
 
-**Read-only.** Never writes to `index.jsonl`/`debt.jsonl`, never edits a spec, never fixes a stale
-record — it *reports* contradictions; `/clio:memo` and `/clio:ingest` are the writers. Staying
-silent because "nothing was actionable" is the failure mode.
-
-## Walk the hops, in order
-
-Each hop feeds the next — don't skip ahead, and don't stop after hop 1 just because it looks decided.
-
-1. **The requirement** → [HOP1.md](HOP1.md). Read `requirements.md`, resolve the status marker for your
-   row. ⚠️/❌ defaults to stop-and-ask; a specific `debt.jsonl` record (hop 3) can override that for
-   the exact piece it covers.
-2. **What was already built** → [HOP2.md](HOP2.md). Query `index.jsonl` for prior docs on this row/
-   file/area — the last record per doc is its full current state, earlier ones are the timeline —
-   and read the feature's `summary.md` § General Memory.
-3. **What's still open** → [HOP3.md](HOP3.md). Query `debt.jsonl`. `blocked_by` is the only field
-   that decides whether you may act on it.
-4. **Rules for the files you will touch.** A path-scoped rule loads only once Claude *reads* a
-   matching file, so a file you are about to create has loaded nothing yet. Name them up front:
-   `clio q rules <files from the plan's Touches or hop 2>`,
-   then read each matching rule. Its bullets are constraints for this task, quoted like the rest.
-5. **Coverage** — nothing stores this, it's derived: hop 1's row number joined against hops 2 and 3
-   tells you what's built vs what's still owed. ✅ row + no index record + no open debt = decided but
-   unbuilt, worth a sentence in your report.
-
-## Report — including what looks wrong
-
-Summarise: governing spec + status, prior docs worth knowing, the feature's General Memory, open debt in this area, the rules that bind the files, the plan's
-next task and its cases (`clio q cases <task>`). A question ("why X?", "what is `<id>`?") is answered from the section the
-record names — task doc `## Decisions` / `## Side Effects` / `## Follow-up`, ADR `## Decision` /
-`## Consequences`, debt `what` / `action` / `blocked_by` — quoted, with the path. Then flag
-plainly, without fixing:
-- a debt item whose `blocked_by` names a spec that hop 1 shows is already decided — should be
-  unblocked or closed;
-- a ⚠️/❌ row from hop 1 that no `debt.jsonl` record tracks;
-- a doc whose `## Decisions` contradicts the current spec, or describes reverted code;
-- a ✅ row with no document record — ✅ means decided, not built, so this is "nothing implements it
-  yet" or a missing index record, not evidence the ✅ is wrong;
-- an `req`/`specs` tag that doesn't survive reading the doc — a wrong `req` on a ⚠️ row is the
-  expensive one, it makes this skill send you to ask about something already settled.
-
-`/clio:memo` writes the corrections at the end of the session; skip it and the finding is lost.
-
-## If nothing matches
-
-Say so in one line, continue — don't fall back to reading all of `.claude/clio/docs/`. "No task doc
-matched" ≠ "no context": hop 1 is independent of hop 2, and a spec row with no implementation
-history is exactly where reading the spec matters most.
+Field meanings, only if the report leaves one unclear: [HOP1.md](HOP1.md) (rows and markers), [HOP2.md](HOP2.md) (index records, docs), [HOP3.md](HOP3.md) (debt kinds, `blocked_by`); they also list the single queries (`clio q built|owed|history|plan|cases`).

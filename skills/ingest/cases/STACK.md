@@ -21,8 +21,7 @@ stack does not visibly meet as a ⚠️.
 test commands, the version they need, the layout they recommend — each with source and the date
 read. Show them side by side against the constraints, then **ASK**: the user picks one or names their
 own. Never pick silently. Record the choice as an ADR (`${CLAUDE_PLUGIN_ROOT}/skills/memo/steps/WRAP-UP.md`
-§ ADR, indexed with `"type":"adr"`, `"domain":"infra"`, `"req":["0"]`, then
-`${CLAUDE_PLUGIN_ROOT}/bin/clio validate index`).
+§ ADR, indexed with `clio add index` as `"type":"adr"`, `"domain":"infra"`, `"req":["0"]`).
 
 Scope stops at what the scaffold needs. A library for a domain — OCR, image processing, an HTTP
 client — is chosen in that area's spec or plan, not here; the rows it serves are often still ⚠️.

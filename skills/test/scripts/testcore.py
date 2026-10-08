@@ -65,9 +65,9 @@ def plan_files():
     return store.files("plan")
 
 
-def cases():
-    """Every active case of every test store file — see store.case_rows for the fields."""
-    return store.case_rows(LEVELS)
+def cases(task=None):
+    """Every active case of every test store file, or just one task's — see store.case_rows."""
+    return store.case_rows(LEVELS, task)
 
 
 def level_ids(level):

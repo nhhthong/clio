@@ -32,12 +32,12 @@ def subs(path, var="cmd"):
 Q = subs("skills/context/scripts/q.py")
 TEST = subs("skills/test/scripts/clio_test.py") | {"fp"}
 VALIDATE = {"index", "debt", "all"}
-TOP = {"q": Q, "test": TEST, "validate": VALIDATE, "add": {"plan", "test"}, "selftest": {None}}
+TOP = {"doc": {None}, "q": Q, "test": TEST, "validate": VALIDATE, "add": {"plan", "test", "index", "debt"}, "selftest": {None}}
 # Commands that must raise the permission prompt on purpose: the prompt is the user's own yes.
 USER_YES = {("test", "approve"), ("test", "withdraw")}
 USER_YES_ARGS = {("test", "migrate"): "--write"}
 
-CMD = re.compile(r"(?:\$\{CLAUDE_PLUGIN_ROOT\}/bin/)?\bclio ((?:q|test|add|validate|selftest))\b(?: ([a-z][a-z0-9-]*))?([^`\n]*)")
+CMD = re.compile(r"(?:\$\{CLAUDE_PLUGIN_ROOT\}/bin/)?\bclio ((?:q|test|add|validate|doc|selftest))\b(?: ([a-z][a-z0-9-]*))?([^`\n]*)")
 
 
 def code_text(text):
@@ -121,14 +121,24 @@ for skill_md in sorted(glob.glob(os.path.join(SKILLS, "*", "SKILL.md"))):
                 if covered(pats, full):
                     miss("%s is the user's own yes but the allowed-tools of %s lets it run unasked" % (where, skill))
                 continue
+            if top == "doc":
+                if not covered(pats, ["clio", "doc"]):
+                    miss("%s is not covered by the allowed-tools of the %s skill" % (where, skill))
+                continue
             if sub is None:
                 continue                  # the tool named in prose ("`clio q` reads …"), not a command to run
             if not covered(pats, ["clio", top, sub] + ["x"]) and not covered(pats, ["clio", top, sub]):
                 miss("%s is not covered by the allowed-tools of the %s skill" % (where, skill))
 
 # --- no orphan, no stale layout -------------------------------------------------------------------------
+named = set()                       # file names mentioned anywhere in a skill's files, e.g. `RESOLVE-AND-GATHER.md`
 for md in all_md:
-    if os.path.basename(md) == "SKILL.md" or os.path.normpath(md) in {os.path.normpath(x) for x in referenced}:
+    for m in re.findall(r"(?<![\w/-])((?:[A-Z][A-Z0-9-]+|[A-Z][A-Za-z0-9-]*)\.md)\b", read(md)):
+        named.add((os.path.relpath(md, SKILLS).split(os.sep)[0], m))
+for md in all_md:
+    skill = os.path.relpath(md, SKILLS).split(os.sep)[0]
+    if (os.path.basename(md) == "SKILL.md" or os.path.normpath(md) in {os.path.normpath(x) for x in referenced}
+            or (skill, os.path.basename(md)) in named):
         continue
     if md.endswith(os.path.join("setup", "templates", "requirements.md")):
         continue
@@ -144,6 +154,27 @@ for md in all_md + [os.path.join(ROOT, "README.md")]:
         for m in re.finditer(pat, text, re.M):
             line = text.count("\n", 0, m.start()) + 1
             miss("%s:%d still names the 4.x layout (%s)" % (os.path.relpath(md, ROOT), line, pat.strip()))
+
+# --- token budget: what a model loads when a skill runs must stay small -------------------------------------
+# Bytes, ≈ 4 per token. A SKILL.md is read whole on every run; a case or step file only when its case comes.
+# LEVELS.md is a catalog read through `clio q levels` (never whole), the HOP files only to explain a field.
+BUDGET = {"SKILL.md": 6000, "test/SKILL.md": 9000, "other": 6000}
+EXEMPT = {"LEVELS.md"}
+for md in all_md:
+    base, rel = os.path.basename(md), os.path.relpath(md, SKILLS)
+    if base in EXEMPT or rel.startswith("setup" + os.sep + "templates"):
+        continue
+    limit = BUDGET.get(rel, BUDGET["SKILL.md"] if base == "SKILL.md" else BUDGET["other"])
+    if len(read(md).encode("utf-8")) > limit:
+        miss("%s is %d bytes, over its %d budget — split the rare path into a case file or cut prose" % (rel, len(read(md).encode("utf-8")), limit))
+# the main path of the busiest skills, all files a normal run reads
+PATH = {"memo": ["memo/SKILL.md"] + ["memo/steps/%s.md" % n for n in ("RESOLVE-AND-GATHER", "WRITE-DOC", "INDEX-IT", "DEBT-IT", "WRAP-UP")],
+        "ingest (a change)": ["ingest/SKILL.md", "ingest/cases/CHANGE.md"], "plan (a change)": ["plan/SKILL.md", "plan/cases/CHANGE.md"]}
+LIMIT = {"memo": 18000, "ingest (a change)": 11000, "plan (a change)": 10000}
+for name, files in PATH.items():
+    total = sum(len(read(os.path.join(SKILLS, f)).encode("utf-8")) for f in files)
+    if total > LIMIT[name]:
+        miss("the main path of %s is %d bytes, over its %d budget" % (name, total, LIMIT[name]))
 
 if bad == 0:
     print("OK")

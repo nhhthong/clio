@@ -2,19 +2,12 @@
 
 ## 5.0.0 — 2026-10-08
 
-Breaking: plans and test cases move from Markdown to `database/plan|test/<area>.jsonl`. `/clio:plan`
-migrates a 4.x project on first run; approvals and runs carry over.
+Breaking: plans and test cases move to `database/plan|test/<area>.jsonl`. `/clio:plan` migrates a 4.x
+project; approvals and runs carry over.
 
-- Append-only stores written only by `clio add`; a task is done only through `clio test tick`.
-- Open tasks are edited in place; only done work is history.
-- Light tier for small, visible, easily undone work.
-- Ingest shows what a change invalidates before writing it.
-- New: `clio q plan|cases|spec-grep`, `clio test diff|migrate`, `chore` index records.
-- `clio test withdraw`: take back done work that never left the working tree, with the user's yes.
-- Index records carry `fp`, so a bare `/clio:memo` knows when nothing moved since the last one.
-- A test command that runs no test is a fail, not a pass.
-- `clio q summary` ends with `suggest:` lines (memo, test, plan, a question to answer), computed from the state.
-- Skills are checked by a selftest: commands exist, allowed-tools cover them, no dead links.
+- Append-only stores, written by `clio add` / `clio doc`; a task is done only through `clio test tick`.
+- One-call reads: `clio q context`, `clio q gather`, and `suggest:` lines in `clio q summary`.
+- New: light tier, `clio test withdraw|diff|migrate`.
 - Fix bug.
 
 ## 4.2.0 — 2026-09-28

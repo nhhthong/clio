@@ -46,14 +46,18 @@ SCHEMA = {
 }
 
 
+_LEVELS_TEXT = []
+
+
 def level_ids(level):
     """The `level.n` ids LEVELS.md lists for a level — the risks a case of it must cover or excuse."""
-    try:
-        with open(LEVELS_FILE, encoding="utf-8") as f:
-            text = f.read()
-    except OSError:
-        return []
-    return sorted({m[1:-1] for m in re.findall(r"`" + re.escape(level) + r"\.[0-9]+`", text)})
+    if not _LEVELS_TEXT:
+        try:
+            with open(LEVELS_FILE, encoding="utf-8") as f:
+                _LEVELS_TEXT.append(f.read())
+        except OSError:
+            _LEVELS_TEXT.append("")
+    return sorted({m[1:-1] for m in re.findall(r"`" + re.escape(level) + r"\.[0-9]+`", _LEVELS_TEXT[0])})
 
 
 def today():
@@ -76,10 +80,39 @@ def key(r):
     return (r.get("type"), c.tostring(r.get("id")) if r.get("type") != "mutation" else "")
 
 
+_READ = {}      # path → ((mtime_ns, size), result): a file is parsed once per process unless it changed
+_ROWS = {}      # the validated case tuples, same idea
+
+
+def _sig(paths):
+    out = []
+    for p in paths:
+        try:
+            st = os.stat(p)
+            out.append((p, st.st_mtime_ns, st.st_size))
+        except OSError:
+            out.append((p, 0, 0))
+    return tuple(out)
+
+
 def read(path):
-    """(records, bad line numbers) of one store file; a missing file is empty."""
-    if not os.path.isfile(path):
+    """(records, bad line numbers) of one store file; a missing file is empty. The result is shared with
+    later calls of this process (a write changes the file's mtime and size, so the next read is fresh):
+    callers must not change what they get."""
+    try:
+        st = os.stat(path)
+    except OSError:
         return [], []
+    key = (st.st_mtime_ns, st.st_size)
+    hit = _READ.get(path)
+    if hit is not None and hit[0] == key:
+        return hit[1]
+    res = _read(path)
+    _READ[path] = (key, res)
+    return res
+
+
+def _read(path):
     recs, bad = [], []
     with open(path, encoding="utf-8", errors="surrogateescape") as f:
         for n, line in enumerate(f.read().split("\n"), 1):
@@ -258,12 +291,24 @@ def _cases():
     return [(p, r) for p, r in current("test") if r.get("type") == "case" and r.get("status") != "removed"]
 
 
-def case_rows(levels=" ".join(LEVELS)):
+def case_tasks():
+    """The ids of the tasks that have at least one active case — without validating a single case."""
+    return {c.tostring(r.get("task")) for _, r in _cases()}
+
+
+def case_rows(levels=" ".join(LEVELS), task=None):
     """One tuple per active case: (case, task, level, covers, command, repeat, tracked, error). A
-    malformed record is still returned, with the reason in error, so its task fails loudly."""
+    malformed record is still returned, with the reason in error, so its task fails loudly. task: only
+    that task's cases, and only those are validated. Memoised until a test file changes."""
+    sig = (_sig(files("test")), levels, task)
+    hit = _ROWS.get(sig)
+    if hit is not None:
+        return hit
     allowed = levels.split()
     out = []
     for _, r in _cases():
+        if task is not None and c.tostring(r.get("task")) != task:
+            continue
         p = problems("test", r)
         err = "; ".join(p)
         if not err and allowed and r["level"] not in allowed:
@@ -272,6 +317,7 @@ def case_rows(levels=" ".join(LEVELS)):
                     ", ".join(c.tostring(x) for x in c.items(r.get("covers"))) or DASH,
                     c.tostring(r.get("command")) if c.truthy(r.get("command")) else DASH,
                     c.tostring(r.get("repeat")), 1 if c.items(r.get("covers")) else 0, err))
+    _ROWS[sig] = out
     return out
 
 

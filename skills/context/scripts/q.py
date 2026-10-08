@@ -1,5 +1,10 @@
 #!/usr/bin/env python3
 USAGE = """# clio q — every read of Clio's ledgers, in one place. Read-only.
+#   context [target...]                       /clio:context in one call: rows, spec, built docs, debt, rules, plan, what looks wrong
+#                                              (target: area · row · task id · debt id · file · word; none = summary)
+#   levels [choosing | level...]              LEVELS.md sections: the questions + tier, or what each named level must cover
+#   gather [target]                           /clio:memo step 1 in one call: changed, unrecorded, the doc that owns the target
+#                                              (Case A–D), its rows and plan tasks, commit, keywords, rules
 #   summary                                   plans done/open + next task, debt queue/blocked, last memo, and
 #                                              `suggest:` lines — what to do next, from the state alone
 #   built  [--req R --spec S --file F --area A --keyword K --task T --id I]   current state per doc
@@ -185,7 +190,7 @@ def suggest(rows):
             out.append(("/clio:plan %s" % c.tostring(d.get("domain")), "spec-delta %s is open and no task carries it" % c.tostring(d.get("id"))))
             break
     done = {r[1] for r in rows if r[6].startswith("[x]")}
-    cased = {r[1] for r in store.case_rows()}
+    cased = store.case_tasks()
     ready = [r for r in rows if r[6].startswith("[ ]") and all(n in done for n in re.split(r"[ ,]+", r[5]) if n[:1].isdigit())]
     if ready:
         bare = [r for r in ready if r[1] not in cased]
@@ -464,6 +469,36 @@ def spec_grep(args):
     print("# %d live, %d superseded and skipped" % (live, old))
 
 
+def levels(args):
+    """Sections of skills/test/LEVELS.md, so nobody reads the whole catalog (13 KB): `choosing` (the questions
+    and the tier), or level names (`unit api security`) for what each must cover. No argument lists the names."""
+    path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "test", "LEVELS.md")
+    text = tables.read_lines(path)
+    secs, cur = {}, None
+    for line in text:
+        m = re.match(r"## (.*)$", line)
+        if m:
+            cur = m.group(1).strip().lower()
+            secs[cur] = [line]
+        elif cur:
+            secs[cur].append(line)
+    secs["choosing"] = secs.get("choosing", []) + secs.get("tier", [])
+    head = [l for l in text[:text.index(next(l for l in text if l.startswith("## ")))] if l.strip()]
+    if not args:
+        print("sections: " + " ".join(k for k in secs if k != "tier"))
+        return
+    for a in args:
+        k = a.lower()
+        if k not in secs:
+            print("no section %r — sections: %s" % (a, " ".join(secs)), file=sys.stderr)
+            sys.exit(1)
+    if "choosing" not in [a.lower() for a in args]:
+        print("(ids `level.n` are the risks a task's cases must cover or excuse; a bullet without an id is a constraint on every case)")
+    for a in args:
+        print("\n".join(l for l in secs[a.lower()]).rstrip())
+        print()
+
+
 def rule_globs(path):
     """A rules file's `paths:` — a YAML list, an inline [a, b] list, or a single string. Only the
     frontmatter is read; no frontmatter, or no `paths:`, reads as none."""
@@ -487,24 +522,408 @@ def rule_globs(path):
     return out_
 
 
+def rules_for(files):
+    """[(rule file, why)] — the .claude/rules/*.md that bind these files; a rule with no `paths:` loads
+    every session and is reported as such."""
+    # ponytail: `**` matches like `*` (crossing `/`). Good enough to name candidates; Claude Code's
+    # own matcher is what actually loads them.
+    out = []
+    for rf in sorted(glob.glob(".claude/rules/**/*.md", recursive=True)):
+        globs = rule_globs(rf)
+        if not globs:
+            out.append((rf, "(no paths: — loads every session)"))
+            continue
+        hit = next(((f, g) for f in files for g in globs if fnmatch.fnmatchcase(f, g)), None)
+        if hit:
+            out.append((rf, "← %s matches %s" % (hit[0], hit[1])))
+    return out
+
+
 def rules(args):
     if not args:
         print("usage: clio q rules <file>...", file=sys.stderr)
         sys.exit(1)
-    # ponytail: `**` matches like `*` (crossing `/`). Good enough to name candidates; Claude Code's
-    # own matcher is what actually loads them.
-    for rf in sorted(glob.glob(".claude/rules/**/*.md", recursive=True)):
-        globs = rule_globs(rf)
-        if not globs:
-            print(rf + "  (no paths: — loads every session)")
+    for rf, why in rules_for(args):
+        print("%s  %s" % (rf, why))
+
+
+# --- context: hops 1–5 of /clio:context in one call --------------------------------------------------------
+NUM = re.compile(r"[0-9]+(\.[0-9]+)*")
+
+
+def domains():
+    """The `Domains:` vocabulary of requirements.md: the only values a ledger record's `domain` may hold."""
+    path = SPECS + "/requirements.md"
+    if not os.path.isfile(path):
+        return []
+    lines = tables.read_lines(path)
+    for i, line in enumerate(lines):
+        if line.lstrip("*_ ").lower().startswith("domains"):
+            para = []
+            for l in lines[i:]:
+                if not l.strip():
+                    break
+                para.append(l)
+            return re.findall(r"`([^`]+)`", " ".join(para)[len(line):] if len(para) > 1 else line)
+    return []
+
+
+_GENERIC = {"internal", "src", "app", "lib", "pkg", "cmd", "test", "tests", "main", "index", "util", "utils", "common", "the", "and"}
+
+
+def work_words(target, files):
+    """Words that stand for this work: the target's, else the stems of the changed files (a path gives `volume`
+    for `internal/player/volume.go`), minus the directory names every repo has."""
+    src = [target] if target and not NUM.fullmatch(target) else []
+    if not src:
+        src = [os.path.splitext(f)[0] for f in files if not f.startswith(".claude/")]
+    out, seen = [], {}
+    for chunk in src:
+        for w in {w.lower() for w in re.split(r"[\s/_.-]+", chunk)}:
+            if len(w) > 2 and not NUM.fullmatch(w) and w not in _GENERIC:
+                seen[w] = seen.get(w, 0) + 1
+    # a word the changed files share (`volume` in four file names) is the work's topic; the rest is noise
+    shared = [w for w, n in seen.items() if n > 1] if not target else []
+    return sorted(shared or seen)
+
+
+def best_rows(rows, words):
+    """The rows the words point at: each word weighs 1 / (rows it appears in), so `volume` outweighs `player`;
+    only rows scoring at least half of the best stay."""
+    text = [(r, (r[1] + " " + r[2]).lower()) for r in rows]
+    weight = {w: 1.0 / max(1, sum(w in t for _, t in text)) for w in words}
+    scored = [(sum(weight[w] for w in words if w in t), r) for r, t in text]
+    top = max([sc for sc, _ in scored] or [0])
+    return [r for sc, r in scored if sc and sc >= top / 2]
+
+
+def req_table():
+    """[(num, task, spec stem, spec path, status)] — the rows of requirements.md — and its keyword table
+    {word: spec stem}."""
+    path = SPECS + "/requirements.md"
+    rows, kw, in_kw = [], {}, False
+    if not os.path.isfile(path):
+        return rows, kw
+    for line in tables.live(tables.read_lines(path)):
+        if line.startswith("## "):
+            in_kw = "keyword" in line.lower()
             continue
-        hit = next(((f, g) for f in args for g in globs if fnmatch.fnmatchcase(f, g)), None)
-        if hit:
-            print("%s  ← %s matches %s" % (rf, hit[0], hit[1]))
+        if not line.lstrip().startswith("|"):
+            continue
+        cell = tables._cells(line)
+        if in_kw:
+            m = re.search(r"([A-Za-z0-9_-]+)\.md", tables._f(cell, 3))
+            if m:
+                for w in re.split(r"[/,]", tables._f(cell, 2)):
+                    if w.strip():
+                        kw[w.strip().lower()] = m.group(1)
+        elif NUM.fullmatch(tables._f(cell, 2)):
+            m = re.search(r"\(([^)]+\.md)\)", tables._f(cell, 4))
+            sp = m.group(1) if m else ""
+            rows.append((tables._f(cell, 2), tables._f(cell, 3), os.path.basename(sp)[:-3], sp, tables._f(cell, 5)))
+    return rows, kw
+
+
+def doc_sections(path, names=("Decisions", "Side Effects", "Follow-up"), cap=8):
+    """{section: its non-empty lines, cut to cap} of a task doc — the load-bearing part (HOP2.md). A section
+    relabelled `[SUPERSEDED …]` is history: one warning line instead of its body, so nobody reads reverted
+    work as the pattern to follow."""
+    out, cur = {}, None
+    if not os.path.isfile(path):
+        return out
+    for line in tables.read_lines(path):
+        if line.startswith("## "):
+            m = re.match(r"## (\[SUPERSEDED[^\]]*\]) (.*?)(?: — REVERTED.*)?$", line)
+            if m and m.group(2) in names:
+                out[m.group(2)] = ["%s — do not follow, the code is gone" % m.group(1)]
+                cur = None
+                continue
+            m = re.match(r"## (.*)$", line)
+            cur = m.group(1) if m and m.group(1) in names else None
+            if cur:
+                out.setdefault(cur, [])
+        elif cur and line.strip():
+            out[cur].append(line)
+    return {k: (v[:cap] + ["  … %d more line(s) in the doc" % (len(v) - cap)] if len(v) > cap else v) for k, v in out.items()}
+
+
+def context(args):
+    """Everything /clio:context loads for a target, in one report: the requirement rows and their spec
+    files, what was built (the last docs' load-bearing sections), what is owed, the rules that bind the
+    files, the plan, and what looks wrong. A target is an area, a requirement row, a task id, a debt id, a
+    file or a word; several are merged. No target is the overview."""
+    if not args:
+        summary()
+        return
+    rows, kw = req_table()
+    plan = {r[1]: r for r in store.plan_rows()}
+    areas_all = {store.area_of(p) for p in store.files("plan")}
+    debt_all = {}
+    for r in c.read_valid(DEBT):
+        if isinstance(r, dict):
+            debt_all[c.tostring(r.get("id"))] = r
+    nums, stems, areas, files, words, tasks_t = set(), set(), set(), set(), set(), set()
+    for t in args:
+        if t in debt_all:
+            d = debt_all[t]
+            nums |= {c.tostring(x) for x in c.items(d.get("req"))}
+            stems |= {os.path.basename(c.tostring(x))[:-3] for x in c.items(d.get("specs"))}
+        elif t in plan:
+            tasks_t.add(t)
+            nums |= {x.strip() for x in plan[t][3].split(",") if NUM.fullmatch(x.strip())}
+            areas.add(store.area_of(plan[t][0]))
+        elif NUM.fullmatch(t) and any(r[0] == t or r[0].startswith(t + ".") for r in rows):
+            nums.add(t)
+        elif t in areas_all or any(r[2] == t for r in rows):
+            (areas if t in areas_all else stems).add(t)
+            if t in areas_all:
+                stems.add(t)
+        elif "/" in t or os.path.exists(t):
+            files.add(t)
+        else:
+            words.add(t.lower())
+            if t.lower() in kw:
+                stems.add(kw[t.lower()])
+    sel = [r for r in rows if r[0] in nums or any(r[0].startswith(n + ".") for n in nums) or r[2] in stems
+           or any(w in (r[1] + " " + r[2]).lower() for w in words)]
+    nums |= {r[0] for r in sel}
+    print("context: %s" % " ".join(args))
+
+    # hop 1 — the requirement and its spec files
+    print("\nrequirement rows (%d)%s:" % (len(sel), "" if len(sel) <= 12 else ", first 12"))
+    for num, task, stem, sp, status in sel[:12]:
+        print("  %-6s %s → %s\n         %s" % (num, task[:90], sp or "?", status[:230]))
+    if not sel:
+        print("  none matches — outside the contracted scope, or requirements.md lacks a row (not a reason to stop)")
+    for stem in sorted({r[2] for r in sel if r[2]}):
+        path = "%s/memory/%s.md" % (SPECS, stem)
+        if not os.path.isfile(path):
+            continue
+        sec, n_dec, opens = "", 0, []
+        for line in tables.read_lines(path):
+            if line.startswith("## "):
+                sec = line
+            elif sec.startswith("## Decisions") and re.match(r"-\s", line):
+                n_dec += 1
+            elif sec.startswith("## Open") and line.startswith("- ") and "None" not in line[:8]:
+                opens.append(line)
+        print("  spec %s: %d decisions, %d open ⚠️  (read it whole when a decision matters)" % (path, n_dec, len(opens)))
+        for o in opens:
+            print("     " + o[:300])
+
+    # hop 2 — what was built
+    idx = c.read_valid(IDX)
+    ptasks = tasks_t | {r[1] for r in plan.values() if set(x.strip() for x in r[3].split(",")) & nums or store.area_of(r[0]) in areas}
+
+    def mine(r):
+        return (r.get("type") != "chore" and (
+            {c.tostring(x) for x in c.items(r.get("req"))} & nums
+            or {os.path.basename(c.tostring(x))[:-3] for x in c.items(r.get("specs"))} & stems
+            or r.get("domain") in areas
+            or any(any(f == c.tostring(x) or f in c.tostring(x) for x in c.items(r.get("files"))) for f in files)
+            or any(any(w in c.tostring(x).lower() for x in c.items(r.get("keywords"))) for w in words)
+            or {c.tostring(x) for x in c.items(r.get("plan_tasks"))} & tasks_t))
+    built = [r for r in docs(idx) if mine(r)]
+    built.sort(key=lambda r: (c.tostring(r.get("date")), c.tostring(r.get("id"))), reverse=True)
+    print("\nbuilt (%d doc(s); newest first):" % len(built))
+    for r in built[:3]:
+        print("  %s  %s  tasks %s" % (c.tostring(r.get("date")), r.get("doc"), ",".join(c.tostring(x) for x in c.items(r.get("plan_tasks"))[:8]) or "–"))
+        for name, lines in doc_sections(c.tostring(r.get("doc"))).items():
+            print("     [%s]" % name)
+            for l in lines:
+                print("       " + l[:240])
+    for r in built[3:12]:
+        print("  %s  %s  tasks %s" % (c.tostring(r.get("date")), r.get("doc"), ",".join(c.tostring(x) for x in c.items(r.get("plan_tasks"))[:6]) or "–"))
+    if len(built) > 12:
+        print("  … and %d older" % (len(built) - 12))
+    for stem in sorted(stems | areas):
+        for sm in glob.glob(".claude/clio/docs/tasks/*/summary.md"):
+            if os.path.basename(os.path.dirname(sm)) == stem:
+                gm = doc_sections(sm, names=("General Memory", "Cross-cutting side effects"))
+                for name, lines in gm.items():
+                    print("  feature %s [%s]" % (stem, name))
+                    for l in lines:
+                        print("       " + l[:240])
+
+    # hop 3 — what is owed
+    open_debt = []
+    for g in c.group_by([r for r in c.read_valid(DEBT) if isinstance(r, dict)], lambda r: r.get("id")):
+        d = g[-1]
+        if d.get("status") == "done":
+            continue
+        blob = (c.tostring(d.get("what")) + " " + c.tostring(d.get("id"))).lower()
+        if ({c.tostring(x) for x in c.items(d.get("req"))} & nums or d.get("domain") in areas
+                or {os.path.basename(c.tostring(x))[:-3] for x in c.items(d.get("specs"))} & stems
+                or c.tostring(d.get("id")) in args or any(w in blob for w in words)):
+            open_debt.append(d)
+    open_debt.sort(key=lambda d: d.get("blocked_by") is not None)
+    print("\nowed (%d open; actionable first):" % len(open_debt))
+    for d in open_debt:
+        bb = d.get("blocked_by")
+        print("  %-28s %-12s %-10s %s" % (c.tostring(d.get("id")), d.get("kind"), d.get("status"),
+                                          ("BLOCKED by " + c.tostring(bb)[:90]) if bb is not None else "actionable now"))
+        print("      " + c.tostring((c.items(d.get("what")) or [""])[0])[:200])
+
+    # hop 4 — the rules that bind the files this work will touch
+    touch = set(files)
+    for tid in ptasks:
+        if tid in plan and plan[tid][6].startswith("[ ]"):
+            rec = store.tasks().get(tid, {})
+            touch |= {c.tostring(x) for x in c.items(rec.get("touches")) if "/" in c.tostring(x) and not c.tostring(x).endswith("/")}
+    for r in built[:3]:
+        touch |= {c.tostring(x) for x in c.items(r.get("files"))[:8]}
+    rl = rules_for(sorted(touch)) if touch else []
+    print("\nrules (%d file(s) considered):" % len(touch))
+    for rf, why in rl:
+        print("  %s  %s" % (rf, why))
+    if not rl:
+        print("  none")
+
+    # hop 5 — the plan
+    mine_t = sorted((plan[t] for t in ptasks if t in plan), key=lambda r: [int(x) if x.isdigit() else 0 for x in re.split(r"[.]", r[1])])
+    opn = [r for r in mine_t if r[6].startswith("[ ]")]
+    done_ids = {r[1] for r in plan.values() if r[6].startswith("[x]")}
+    cased = store.case_tasks()
+    dropped = sum(r[6].startswith(("superseded", "void", "withdrawn")) for r in mine_t)
+    print("\nplan: %d task(s), %d done, %d open%s" % (len(mine_t), sum(r[6].startswith("[x]") for r in mine_t), len(opn),
+                                                  ", %d superseded/void (history, not work)" % dropped if dropped else ""))
+    for r in opn[:10]:
+        waits = [n for n in re.split(r"[ ,]+", r[5]) if n[:1].isdigit() and n not in done_ids]
+        print("  %-8s %-26s %s%s" % (r[1], r[4][:26], "ready" if not waits else "waits on " + ", ".join(waits),
+                                      "" if r[1] in cased else " · no cases yet"))
+        print("           " + r[2][:150])
+
+    # what looks wrong — reported, never fixed (/clio:memo and /clio:ingest write the corrections)
+    print("\nlooks wrong:")
+    bad = []
+    for num, task, stem, sp, status in sel:
+        if ("⚠" in status or "❌" in status) and not any({c.tostring(x) for x in c.items(d.get("req"))} & {num} for d in open_debt):
+            bad.append("row %s is ⚠️/❌ and no open debt record tracks it" % num)
+        if "✅" in status and not any(num in {c.tostring(x) for x in c.items(r.get("req"))} for r in idx if isinstance(r, dict)):
+            bad.append("row %s is ✅ (decided) and nothing was recorded as built: nothing implements it yet, or a memo is missing" % num)
+    ok_rows = {r[0] for r in rows if "✅" in r[4] and "⚠" not in r[4].split(";")[0] and "❌" not in r[4].split(";")[0]}
+    for d in open_debt:
+        rq = {c.tostring(x) for x in c.items(d.get("req"))}
+        if d.get("blocked_by") is not None and rq and rq <= ok_rows and d.get("kind") == "spec-blocked":
+            bad.append("debt %s waits on %s but its row(s) %s read ✅ now: unblock or close it" % (d.get("id"), c.tostring(d.get("blocked_by"))[:60], ",".join(sorted(rq))))
+    print("\n".join("  - " + b for b in bad) if bad else "  nothing found")
+    for cmd, why in suggest(store.plan_rows()):
+        print("suggest: %s — %s" % (cmd, why))
+
+
+def gather(args):
+    """Step 1 of /clio:memo in one report: what changed, what is unrecorded, which doc owns the target
+    (Case A–D of RESOLVE-AND-GATHER.md, computed), the requirement rows and plan tasks it serves, the
+    commit of the files, the keyword vocabulary and the rules that bind the files."""
+    import datetime
+    idx = c.read_valid(IDX)
+    last = [r for r in docs(idx) if r.get("type") != "chore"]
+    print("gather: %s" % (" ".join(args) or "(no target)"))
+    print("today: %s" % datetime.date.today().strftime("%Y-%m-%d"))
+    files, same = work_changes() if c.is_git() else ([], False)
+    print("\nchanged (%d)%s:" % (len(files), " — UNCHANGED since the last memo: nothing new to record" if same else ""))
+    for f in files[:40]:
+        print("  " + f)
+    if len(files) > 40:
+        print("  … and %d more" % (len(files) - 40))
+    pend = c.unrecorded_commits(idx) if c.is_git() else []
+    o = parse([])
+    print("\nunrecorded commits (%d):" % len(pend))
+    docless = []
+    for h, fl in pend:
+        found = set()
+        for f in fl:
+            o["f"] = f
+            found.update(c.tostring(r.get("doc")) for r in last if built_match(o, r))
+        if not found:
+            docless.append(h)
+        print("  %s  docs: %s" % (h, ",".join(sorted(found)) or "- (nobody recorded it)"))
+    target = args[0] if args else ""
+    case, cand = "", []
+    if target and ("/" in target or target.endswith(".md")):
+        case = "A — path target: " + ("EXISTS → UPDATE" if os.path.isfile(target) else "MISSING → stop and ask, do not create it")
+    elif target and NUM.fullmatch(target):
+        o = parse([])
+        o["t"] = target
+        cand = [r for r in last if built_match(o, r)]
+        parent = target.rsplit(".", 1)[0] if "." in target else ""
+        if not cand and parent and NUM.fullmatch(parent):
+            o["t"] = parent
+            cand = [r for r in last if built_match(o, r)]
+            case = "B — task %s: no doc of its own; a sub-task of %s → UPDATE the parent's doc" % (target, parent) if cand else ""
+        elif cand:
+            case = "B — task %s: a doc owns it → UPDATE" % target
+        if not case:
+            case = "B — task %s: %s" % (target, "no doc → CREATE" if target in {r[1] for r in store.plan_rows()} else "in no plan → stop and ask, do not invent an id")
+    elif target:
+        ws = work_words(target, [])
+        cand = [r for r in last if any(any(w == c.tostring(k).lower() for k in c.items(r.get("keywords"))) for w in ws)]
+        case = ("C — word target: %d doc(s) carry the keyword → ONE, same sub-task → UPDATE, several → ask, none → CREATE" % len(cand)
+                if cand else "C — word target: no doc carries the keyword → CREATE")
+    elif not target and files and not same:
+        for f in files:
+            o = parse([])
+            o["f"] = f
+            for r in last:
+                if built_match(o, r) and r not in cand:
+                    cand.append(r)
+        case = ("C — no target: %d doc(s) already cover changed files → ONE → UPDATE, several → ask, none → CREATE" % len(cand)) if cand else "C — no target and no doc covers the files → CREATE"
+    elif not target and not files and pend:
+        case = ("D — nothing uncommitted and every unrecorded commit names its docs: backfill them (hash only)" if not docless else
+                "C — nothing uncommitted, but commit(s) %s are recorded nowhere: their files go to Case C (or a chore, if the user says no task owns them)" % ", ".join(docless))
+    elif not target and not files and not pend:
+        case = "nothing to record — stop, unless the user names work outside git"
+    print("\ncase: %s" % (case or "—"))
+    for r in cand[:8]:
+        print("  %s  %s  tasks %s  commits %s" % (r.get("id"), r.get("doc"), ",".join(c.tostring(x) for x in c.items(r.get("plan_tasks"))[:8]) or "–",
+                                                 ",".join(c.tostring(x) for x in c.items(r.get("commits"))) or "–"))
+
+    rows, _ = req_table()
+    words = work_words(target, files)
+    near = best_rows(rows, words)
+    print("\nrequirement rows that may be this work's (%s):" % (", ".join(words) or "no word to match"))
+    for num, task, stem, sp, status in near[:8]:
+        print("  %-6s %s → %s  %s" % (num, task[:70], sp, status[:60]))
+    plan_rows = store.plan_rows()
+    reqs = {r[0] for r in near} | ({target} if NUM.fullmatch(target or "") else set())
+    mine = [r for r in plan_rows if {x.strip() for x in r[3].split(",")} & reqs or r[1] == target]
+    print("plan tasks for those rows (%d):" % len(mine))
+    for r in mine[:12]:
+        print("  %-8s %-22s %-18s %s" % (r[1], r[4][:22], r[6][:18], r[2][:70]))
+    if files:
+        h = c.git_out(["log", "-1", "--format=%h", "--"] + files) if not c.git(["status", "--porcelain", "--"] + files).stdout.strip() else ""
+        print("\ncommit holding these files: %s" % (h or "none (uncommitted, or a repo with no commit): write no hash"))
+        rl = rules_for(files)
+        print("rules binding them: %s" % ("; ".join("%s %s" % x for x in rl) or "none"))
+    if words:
+        hits = []
+        for g in c.group_by([r for r in c.read_valid(DEBT) if isinstance(r, dict)], lambda r: r.get("id")):
+            d = g[-1]
+            blob = (c.tostring(d.get("what")) + " " + c.tostring(d.get("id"))).lower()
+            if d.get("status") != "done" and any(w in blob for w in words):
+                hits.append(d)
+        print("\nopen debt that mentions %s (%d):" % (", ".join(words[:6]), len(hits)))
+        for d in hits[:6]:
+            bb = d.get("blocked_by")
+            print("  %-28s %-12s %s" % (c.tostring(d.get("id")), d.get("kind"), ("BLOCKED by " + c.tostring(bb)[:60]) if bb is not None else "actionable now"))
+    print("\ndomains (a record's `domain` is one of these; a new one → ask): %s" % (", ".join(domains()) or "none declared"))
+    counts = {}
+    for r in last:
+        for k in c.items(r.get("keywords")):
+            counts[c.tostring(k)] = counts.get(c.tostring(k), 0) + 1
+    print("\nkeyword vocabulary (reuse these exact words): %s" % ", ".join(k for k, _ in sorted(counts.items(), key=lambda kv: (-kv[1], kv[0]))[:30]))
+    feats = sorted(glob.glob(".claude/clio/docs/tasks/*/"), key=lambda d: os.path.getmtime(d), reverse=True)
+    print("feature directories (newest first): %s" % ", ".join(os.path.basename(d.rstrip("/")) for d in feats))
+    for cmd, why in suggest(plan_rows)[:2]:
+        print("suggest: %s — %s" % (cmd, why))
 
 
 def main(argv):
     c.quiet_on_closed_pipe()
+    cmd = argv[0] if argv else ""
+    if cmd == "levels":                   # the plugin's own catalog: needs no project
+        levels(argv[1:])
+        return
     root = c.find_root()
     if not root:
         print("no .claude/clio above %s — run /clio:setup" % os.getcwd(), file=sys.stderr)
@@ -533,6 +952,10 @@ def main(argv):
         spec_diff(args)
     elif cmd == "rules":
         rules(args)
+    elif cmd == "context":
+        context(args)
+    elif cmd == "gather":
+        gather(args)
     elif cmd == "spec-grep":
         spec_grep(args)
     elif cmd == "plan":

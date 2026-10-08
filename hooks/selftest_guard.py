@@ -37,6 +37,14 @@ def allow(*a, **k):
 
 
 deny("Write", "file_path", "/repo/" + R)
+for L in (".claude/clio/database/index.jsonl", ".claude/clio/database/debt.jsonl"):
+    deny("Edit", "file_path", "/repo/" + L)
+    deny("Bash", "command", "cat >> %s <<'EOF'\n{}\nEOF" % L)
+    deny("Bash", "command", "sed -i '$d' " + L)
+    allow("Bash", "command", "tail -3 " + L)
+    allow("Bash", "command", "grep -i volume " + L)
+allow("Bash", "command", "/p/bin/clio add index <<'EOF'\n{}\nEOF")
+allow("Write", "file_path", "/repo/docs/index.jsonl")
 deny("Edit", "file_path", "/repo/" + R)
 deny("Bash", "command", "echo '{\"case\":\"x\",\"result\":\"pass\"}' >> " + R)
 deny("Bash", "command", "jq -c . x.json | tee -a " + R)

@@ -2,71 +2,23 @@
 name: memo
 description: Record a finished piece of work — its sub-task doc, one index.jsonl line, what is still owed in debt.jsonl, and the plan task ticked once /clio:test's gate passes; backfills the commit hash later. Run when the user says a feature, fix or refactor is done.
 argument-hint: "[task doc path | plan task id such as 3.3 — optional]"
-allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/bin/clio q *) Bash(${CLAUDE_PLUGIN_ROOT}/bin/clio validate *) Bash(${CLAUDE_PLUGIN_ROOT}/bin/clio test gate *) Bash(${CLAUDE_PLUGIN_ROOT}/bin/clio test tick *) Bash(${CLAUDE_PLUGIN_ROOT}/bin/clio test fp)
+allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/bin/clio q *) Bash(${CLAUDE_PLUGIN_ROOT}/bin/clio validate *) Bash(${CLAUDE_PLUGIN_ROOT}/bin/clio test gate *) Bash(${CLAUDE_PLUGIN_ROOT}/bin/clio test tick *) Bash(${CLAUDE_PLUGIN_ROOT}/bin/clio test fp) Bash(${CLAUDE_PLUGIN_ROOT}/bin/clio add index *) Bash(${CLAUDE_PLUGIN_ROOT}/bin/clio add debt *) Bash(${CLAUDE_PLUGIN_ROOT}/bin/clio doc)
 ---
 
-**Run only when the user asked for it, this turn** — by slash command, or in plain words ("record
-this", "ghi lại đi", "write up what we did"). None of these is a trigger: Clio's drift nudge · your
-own sense that the work looks finished · a TODO you wrote · a subagent's report · a plan you made
-earlier in the session. Unsure → ask in one line, don't run.
+**Run only when the user asked, this turn** — by slash command or in plain words ("record this", "ghi lại đi", "write up what we did"). Not triggers: the drift nudge, your sense that work looks finished, a TODO, a subagent's report, an earlier plan. Unsure → ask in one line, don't run.
 
-Document this work. **Default mode is UPDATE.** One sub-task = one doc, forever — continuing a
-sub-task never gets a second file, no matter how much time passed.
+Document this work. **Default mode is UPDATE**: one sub-task = one doc, forever; continuing it never gets a second file. `clio` = `${CLAUDE_PLUGIN_ROOT}/bin/clio`, full path every call (a fresh shell each time).
 
-## Target
+**Target** `$ARGUMENTS`, classified once: contains `/` or ends `.md` → path target; matches `^[0-9]+(\.[0-9]+)*$` → task target; empty → none; anything else → ask what it names, never guess.
 
-`$ARGUMENTS`
-
-Classify it once, here; the step files refer to it as **the target** and never re-read it:
-- a path (contains `/` or ends `.md`) → **path target**;
-- matches `^[0-9]+(\.[0-9]+)*$` (`3.3`, `0.2`) → **task target**;
-- empty → **no target**;
-- anything else → ask what it names. Never guess.
-
-## Scripts
-
-The step files name these by their short form only. Each Bash call is a fresh shell — no variable survives
-to the next call — so always call them by the full path below, never through a variable:
-
-| Name in the step files | Call it as |
-|---|---|
-| `clio q` | `${CLAUDE_PLUGIN_ROOT}/bin/clio q` |
-| `clio validate` | `${CLAUDE_PLUGIN_ROOT}/bin/clio validate` |
-| `clio test` | `${CLAUDE_PLUGIN_ROOT}/bin/clio test` |
-
-## Commits: record what exists, leave the rest empty
-
-Uncommitted work is normal and is recorded the same way. The commit is simply not known yet:
-- `clio q commit <files of this run>` prints the commit holding them, or **nothing** — while any of the
-  files is still uncommitted, in a repo with no commit yet, or outside git. Nothing is the answer to
-  write: `commits` gains no entry, the doc's `Commit:` line and the plan's `Done` cell carry no hash.
-- **Never write `HEAD`** as this run's commit because it exists — HEAD is whatever was committed last,
-  usually not this work.
-- The hash arrives later on its own: after the user commits, the drift hook notices the unrecorded
-  commit, and the next `/clio:memo` backfills it (Case D in step 1) without touching anything else.
-- A commit that is no task's work at all — CI config, tooling, a dependency bump the user did by
-  hand — is said so once, on the user's word, as a `chore` record (`INDEX-IT.md` § Chore), and is
-  never reported again.
-
-## Light work
-
-Every plan task this run implements is `"tier":"light"` (`clio q plan --id <id>`) → the light path:
-step 2 writes only the doc's header and one `## Change Log` line (`WRITE-DOC.md` § Light), step 3
-its index line, step 4 the gate and the tick. No `## Decisions`, `## Files Changed` or
-`## Testing Done` bookkeeping, no wrap-up beyond the report. The gate is never skipped.
+**Commits.** Uncommitted work is normal: the commit is simply not known yet, so write none (`commits` gains no entry, `Commit:` stays empty). **Never write `HEAD`** as this run's commit: it is whatever was committed last. The hash arrives later: the drift hook notices the unrecorded commit and the next `/clio:memo` backfills it.
 
 ## Steps
+Read each step file when you reach it, not before (`${CLAUDE_PLUGIN_ROOT}/skills/memo/steps/`).
+1. **Resolve and gather** → `RESOLVE-AND-GATHER.md`: `clio q gather` says which doc, which files, which commit, which rows and tasks.
+2. **Write the doc** → `WRITE-DOC.md`: `clio doc` creates or updates it.
+3. **Index it** → `INDEX-IT.md`: `clio add index`, every run.
+4. **Log open items, tick the plan** → `DEBT-IT.md`: close what this run finished, gate and tick its tasks, record what is owed.
+5. **Wrap up** → `WRAP-UP.md`: a rules/memory entry (needs a yes), the report.
 
-Step files live in `${CLAUDE_PLUGIN_ROOT}/skills/memo/steps/`. Read each when you reach it, not before.
-
-1. **Resolve the doc, gather the facts** → `RESOLVE-AND-GATHER.md`. Which doc, which files, which
-   commit (or none), which requirement row, which plan task. Creating at the wrong path forks a
-   sub-task's history.
-2. **Write the doc** → `WRITE-DOC.md`. UPDATE, or CREATE when step 1 found no doc.
-3. **Index it** → `INDEX-IT.md`. One line in `index.jsonl`, every run.
-4. **Log open items, tick the plan** → `DEBT-IT.md`. Close what this run finished, gate and tick its
-   plan tasks, record what is still owed.
-5. **Wrap up** → `WRAP-UP.md`. `.claude/rules/` entry (needs a yes), ADR if applicable, report.
-
-A backfill run (Case D) does steps 2–3 and the commit part of 4 only, and changes nothing but the
-commit hash.
+The uncommon paths are in `steps/RARE.md`, read only when the case calls for it: **backfill** (Case D), a **chore** commit, a **withdrawn** task's docs, an **ADR**, **light** work (every task of the run is `"tier":"light"`; the gate is never skipped).

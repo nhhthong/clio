@@ -28,9 +28,14 @@ def find_root(start=None):
         d = parent
 
 
+# json.loads(text, parse_float=…) builds a new decoder on every call; one shared decoder is what keeps
+# reading a ledger of thousands of lines as fast as the plain call.
+_DECODER = json.JSONDecoder(parse_float=Decimal)
+
+
 def loads(text):
     """JSON with every non-integer number as a Decimal of its literal, so it prints back unchanged."""
-    return json.loads(text, parse_float=Decimal)
+    return _DECODER.decode(text)
 
 
 def truthy(v):

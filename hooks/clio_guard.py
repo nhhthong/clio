@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """clio_guard.py — PreToolUse hook. Two kinds of file have one writer each: runs.jsonl (test
 evidence) is written only by `clio test`, and the plan and test stores (database/plan/*.jsonl,
-database/test/*.jsonl) only by `clio add` and `clio test` — the one place a task becomes done is
+database/test/*.jsonl) only by `clio add` and `clio test`, index.jsonl / debt.jsonl only by `clio add` — the one place a task becomes done is
 `clio test tick`, after the gate. Refuses an Edit/Write on them and a Bash command that writes,
 deletes or reverts them any other way (redirect, tee, sed -i, rm, truncate, dd, mv, cp/install, git
 restore/checkout). Reads — cat, jq, grep, `cp <file> <somewhere outside the database dir>` — pass.
@@ -22,7 +22,7 @@ import sys
 
 B = r"(^|[\s(){}!`])"                                             # a command word starts here
 # A guarded file named in a command: the evidence file, or anything under the plan/test store dirs.
-NAMED = r"(runs\.jsonl|clio/database/(plan|test)(/|\b))"
+NAMED = r"(runs\.jsonl|clio/database/(plan|test)(/|\b)|database/(index|debt)\.jsonl)"
 PROTECTED = re.compile(NAMED)
 REDIRECT = re.compile(r">[>|]?\s*\S*" + NAMED)                   # > >> >| &> 2> onto one — raw text
 WRITES = [
@@ -40,14 +40,15 @@ ARG_OPTS = {"-S", "-m", "-o", "-g", "-t", "--suffix", "--mode", "--owner", "--gr
 
 def refuse(msg):
     sys.stderr.write("clio: %s — runs.jsonl is written only by `clio test`, the plan and test stores only by "
-                     "`clio add` (and `clio test tick`, after the gate); go through them instead.\n" % msg)
+                     "`clio add` (and `clio test tick`, after the gate), index.jsonl and debt.jsonl only by `clio add "
+                     "index|debt` (validated, rolled back on a FAIL); go through them instead.\n" % msg)
     sys.exit(2)
 
 
 def guarded_path(p):
     """True for the evidence file or a plan/test store file of a Clio repo."""
     p = p if p.startswith("/") else "/" + p
-    return p.endswith(DB + "/runs.jsonl") or re.search(re.escape(DB) + r"/(plan|test)/[^/]*$", p) is not None
+    return p.endswith((DB + "/runs.jsonl", DB + "/index.jsonl", DB + "/debt.jsonl")) or re.search(re.escape(DB) + r"/(plan|test)/[^/]*$", p) is not None
 
 
 def clio_above(d):

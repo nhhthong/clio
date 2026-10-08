@@ -254,7 +254,7 @@ def cmd_gate(task):
         for b in bad:
             tc.say("FAIL: %s is not a JSON record — only `clio add` and `clio test` write the stores; fix or remove it" % b)
         return 1
-    rows = [r for r in tc.cases() if r[1] == task]
+    rows = tc.cases(task)
     if not rows:
         plan = [r for r in store.plan_rows() if r[1] == task]
         if plan and plan[0][6].startswith(("superseded", "void")):    # nothing to prove for a task that was dropped
