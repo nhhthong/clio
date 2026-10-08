@@ -1,12 +1,12 @@
 # Levels — which a task needs, and what each must cover
 
-`/clio:plan` reads **Choosing** to fill a task's `Levels` cell. `/clio:test` reads only the catalog
-sections that cell names. Sources: Microsoft ISE Engineering Playbook (automated testing, CDC, fault
+`/clio:plan` reads **Choosing** and **Tier** to fill a task's `levels`, `critical` and `tier`.
+`/clio:test` reads only the catalog sections that `levels` names. Sources: Microsoft ISE Engineering Playbook (automated testing, CDC, fault
 injection, performance), OWASP WSTG (security, business logic), Pact docs (when contract testing fits).
 
 Under a catalog section, a bullet that names its own id (`` `level.n` ``, in order) is one distinct
-risk — `/clio:test`'s gate holds a task to every id its `Levels` cell names, via each case's
-`Covers` cell or a `Not applicable` line (§ below). A bullet with no id is a constraint on how
+risk — `/clio:test`'s gate holds a task to every id of the levels it names, via each case's
+`covers` or an `na` entry in the task's test meta (§ below). A bullet with no id is a constraint on how
 every case of that level is built, not a risk of its own — it needs neither. `regression`, `smoke`
 and `mutation` carry no ids: each already has its own gate rule (red-then-green, the fixed suite,
 the threshold check).
@@ -33,7 +33,7 @@ spec, not against habit. A task usually answers yes to several; each yes is a le
 | 13 | Is it toolchain or scaffold? | an `infra` task | `smoke` |
 
 Not a question — derived:
-- **Critical** → prefix `critical ·` when a bug here would corrupt shared state, grant access it
+- **Critical** → `"critical": true` when a bug here would corrupt shared state, grant access it
   should not, or destroy something — money, auth, deletes and two writers on one record are the
   usual shapes, not the whole list. Every case must then have been seen red.
 - **Beyond critical** → for a task already `critical`, propose `mutation` and **ASK**; never add it
@@ -49,8 +49,8 @@ Not a question — derived:
      change constants, so a unit case at the exact boundary proves it instead.
   Q4 yes and at least two of Q1–Q3 → propose, with the four answers as the reason. Money moved, a
   ledger written, stock or seats oversold are typical, not the rule. Declined → no `mutation`, no
-  `Not applicable` line, not asked again on re-plan. `Mutation: none` in `plans/infra.md` → do not
-  propose; say which task would have qualified.
+  `na` entry, not asked again on re-plan. The project's `mutation` record says tool `none` → do
+  not propose; say which task would have qualified.
 - **Transaction / isolation** is not its own level: rollback and constraints are `integration`
   cases; two transactions on one row are `concurrency` cases.
 
@@ -63,10 +63,24 @@ Where a yes still does not earn the level:
 
 **Not applicable.** Two granularities, both silent unless § 2 actually found the trigger:
 - A whole level, its trigger found and answered no anyway — a POST that is naturally idempotent, a
-  route that reads only immutable data — goes under the plan table (`/clio:plan` § 4) as
-  `- <task> · <level> — <reason>`.
+  route that reads only immutable data — goes in the plan task's `na`: `{"<level>": "<reason>"}`.
 - One id of a level the task does keep, whose specific risk this task's code does not raise — goes
-  under the tests doc (`/clio:test` § 3) as `- <task> · <level>.<n> — <reason>`.
+  in the task's test meta `na`: `{"<level>.<n>": "<reason>"}`.
+
+## Tier
+
+How much ceremony a task gets. Answer each question against what § 2 found:
+1. **Seen** — would a mistake show the moment someone looks at it (a colour, a layout, a label, an
+   animation, a message's wording)?
+2. **Undone by the code alone** — does reverting the commit put everything back, with nothing
+   stored, sent, migrated or charged in between?
+3. **Contained** — does it leave every trust boundary, shared record and other task's behaviour
+   as it was?
+
+All three yes, and it is not critical → `"tier": "light"`: one level (usually `smoke` or `unit`,
+whichever proves it), one case, no red. Any no → `full`. Cosmetic work in a UI is the common light
+task, not the definition: a "small" change to a price format or a permission check fails Q2 or Q3.
+Light changes nothing the gate checks — it only shortens what the skills write around it.
 
 ## unit
 One class or function through its public signature (`UserService.createUser()`).
@@ -164,13 +178,13 @@ one write succeed. Lives under the `infra` plan; every other area's gate assumes
 ## mutation
 Only where the plan names it: a critical task the user agreed is beyond critical (§ Choosing).
 Runs a mutation tester
-over the task's `Touches` classes that hold logic (not DTOs, records or config); the
+over the task's `touches` classes that hold logic (not DTOs, records or config); the
 command exits non-zero below the threshold (default 80 %, or the spec's / an ADR's). Surviving
 mutants listed in the output are missing cases — add them, don't lower the threshold. The case's
 command runs a full analysis: incremental history (PIT `withHistory`) is for iterating by hand,
 never for evidence — it is experimental and ignores changes in a class's dependencies.
 The gate does not trust the exit code alone: the command must pass the threshold as a flag that
 names it — `--thresholds.break N` (Stryker), `-DmutationThreshold=N` (PIT), or `--threshold N` /
-`--min-score N` for a wrapper script — and every such flag must be ≥ the threshold (80, or the `NN%`
-on `plans/infra.md`'s `Mutation:` line). No such flag, one lowered to slip past
+`--min-score N` for a wrapper script — and every such flag must be ≥ the threshold (80, or the
+`threshold` of the project's `mutation` record). No such flag, one lowered to slip past
 (`--thresholds.break 0`), or a `#` anywhere in the command, and the gate refuses it.

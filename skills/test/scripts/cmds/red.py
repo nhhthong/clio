@@ -9,6 +9,7 @@ import time
 import testcore as tc
 from cliolib import common as c
 from cliolib import fingerprint as fpm
+from cliolib import store
 from cliolib import tables
 
 
@@ -38,12 +39,12 @@ def cmd_red(args):
         tc.say("FAIL: %s is not a commit" % base)
         return 1
     rows = tc.cases()
-    prows = tables.plan_rows(tc.plan_files())
+    prows = store.plan_rows()
     ids = []
     for task in tasks:
         levels = next((r[4] for r in prows if r[1] == task), None)
         if levels is None:
-            tc.say("FAIL: task %s is in no %s/*.md row — nothing run" % (task, tc.PLANS))
+            tc.say("FAIL: task %s is in no %s/*.jsonl record — nothing run" % (task, tc.PLANS))
             return 1
         crit = "critical" in levels
         ids += [r[0] for r in rows if r[1] == task and r[4] not in (tables.DASH, "-")

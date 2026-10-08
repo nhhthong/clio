@@ -22,18 +22,16 @@ above on today's code instead, and say so. A `red` run is never read as today's 
 script reports `NOT RED` passed on the old code. Two different reasons, two different answers —
 **never break code by hand to get a red**:
 - **The test is weak** — the bug was there and the case did not see it: strengthen the case (show
-  the user the changed row, approve again) and run `red` again.
+  the user `clio test diff`, approve again) and run `red` again.
 - **The behaviour was always right** — a hardening task: the base never had the bug, so no red
   exists to find. This exit is for `critical` tasks only; a `regression` case that will not go red
   does not reproduce its bug — rewrite it until it does. If the task names `mutation`, a passing
   mutation case stands in for red on its other cases (the gate prints a `NOTE`). If it does not and many cases come back `NOT RED`, propose
-  `mutation` for the task to the user (`/clio:plan` adds it) — unless `plans/infra.md` says
-  `Mutation: none`. Otherwise, one case at a time, propose a waiver in the tests file, under the
-  table:
+  `mutation` for the task to the user (`/clio:plan` adds it) — unless the project's `mutation`
+  record says tool `none`. Otherwise, one case at a time, propose a waiver in the task's test meta:
+  ```json
+  {"type":"meta","id":"3.4","waived":{"3.4-u2":"correct since before a1b2c3d; red --base a1b2c3d passed"}}
   ```
-  Red waived:
-  - 3.4-u2 — correct since before a1b2c3d; `red --base a1b2c3d` passed
-  ```
-  It is part of the approved table, so the user says yes to it like to a case. The gate accepts it
+  It is part of what the user approves, so they say yes to it like to a case. The gate accepts it
   only if a `red` run of that case with these test files **passed** on a base commit — a waiver
   stands on a tried red, never instead of one.

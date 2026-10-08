@@ -1,8 +1,8 @@
 ---
 name: context
-description: Load the spec, prior task docs and open debt for an area before working in it. Use before any non-trivial task, and when the user asks "where are we", "what's next", "why is X like this" or "any history on this".
+description: Load the spec, prior task docs and open debt for an area before working in it. Use before any non-trivial task, and when the user asks "where are we", "what's next", "what should I do now", "which clio skill", "why is X like this" or "any history on this".
 argument-hint: "[area | requirements row | debt id | question — omit for the overview]"
-allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/bin/clio q *)
+allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/bin/clio q *) Bash(${CLAUDE_PLUGIN_ROOT}/bin/clio validate all)
 ---
 
 # Related Context
@@ -18,7 +18,9 @@ Also the answer to "what do I still owe?" — hop 3 alone, filtered, is the whol
 **Two depths.** The *user* asked "where are we / what's next / continue" with no area named →
 **hop 0**: run `clio q summary` and open nothing else. Report in ≤ 10 lines: per area `done/open` and
 the first open task with its levels · debt `queue` vs `blocked` · last memo. A `next:` whose `Needs`
-is unticked is not next — say which task it waits on. Stop there. Anything
+is unticked is not next — say which task it waits on. End with the `suggest:` lines of the summary,
+verbatim: a script computed them from the ledgers and git, so do not reword them or add your own. They are
+how a user who does not know which skill fits finds out. Stop there. Anything
 else — a target (area, row, debt `id`, file), a "why is X like this?" question, or **you triggered
 this yourself before a task** (then the target is that task's area; an empty `$ARGUMENTS` is not a
 reason for hop 0) → hops 1–4 below, then open **only** the docs those records point at and answer
@@ -58,7 +60,7 @@ Each hop feeds the next — don't skip ahead, and don't stop after hop 1 just be
 ## Report — including what looks wrong
 
 Summarise: governing spec + status, prior docs worth knowing, the feature's General Memory, open debt in this area, the rules that bind the files, the plan's
-next task and its cases (`docs/tests/<area>.md`). A question ("why X?", "what is `<id>`?") is answered from the section the
+next task and its cases (`clio q cases <task>`). A question ("why X?", "what is `<id>`?") is answered from the section the
 record names — task doc `## Decisions` / `## Side Effects` / `## Follow-up`, ADR `## Decision` /
 `## Consequences`, debt `what` / `action` / `blocked_by` — quoted, with the path. Then flag
 plainly, without fixing:

@@ -19,11 +19,12 @@ def scratch():
     return d
 
 
-def clio(*args, env=None, cwd=None):
-    """Run `clio <args>` → (exit code, stdout, stderr)."""
+def clio(*args, env=None, cwd=None, input=None):
+    """Run `clio <args>` → (exit code, stdout, stderr); input goes to its stdin."""
     e = dict(os.environ, **env) if env else None
     p = subprocess.run([sys.executable, CLIO] + list(args), stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                       universal_newlines=True, env=e, cwd=cwd)
+                       universal_newlines=True, env=e, cwd=cwd, input=input,
+                       stdin=None if input is not None else subprocess.DEVNULL)
     return p.returncode, p.stdout, p.stderr
 
 

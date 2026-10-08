@@ -10,7 +10,7 @@
 
   [![Claude Code plugin](https://img.shields.io/badge/Claude_Code-plugin-D97757?logo=anthropic&logoColor=white)](https://code.claude.com/docs/en/plugins)
   [![Python](https://img.shields.io/badge/python-3.9+-3776AB?logo=python&logoColor=white)](https://www.python.org)
-  [![Version](https://img.shields.io/badge/version-4.2.0-blue)](CHANGELOG.md)
+  [![Version](https://img.shields.io/badge/version-5.0.0-blue)](CHANGELOG.md)
   [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 </div>
 
@@ -65,12 +65,14 @@ Four questions, one home each, all under `.claude/clio/`. Nothing here is loaded
 
 | | Holds | Written by |
 |---|---|---|
-| **Decided** | `docs/specs/` (requirements, per-area decisions, stack) and `docs/plans/` (tasks + test levels) | `/clio:ingest`, `/clio:plan` |
+| **Decided** | `docs/specs/` (requirements, per-area decisions, stack) and `database/plan/` (tasks + test levels) | `/clio:ingest`, `/clio:plan` |
 | **Built** | `database/index.jsonl`, `docs/tasks/`, `docs/decisions/` (ADRs) | `/clio:memo` |
-| **Proven** | `database/runs.jsonl`, `docs/tests/` (approved cases) | `/clio:test` script only |
+| **Proven** | `database/runs.jsonl`, `database/test/` (approved cases) | `/clio:test` script only |
 | **Owed** | `database/debt.jsonl` (bugs, open questions) | `/clio:memo`, `/clio:ingest` |
 
-`.jsonl` ledgers are append-only. All four join on the requirement row number.
+`.jsonl` files are append-only: the last record per id is the current state, the earlier ones its
+history. Plans and cases are written only through `clio add`, which checks every record first; a task
+becomes done only through `clio test tick`, after the gate. All four join on the requirement row number.
 
 ## The loop
 
@@ -83,7 +85,7 @@ flowchart LR
 Two hooks:
 
 - `clio_nudge.py` — reminds once per session that a memo is still owed
-- `clio_guard.py` — refuses any write to `runs.jsonl` except from `clio test`
+- `clio_guard.py` — refuses any write to `runs.jsonl` and the plan/test stores except from `clio test` / `clio add`
 
 Neither writes a ledger itself.
 

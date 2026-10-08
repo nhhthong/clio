@@ -14,8 +14,9 @@ clio q unrecorded   # commits since the last one any index record names: <hash><
 
 | `changed` | `unrecorded` | Situation | Go to |
 |---|---|---|---|
+| files, and stderr says `unchanged since the last memo` | anything | the files are there but the code is the one the last memo recorded | stop: say "nothing new to record" |
 | files | anything | work in progress or just finished, not (fully) committed | the target's case below |
-| empty | lines | work committed, never recorded — or recorded before it was committed | Case D if every line names docs; else the target's case, files from `git show --name-only --format= <hash>` |
+| empty | lines | work committed, never recorded — or recorded before it was committed | Case D if every line names docs; else the target's case, files from `git show --name-only --format= <hash>` — or, when the user says that commit is no task's work, a `chore` record (`INDEX-IT.md` § Chore) |
 | empty | empty | nothing new since the last memo | stop: say "nothing to record", unless the user names work outside git |
 | "not a git repository" | – | no git | the target's case; files come from the session only, commit stays empty |
 
@@ -32,12 +33,12 @@ Do this FIRST, before writing anything.
 filename:
 ```bash
 clio q built --task <task>
-grep -n "^| <task> " .claude/clio/docs/plans/*.md      # the row: its Levels and Done cells
+clio q plan --id <task>          # the task: levels, tier, status
 ```
 - A doc came back → UPDATE mode.
 - No doc, and the task is a re-plan sub-task (`3.1.1` under `3.1`) → `clio q built --task <parent id>`.
   A doc came back → UPDATE it: a sub-task changes or hardens what its parent's doc describes.
-- No doc, but the plan row exists → CREATE, with the id in `plan_tasks` at step 3.
+- No doc, but the plan task exists → CREATE, with the id in `plan_tasks` at step 3.
 - Neither → stop, ask. Don't invent a plan id.
 
 **Case C — no target:** find the existing doc before assuming there isn't one. `clio q` returns
@@ -53,9 +54,11 @@ ls -1t .claude/clio/docs/tasks/                       # feature directories, mos
 
 **Case D — backfill.** Nothing uncommitted, and every `unrecorded` line names the docs that cover its
 files: the work was recorded while uncommitted and has since been committed. For each such doc,
-UPDATE with the hash only — `Commit:` line, `## Change Log`, `commits` in its index record, and the
-hash appended to its ticked plan rows. Nothing else is re-derived or rewritten; say "backfill" in the
-report. A line ending `-` is work nobody recorded → Case C for those files.
+UPDATE with the hash only — `Commit:` line, `## Change Log`, `commits` in its index record, and
+`clio test tick <id> --commit <hash>` for each of its done plan tasks (on a done task it records the
+hash and runs nothing). Nothing else is re-derived or rewritten; say "backfill" in the report. Many
+docs at once: one index line per doc, appended together, then `clio validate index <N>`. A line
+ending `-` is work nobody recorded → Case C for those files, or a `chore` if the user says so.
 
 **Same sub-task vs new:** same files ≠ same sub-task. Continuing, fixing, extending or reverting the
 work a doc already describes → UPDATE that doc. A different observable behaviour, even in the same
@@ -105,17 +108,14 @@ grep -in "<feature keyword>" .claude/clio/docs/specs/requirements.md
 
 ## Which plan task this work is
 
-Match on the plan table's **`req` column**, not on the task id. `/clio:plan` numbers its ids
-`<row>.<n>`, but a plan lifted out of an old `requirements.md` keeps that project's own numbering,
-so `1.14` can serve req `10`:
+Match on the task's **`req`**, not on its id: `/clio:plan` numbers ids `<row>.<n>`, but a plan
+migrated from an old project keeps its own numbering, so `1.14` can serve req `10`:
 ```bash
-awk -F'|' -v r="<req>" 'NF>5 && $4 ~ ("(^| )" r "( |,|$)") {gsub(/^ +| +$/,"",$2); print FILENAME": "$2}' \
-  .claude/clio/docs/plans/*.md
+clio q plan --all --req <req>
 ```
-Plan still in its pre-split bullet form → no `req` column to match; say so and read the file.
-- Each row this work actually implements goes in `plan_tasks` for step 3; step 4 gates and ticks it.
-- Unsure whether a row belongs → leave it out. `[]` is a correct answer; a wrong id makes step 4
+- Each task this work actually implements goes in `plan_tasks` for step 3; step 4 gates and ticks it.
+- Unsure whether a task belongs → leave it out. `[]` is a correct answer; a wrong id makes step 4
   gate and tick a task nobody meant.
-- Nothing at all → no plan file for this row; say so in the report and continue.
+- Nothing at all → no plan for this row; say so in the report and continue.
 
 Next: `WRITE-DOC.md`.

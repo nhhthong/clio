@@ -132,6 +132,51 @@ def read_valid(path, err=sys.stderr):
     return out
 
 
+def same_commit(a, b):
+    """Two hashes of unpinned length name the same commit: one is a prefix of the other, at least 6
+    characters long — the shortest a ledger may hold."""
+    a, b = tostring(a).strip().lower(), tostring(b).strip().lower()
+    n = min(len(a), len(b))
+    return n >= 6 and a[:n] == b[:n]
+
+
+def recorded_commits(idx):
+    """Every commit hash an index.jsonl record names (`commits`, or a pre-2.0 scalar `commit`)."""
+    out = []
+    for r in idx:
+        if isinstance(r, dict):
+            out += [tostring(h) for h in items(r.get("commits"))]
+            if truthy(r.get("commit")):
+                out.append(tostring(r["commit"]))
+    return out
+
+
+def unrecorded_commits(idx, limit="20"):
+    """[(short hash, files)] newest first: the non-merge commits since the last one an index record
+    names, each with the files it touched outside .claude/. The scan stops at the first commit a task or
+    adr record names (older work was recorded, or predates Clio) and passes over a commit a `chore`
+    record owns. A merge adds no change of its own, so it is never listed. One definition for `clio q
+    unrecorded` and the drift hook."""
+    if git(["rev-parse", "--verify", "-q", "HEAD"]).returncode != 0:
+        return []
+    recs = [r for r in idx if isinstance(r, dict)]
+    rec = recorded_commits([r for r in recs if r.get("type") != "chore"])
+    chores = recorded_commits([r for r in recs if r.get("type") == "chore"])
+    out = []
+    for h in git_out(["log", "-%s" % limit, "--no-merges", "--format=%H"]).split("\n"):
+        if not h:
+            continue
+        if any(same_commit(h, x) for x in rec):
+            break
+        if any(same_commit(h, x) for x in chores):
+            continue
+        files = [f for f in git_out(["show", "--name-only", "--format=", h]).split("\n")
+                 if f and not f.startswith(".claude/")]
+        if files:               # a commit of .claude/ only is Clio's own output
+            out.append((h[:7], files))
+    return out
+
+
 def git(args, cwd=None, env=None, input=None, check=False):
     """git with its output captured as text; returns the CompletedProcess."""
     e = None

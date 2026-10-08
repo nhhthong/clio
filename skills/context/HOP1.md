@@ -26,9 +26,9 @@ full — they're short and already distilled.
 
 Note the row number(s) (`req`) — reused in [HOP2.md](HOP2.md), and `/clio:memo` needs them.
 
-`.claude/clio/docs/plans/<area>.md` exists → run `clio q summary` and read this area's `next:` line
-for the next ready task — **never derive it yourself** by eyeballing `Done`/`Needs` in the raw table;
-a `Needs` can name a task in a *different* area's plan (`0.4` in `infra`), which only `clio q summary`
-resolves across every plan file at once. Its cases in `.claude/clio/docs/tests/<area>.md`
-are the success criterion; none yet → `/clio:test <task>` designs them before code. No plan file
-for a ✅ row you are about to build → say `/clio:plan <area>` has not been run, continue.
+The area has a plan → run `clio q summary` and read this area's `next:` line for the next ready
+task — **never derive it yourself** from `clio q plan`: a `needs` can name a task in a *different*
+area (`0.4` in `infra`), which only `clio q summary` resolves across every area at once. Its cases
+(`clio q cases <task>`) are the success criterion; none yet → `/clio:test <task>` designs them
+before code. No plan for a ✅ row you are about to build → say `/clio:plan <area>` has not been
+run, continue.

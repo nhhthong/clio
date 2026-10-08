@@ -1,8 +1,8 @@
 ---
 name: memo
-description: Record a finished piece of work — update (or create) its sub-task doc under .claude/clio/docs/tasks/<feature>/, append the run to .claude/clio/database/index.jsonl, log what is still owed to .claude/clio/database/debt.jsonl, tick the plan task once /clio:test's gate passes, and propose a path-scoped .claude/rules/ entry or an ADR when warranted. Works on committed or uncommitted work, and backfills the commit hash later. Run after finishing a feature, fix or refactor.
+description: Record a finished piece of work — its sub-task doc, one index.jsonl line, what is still owed in debt.jsonl, and the plan task ticked once /clio:test's gate passes; backfills the commit hash later. Run when the user says a feature, fix or refactor is done.
 argument-hint: "[task doc path | plan task id such as 3.3 — optional]"
-allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/bin/clio q *) Bash(${CLAUDE_PLUGIN_ROOT}/bin/clio validate *) Bash(${CLAUDE_PLUGIN_ROOT}/bin/clio test gate *)
+allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/bin/clio q *) Bash(${CLAUDE_PLUGIN_ROOT}/bin/clio validate *) Bash(${CLAUDE_PLUGIN_ROOT}/bin/clio test gate *) Bash(${CLAUDE_PLUGIN_ROOT}/bin/clio test tick *) Bash(${CLAUDE_PLUGIN_ROOT}/bin/clio test fp)
 ---
 
 **Run only when the user asked for it, this turn** — by slash command, or in plain words ("record
@@ -44,6 +44,16 @@ Uncommitted work is normal and is recorded the same way. The commit is simply no
   usually not this work.
 - The hash arrives later on its own: after the user commits, the drift hook notices the unrecorded
   commit, and the next `/clio:memo` backfills it (Case D in step 1) without touching anything else.
+- A commit that is no task's work at all — CI config, tooling, a dependency bump the user did by
+  hand — is said so once, on the user's word, as a `chore` record (`INDEX-IT.md` § Chore), and is
+  never reported again.
+
+## Light work
+
+Every plan task this run implements is `"tier":"light"` (`clio q plan --id <id>`) → the light path:
+step 2 writes only the doc's header and one `## Change Log` line (`WRITE-DOC.md` § Light), step 3
+its index line, step 4 the gate and the tick. No `## Decisions`, `## Files Changed` or
+`## Testing Done` bookkeeping, no wrap-up beyond the report. The gate is never skipped.
 
 ## Steps
 
@@ -58,5 +68,5 @@ Step files live in `${CLAUDE_PLUGIN_ROOT}/skills/memo/steps/`. Read each when yo
    plan tasks, record what is still owed.
 5. **Wrap up** → `WRAP-UP.md`. `.claude/rules/` entry (needs a yes), ADR if applicable, report.
 
-A backfill run (Case D) does steps 2–3 and the plan-tick part of 4 only, and changes nothing but the
+A backfill run (Case D) does steps 2–3 and the commit part of 4 only, and changes nothing but the
 commit hash.

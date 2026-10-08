@@ -5,7 +5,6 @@ Python 3.9+, standard library only."""
 import datetime
 import glob
 import os
-import re
 import signal
 import subprocess
 import sys
@@ -16,18 +15,16 @@ sys.path.insert(0, os.path.join(HERE, "..", "..", "lib"))
 from cliolib import common as c  # noqa: E402
 from cliolib import fingerprint as fpm  # noqa: E402
 from cliolib import junit  # noqa: E402
+from cliolib import store  # noqa: E402
 from cliolib import tables  # noqa: E402
 
-# The catalog this script's own repo ships beside it — not the target repo's — so `level_ids` below
-# reads the same ids /clio:test wrote from, however clio test was invoked.
-LEVELS_FILE = os.path.join(HERE, "..", "LEVELS.md")
 # The only level names a plan or a case may use — LEVELS.md's catalog, lowercase.
-LEVELS = "unit integration api contract e2e idempotency concurrency security resilience perf load stress regression smoke mutation"
-TESTS = ".claude/clio/docs/tests"
-PLANS = ".claude/clio/docs/plans"
+LEVELS = " ".join(store.LEVELS)
+TESTS = store.TEST_DIR
+PLANS = store.PLAN_DIR
 # ponytail: fixed floor for concurrency repeats; make it a per-case column if 20 proves wrong somewhere.
 CONCURRENCY_MIN_REPEAT = 20
-# LEVELS.md's mutation default; override per project with `NN%` on the `Mutation:` line in plans/infra.md.
+# LEVELS.md's mutation default; override per project with the `threshold` of the plan's `mutation` record.
 MUTATION_MIN_THRESHOLD = 80
 NA = ("", tables.DASH, "-")
 
@@ -61,33 +58,29 @@ def say(s=""):
 # --- the tables and the ledger ----------------------------------------------------------------------
 
 def test_files():
-    return sorted(glob.glob(TESTS + "/*.md"))
+    return store.files("test")
 
 
 def plan_files():
-    return sorted(glob.glob(PLANS + "/*.md"))
+    return store.files("plan")
 
 
 def cases():
-    """Every case row of every tests file — see tables.case_rows for the fields."""
-    return tables.case_rows(LEVELS, test_files())
+    """Every active case of every test store file — see store.case_rows for the fields."""
+    return store.case_rows(LEVELS)
 
 
 def level_ids(level):
     """All `level.n` ids LEVELS.md's catalog names for a level — the risks a named level must cover
     or excuse. A level whose bullets carry no id (regression, smoke, mutation — each has its own gate
     rule already) has none, which is how the gate knows to skip the check entirely for it."""
-    try:
-        text = open(LEVELS_FILE, encoding="utf-8").read()
-    except OSError:
-        return []
-    return sorted({m[1:-1] for m in re.findall(r"`" + re.escape(level) + r"\.[0-9]+`", text)})
+    return store.level_ids(level)
 
 
 def na_lines(task):
     """The bullet-scoped Not applicable list of one task: (id, line). The excuse check reads the id,
     table_hash the line — one parse for both, so a line that excuses an id is always one the user approved."""
-    return [(i, line) for t, i, line in tables.na_rows(test_files()) if t == task]
+    return [(i, line) for t, i, line in store.na_rows() if t == task]
 
 
 def records():
@@ -126,16 +119,51 @@ def timeout_s():
         return 600
 
 
+def ran_nothing(text):
+    """True when a command that exited 0 says it ran no test at all: a case whose test was renamed or
+    deleted would otherwise "pass". Only output that says so for every package, binary or file counts —
+    `go test ./... -run X` prints [no tests to run] for the packages without X and is fine if one ran.
+    Go, cargo, pytest and unittest; a runner not listed here is the case's own command to make strict."""
+    lines = text.splitlines()
+    go_ok = [l for l in lines if l.startswith("ok ") or l.startswith("ok\t")]
+    if go_ok and all("[no tests to run]" in l for l in go_ok):
+        return True
+    cargo = [l.strip() for l in lines if l.strip().startswith("running ") and l.strip().endswith(" tests")]
+    if cargo and all(l == "running 0 tests" for l in cargo):
+        return True
+    return any(l.startswith(("collected 0 items", "no tests ran", "Ran 0 tests")) or " no tests ran in " in l for l in lines)
+
+
+def heartbeat_s():
+    """How often a long command says it is still running — a hang reads as one long before the cap."""
+    try:
+        return max(1, int(os.environ.get("CLIO_HEARTBEAT", "60")))
+    except ValueError:
+        return 60
+
+
 def capped(cmd, cwd, log):
     """`bash -c cmd` in cwd, output to log, capped at CLIO_TIMEOUT seconds (default 600): a deadlocked
     case fails instead of hanging the run. On timeout the whole process group goes — the shell and
-    whatever it started (mvn, a JVM) — and the exit is 124, as coreutils' timeout reports it.
+    whatever it started (mvn, a JVM) — and the exit is 124, as coreutils' timeout reports it. Every
+    CLIO_HEARTBEAT seconds (default 60) it says it is still running and how long the cap leaves.
     Returns (exit code, timed out)."""
+    cap = timeout_s()
     with open(log, "wb") as lf:
         p = subprocess.Popen(["bash", "-c", cmd], cwd=cwd, stdin=subprocess.DEVNULL, stdout=lf,
                              stderr=subprocess.STDOUT, start_new_session=True)
+        waited, rc = 0, None
         try:
-            rc = p.wait(timeout=timeout_s())
+            while rc is None:
+                step = min(heartbeat_s(), cap - waited)
+                if step <= 0:
+                    raise subprocess.TimeoutExpired(cmd, cap)
+                try:
+                    rc = p.wait(timeout=step)
+                except subprocess.TimeoutExpired:
+                    waited += step
+                    if waited < cap:
+                        say("… still running after %d s (cap %d s, CLIO_TIMEOUT): %s" % (waited, cap, cmd[:100]))
         except subprocess.TimeoutExpired:
             for sig, grace in ((signal.SIGTERM, 5), (signal.SIGKILL, None)):
                 try:
@@ -163,9 +191,9 @@ def tail(log, n=30):
 def row_of(cid, rows):
     hit = [r for r in rows if r[0] == cid]
     if not hit:
-        raise CaseError("FAIL: case %s is in no %s/*.md row" % (cid, TESTS))
+        raise CaseError("FAIL: case %s is in no %s/*.jsonl record" % (cid, TESTS))
     if len(hit) > 1:
-        raise CaseError("FAIL: case %s appears twice" % cid)
+        raise CaseError("FAIL: case %s lives in two area files — one id, one area" % cid)
     r = hit[0]
     if r[7]:
         raise CaseError("FAIL: case %s: %s" % (cid, r[7]))
@@ -192,6 +220,13 @@ def run(cid, wd=None, base=""):
             if timed_out:
                 with open(log, "a") as lf:
                     lf.write("timed out after %ds (run %d of %d)\n" % (timeout_s(), i, rep))
+            elif code == 0:
+                with open(log, encoding="utf-8", errors="replace") as lf:
+                    vacuous = ran_nothing(lf.read())
+                if vacuous:    # exit 0 without a test is not a pass
+                    code = 1
+                    with open(log, "a") as lf:
+                        lf.write("the command ran no test (the test was renamed or deleted?) — a case that runs nothing proves nothing\n")
             if code != 0:
                 break
             passed += 1
@@ -397,14 +432,14 @@ def link_deps(wt):
 
 
 def case_part(task):
-    return tables.case_lines(task, test_files())
+    return store.case_lines(task)
 
 
 def list_part(task):
     """What else the user approved for a task: its `Not applicable` lines, then the `Red waived`
     lines of its cases."""
     mine = {r[0] for r in cases() if r[1] == task}
-    return [line for _, line in na_lines(task)] + [line for cid, line in tables.waiver_rows(test_files()) if cid in mine]
+    return [line for _, line in na_lines(task)] + [line for cid, line in store.waiver_rows() if cid in mine]
 
 
 def hash_of(lines):
@@ -413,8 +448,7 @@ def hash_of(lines):
 
 def table_hash(task):
     """What the user approved for a task, in two parts — its case rows and its lists — hashed as
-    one: an excuse or a waiver added after approve voids it like an edited case would. A task with no
-    list line hashes exactly as before 4.2.0."""
+    one: an excuse or a waiver added after approve voids it like an edited case would."""
     if not test_files():
         return "none"
     return hash_of(case_part(task) + list_part(task))

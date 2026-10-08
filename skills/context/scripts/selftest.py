@@ -20,8 +20,8 @@ def field(s, k):
 scratch()
 I = ".claude/clio/database/index.jsonl"
 D = ".claude/clio/database/debt.jsonl"
-P = ".claude/clio/docs/plans/"
-os.makedirs(".claude/clio/docs/plans")
+P = ".claude/clio/database/plan/"
+os.makedirs(P)
 os.makedirs(".claude/rules/api")
 
 # a pre-3.0 record (no id) later claimed by id 100 through `supersedes`, then two runs of id 100
@@ -45,33 +45,54 @@ eq(field(q("owed"), "id"), ["d2", "d1"], "queue first, done excluded")
 eq(field(q("owed", "--req", "7.1"), "id"), ["d1"], "owed by row")
 eq(field(q("owed", "--all", "--id", "d3"), "status"), ["done"], "--all sees closed records")
 eq(json.loads(lines(q("history", "100"))[-1])["added"], ["b.go"], "history diff")
-eq(q("summary").split("\n")[-1], "last memo: 2026-03-02 t/200_b.md", "summary last memo")
+eq([l for l in q("summary").split("\n") if l.startswith("last memo")][0], "last memo: 2026-03-02 t/200_b.md", "summary last memo")
 
-# summary's next task: a table plan gives id · task · levels; a bullet plan must not dump its whole line
-HEAD = "| # | Task | req | Levels | Needs | Touches | Done |\n|---|---|---|---|---|---|---|\n"
-write(P + "tbl.md", HEAD + "| 3.1 | orders list | 3 | unit, api | – | – | [ ] |\n")
-write(P + "blt.md", "- [ ] **1.16** File association registration for JPG/JPEG/PNG/WebP/GIF/TIFF/BMP, on the primary "
-      "dev OS first, others tracked as follow-ups (req #30).\n")
+# spec-grep: a live decision shows, a superseded one is counted and skipped, a reinstated one is live again
+os.makedirs(".claude/clio/docs/specs/memory", exist_ok=True)
+write(".claude/clio/docs/specs/memory/m.md", "# M\n\n## Decisions\n- The panel is 40 columns wide.\n"
+      "- Old: the panel is 40 columns. Superseded 2026-10-01: now 47.\n"
+      "- Kept: 40 columns again. Superseded 2026-10-02: x. Reinstated 2026-10-03: back.\n\n## Open — ⚠️\n- None.\n\n## Source\n> a 40 column quote\n")
+g = q("spec-grep", "40 col")
+ok(g.count("m.md:") == 2 and "# 2 live, 1 superseded and skipped" in g and "quote" not in g, "spec-grep: " + g)
+
+# a filter given twice is an error, not a silent "last one wins"
+rc, _, err = clio("q", "built", "--req", "7.1", "--req", "7.10")
+ok(rc != 0 and "given twice" in err, "a repeated filter was accepted: %s %s" % (rc, err))
+
+# summary's next task: id · task · levels, per area file of the plan store
+def plan(area, *recs):
+    write(P + area + ".jsonl", "".join(json.dumps(dict({"type": "task", "date": "2026-01-01", "req": [],
+          "critical": False, "tier": "full", "needs": [], "touches": [], "na": {}, "status": "open", "by": None,
+          "commit": None, "delta": None}, **r), ensure_ascii=False) + "\n" for r in recs))
+
+
+plan("tbl", {"id": "3.1", "task": "orders list", "levels": ["unit", "api"]})
 s = q("summary")
-ok(re.search(r"(?m)^tbl: done=0 open=1 next: 3\.1 \| orders list \| unit, api", s), "table plan next lost: " + s)
-b = next((l for l in s.split("\n") if l.startswith("blt:")), "")
-ok(len(b) <= 120, "bullet plan dumped whole: " + b)
-# a pre-4.0 row superseded by its replacement counts as neither open nor done
-write(P + "sup.md", "| # | Task | req | Test that proves it | Needs | Done |\n|---|---|---|---|---|---|\n"
-      "| 3.2 | 401 | 3 | `go test` | – | superseded 2026-09-24 → 3.2.1 |\n\n" + HEAD + "| 3.2.1 | 401 | 3 | api | – | – | [ ] |\n")
+ok(re.search(r"(?m)^tbl: done=0 open=1 next: 3\.1 \| orders list \| unit, api", s), "plan next lost: " + s)
+# a superseded task counts as neither open nor done; the last record per id is the task's state
+plan("sup", {"id": "3.2", "task": "401", "levels": ["api"]},
+     {"id": "3.2", "task": "401", "levels": ["api"], "status": "superseded", "by": "3.2.1"},
+     {"id": "3.2.1", "task": "401", "levels": ["api"], "critical": True})
 s = q("summary")
-ok(re.search(r"(?m)^sup: done=0 open=1 next: 3\.2\.1 ", s), "superseded row counted or replacement not next: " + s)
-# next skips a row whose Needs are not ticked yet — across plans (0.4 lives in infra) — and says so
+ok(re.search(r"(?m)^sup: done=0 open=1 next: 3\.2\.1 \| 401 \| critical · api", s), "superseded task counted or replacement not next: " + s)
+# next skips a task whose needs are not done yet — across areas (0.4 lives in infra) — and says so
 # when nothing is ready
-write(P + "inf.md", HEAD + "| 0.4 | smoke suite | 0 | smoke | – | – | [ ] |\n")
-write(P + "nd.md", HEAD + "| 4.1 | create | 4 | unit | 0.4 | – | [ ] |\n| 4.2 | list | 4 | api | 0.4, 4.1 | – | [ ] |\n")
+plan("inf", {"id": "0.4", "task": "smoke suite", "levels": ["smoke"]})
+plan("nd", {"id": "4.1", "task": "create", "levels": ["unit"], "needs": ["0.4"]},
+     {"id": "4.2", "task": "list", "levels": ["api"], "needs": ["0.4", "4.1"]})
 s = q("summary")
-ok(re.search(r"(?m)^nd: done=0 open=2 next: 4\.1 \| create \| unit \(waits on 0\.4\)", s), "unmet Needs not reported: " + s)
-write(P + "inf.md", HEAD + "| 0.4 | smoke suite | 0 | smoke | – | – | [x] 2026-09-01 |\n")
+ok(re.search(r"(?m)^nd: done=0 open=2 next: 4\.1 \| create \| unit \(waits on 0\.4\)", s), "unmet needs not reported: " + s)
+plan("inf", {"id": "0.4", "task": "smoke suite", "levels": ["smoke"], "status": "done"})
 s = q("summary")
-ok(re.search(r"(?m)^nd: done=0 open=2 next: 4\.1 \| create \| unit$", s), "ready row not next: " + s)
-for f in ("tbl", "blt", "sup", "inf", "nd"):
-    os.remove(P + f + ".md")
+ok(re.search(r"(?m)^nd: done=0 open=2 next: 4\.1 \| create \| unit$", s), "ready task not next: " + s)
+# plan: open tasks by default; --all every status; --req compares the row as a string (7.1 ≠ 7.10)
+plan("rq", {"id": "7.1.1", "task": "a", "levels": ["unit"], "req": ["7.1"]},
+     {"id": "7.10.1", "task": "b", "levels": ["unit"], "req": ["7.10"]})
+ok("7.10.1" not in q("plan", "--req", "7.1") and "7.1.1" in q("plan", "--req", "7.1"), "plan --req: " + q("plan", "--req", "7.1"))
+ok("| 0.4 |" not in q("plan", "inf") and "| 0.4 |" in q("plan", "inf", "--all"), "plan hides done tasks unless --all")
+os.remove(P + "rq.jsonl")
+for f in ("tbl", "sup", "inf", "nd"):
+    os.remove(P + f + ".jsonl")
 
 write(D, "not json\n", "a")
 ok("malformed" in clio("q", "owed")[2], "malformed line not reported")
@@ -83,7 +104,7 @@ eq(q("rules", "README.md").count("api/ts.md"), 0, "path-scoped rule not matched"
 eq(q("rules", "README.md").count("loads every session"), 1, "unscoped rule named")
 
 write(I, "")
-eq(q("summary").split("\n")[-1], "last memo: none yet", "empty index")
+eq([l for l in q("summary").split("\n") if l.startswith("last memo")][0], "last memo: none yet", "empty index")
 
 # --- git: which files changed, which commit holds them, which commits nobody recorded
 eq(q("commit", "a.go"), "", "not a git repo → empty commit")
@@ -111,6 +132,16 @@ eq(q("unrecorded"), "%s\tt/300_x.md" % h2, "unrecorded stops at the recorded com
 git("add", "-A", ".claude")
 git("commit", "-qm", "memo")
 eq([l.split("\t")[0] for l in lines(q("unrecorded"))], [h2], "a .claude/-only commit is skipped")
+# a commit no task owns, acknowledged as a chore record, is skipped — not a stop: h2 is still owed
+write("ci.yml", "x\n")
+git("add", "ci.yml")
+git("commit", "-qm", "ci")
+h3 = git("rev-parse", "HEAD")
+ok(q("unrecorded").startswith(h3[:7] + "\t-"), "an unowned commit not listed: " + q("unrecorded"))
+write(I, json.dumps({"date": "2026-03-04", "type": "chore", "id": h3, "commits": [h3[:8]], "note": "CI only"}) + "\n", "a")
+eq([l.split("\t")[0] for l in lines(q("unrecorded"))], [h2], "a chore is skipped, and hides no older unrecorded work")
+ok("CI only" not in q("built"), "built lists a chore record")
+ok(not q("summary").endswith("None"), "summary named a chore as the last memo")
 
 # ingest baseline: a snapshot of the spec files, committed or not; the diff sees hand edits and new files
 ok(clio("q", "spec-diff")[0] != 0, "spec-diff without a baseline must fail")
@@ -142,5 +173,19 @@ eq(lines(q("spec-diff", "--stat")), [], "baseline moved again")
 
 write(".claude/rules/rb.md", '---\npaths: ["lib/**/*.rb", "app/*.rb"]\n---\n- r\n')
 eq(q("rules", "app/x.rb").count("rb.md"), 1, "inline paths: list parsed")
+
+# changed: the index record's fingerprint says whether anything moved since that memo
+write("fpcheck.txt", "x\n")
+fpnow = out("test", "fp")
+rc, o, err = clio("q", "changed")
+ok("unchanged since" not in err, "no fp recorded yet, yet changed claimed nothing moved: " + err)
+write(I, json.dumps({"date": "2026-03-05", "id": "400", "type": "task", "doc": "t/400_f.md", "domain": "x", "plan_tasks": [], "files": ["fpcheck.txt"],
+                     "commits": [], "keywords": ["k"], "req": [], "specs": [], "fp": fpnow}) + "\n", "a")
+rc, o, err = clio("q", "changed")
+ok("fpcheck.txt" in o and "unchanged since the last memo" in err, "same code as the last memo not recognised: %s | %s" % (o, err))
+write("fpcheck.txt", "y\n")
+rc, o, err = clio("q", "changed")
+ok("unchanged since" not in err, "edited code still called unchanged: " + err)
+os.remove("fpcheck.txt")
 
 done()

@@ -6,6 +6,8 @@ import re
 import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "lib"))
+from cliolib import common as c  # noqa: E402
+from cliolib import store  # noqa: E402
 from cliolib import testkit  # noqa: E402
 from cliolib.testkit import clio, git, lines, read, write  # noqa: E402,F401
 
@@ -13,14 +15,12 @@ d = testkit.scratch()
 git("init", "-q")
 git("config", "user.email", "t@t")   # the scratch repo only — its commits need an author
 git("config", "user.name", "t")
-for p in (".claude/clio/database", ".claude/clio/docs/tests", ".claude/clio/docs/plans"):
+for p in (".claude/clio/database", store.PLAN_DIR, store.TEST_DIR):
     os.makedirs(p)
 write("app.txt", "x\n")
 git("add", "app.txt")
 git("commit", "-qm", "init")
 RUNS = ".claude/clio/database/runs.jsonl"
-PLAN_HEAD = "| # | Task | req | Levels | Needs | Touches | Done |\n|---|---|---|---|---|---|---|\n"
-CASE_HEAD = "| Case | Task | Level | Covers | Behaviour | Expected | Command | Repeat |\n|---|---|---|---|---|---|---|---|\n"
 
 
 def t(*args, env=None):
@@ -65,14 +65,41 @@ def has(task, pat):
         miss("gate %s lacks '%s': %s" % (task, pat, o))
 
 
-def add(path, *rows):
-    """Append rows to a table file, one per line."""
-    write(path, "".join(r + "\n" for r in rows), "a")
+def raw(kind, area, rec):
+    """Append one record straight to a store file — no merge, no checks — so the readers and the gate
+    are tested against whatever a file may hold, not only what `clio add` lets in."""
+    write(store.path_of(kind, area), c.dumps(rec) + "\n", "a")
 
 
-def sub(path, old, new):
-    """sed -i s/old/new/ on a fixed string: every occurrence."""
-    write(path, read(path).replace(old, new))
+def task(tid, levels, area="p", critical=False, needs=(), status="open", by=None, **kw):
+    rec = {"type": "task", "id": tid, "date": "2026-01-01", "task": "t " + tid, "req": ["1"],
+           "levels": list(levels), "critical": critical, "tier": "full", "needs": list(needs), "touches": [], "na": {},
+           "status": status, "by": by, "commit": None, "delta": None}
+    rec.update(kw)
+    raw("plan", area, rec)
+
+
+def case(cid, tid, level, cmd, repeat=1, area="p", covers=(), status="active", **kw):
+    rec = {"type": "case", "id": cid, "date": "2026-01-01", "task": tid, "level": level,
+           "covers": list(covers), "behaviour": "b", "expected": "e", "source": "s", "command": cmd,
+           "repeat": repeat, "status": status}
+    rec.update(kw)
+    raw("test", area, rec)
+
+
+def meta(tid, area="p", na=None, waived=None):
+    raw("test", area, {"type": "meta", "id": tid, "date": "2026-01-01", "seams": [], "na": na or {},
+                       "waived": waived or {}})
+
+
+def mutation(tool, threshold=None, area="infra"):
+    raw("plan", area, {"type": "mutation", "date": "2026-01-01", "tool": tool, "threshold": threshold, "adr": None})
+
+
+def add_records(kind, area, *recs):
+    """`clio add <kind> <area>` with these records on stdin → (exit code, stdout)."""
+    rc, o, _ = clio("add", kind, area, input="".join(c.dumps(r) + "\n" for r in recs))
+    return rc, o
 
 
 def done():

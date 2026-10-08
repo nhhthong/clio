@@ -14,6 +14,7 @@ def cmd_approve(tasks):
     for task in tasks:
         h = tc.table_hash(task)
         tc.append({"date": tc.today(), "approve": task, "hash": h,
-                   "cases": tc.hash_of(tc.case_part(task)), "lists": tc.hash_of(tc.list_part(task))})
+                   "cases": tc.hash_of(tc.case_part(task)), "lists": tc.hash_of(tc.list_part(task)),
+                   "lines": tc.case_part(task) + tc.list_part(task)})   # what was approved, for `clio test diff`
         tc.say("approved: task %s case table %s" % (task, h))
     return 0

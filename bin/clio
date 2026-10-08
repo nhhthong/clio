@@ -3,6 +3,7 @@
   clio test <cmd> ...      run cases, record evidence, gate a task     (skills/test/scripts/clio_test.py)
   clio q <cmd> ...         every read of Clio's ledgers, read-only      (skills/context/scripts/q.py)
   clio validate [mode]     check index.jsonl / debt.jsonl / the repo    (skills/memo/scripts/validate.py)
+  clio add <plan|test> <area>   the one writer of database/plan|test/*.jsonl  (skills/lib/clio_add.py)
   clio selftest            run every selftest of the plugin — for contributors
 Each subcommand prints its own usage when called without arguments. The hooks are not routed
 here: hooks.json calls hooks/clio_guard.py and hooks/clio_nudge.py directly."""
@@ -18,6 +19,7 @@ CMDS = {
     "test": "skills/test/scripts/clio_test.py",
     "q": "skills/context/scripts/q.py",
     "validate": "skills/memo/scripts/validate.py",
+    "add": "skills/lib/clio_add.py",
 }
 
 

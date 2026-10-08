@@ -14,13 +14,22 @@ scratch()
 os.makedirs(".claude/clio/database")
 os.makedirs(".claude/clio/docs/tasks/feat")
 os.makedirs(".claude/clio/docs/specs/memory")
-os.makedirs(".claude/clio/docs/plans")
+os.makedirs(".claude/clio/database/plan")
 write(".claude/clio/docs/specs/requirements.md",
       "| # | Task | Spec | Status |\n|---|---|---|---|\n| 1 | x | m | ✅ |\n| 2 | y | m | ⚠️ open |\n")
 write(".claude/clio/docs/specs/memory/m.md", "")
-PLAN = ".claude/clio/docs/plans/acct.md"
-write(PLAN, "| # | Task | req | Levels | Needs | Done |\n|---|---|---|---|---|---|\n"
-      "| 1.1 | login | 1 | unit | – | [ ] |\n| 1.2 | logout | 1 | unit | 1.1 | [ ] |\n")
+PLAN = ".claude/clio/database/plan/acct.jsonl"
+
+
+def task(tid, needs=(), **kw):
+    r = {"type": "task", "id": tid, "date": "2026-01-01", "task": "t " + tid, "req": ["1"], "levels": ["unit"],
+         "critical": False, "tier": "full", "needs": list(needs), "touches": [], "na": {}, "status": "open", "by": None,
+         "commit": None, "delta": None}
+    r.update(kw)
+    return json.dumps(r) + "\n"
+
+
+write(PLAN, task("1.1") + task("1.2", ["1.1"]))
 A = ".claude/clio/docs/tasks/feat/1700000001_alpha.md"
 B = ".claude/clio/docs/tasks/feat/1700000002_beta.md"
 L = ".claude/clio/docs/tasks/legacy.md"                  # pre-3.0 flat doc, no id — still readable
@@ -282,7 +291,7 @@ if rc:
 if "spec-delta sd is in no plan" not in out:
     die("unabsorbed spec-delta not reported", out)
 plan = read(PLAN)
-write(PLAN, "| 9.9 | absorbs sd | 1 | t | - | [ ] |\n", "a")
+write(PLAN, task("9.9", delta="sd"), "a")
 out = validate("all")[1]
 if "spec-delta sd is in no plan" in out:
     die("delta named in a plan still reported", out)
@@ -292,17 +301,48 @@ if "is in no plan" in out:
     die("blocked delta wrongly reported", out)
 write(PLAN, plan)
 
-# a pre-4.0 plan (Test column) that was never re-planned is named; once a Levels table follows, it is not
-OLD = ".claude/clio/docs/plans/old.md"
-write(OLD, "| # | Task | req | Test that proves it | Needs | Done |\n|---|---|---|---|---|---|\n"
-      "| 1.1 | x | 1 | `go test` | - | [x] 2026-01-01 |\n")
-if "old.md is a pre-4.0 plan" not in validate("all")[1]:
-    die("pre-4.0 plan not named")
-write(OLD, "\n| # | Task | req | Levels | Needs | Touches | Done |\n|---|---|---|---|---|---|---|\n"
-      "| 1.1.1 | harden | 1 | unit | 1.1 | - | [ ] |\n", "a")
-if "old.md is a pre-4.0 plan" in validate("all")[1]:
-    die("re-planned plan still named")
-os.remove(OLD)
+# validate index|debt N checks every record one append wrote, not just the last one
+write(D, debt("d1", "code-debt", ["1"], None) + '{"id":"d2","kind":"code-debt"}\n' + debt("d3", "code-debt", ["1"], None))
+passes("debt", "the last record alone is fine")
+rc, out, _ = clio("validate", "debt", "2")
+if rc == 0:
+    die("a bad record two lines up passed validate debt 2", out)
+write(D, "")
+# a chore: a commit no task owns, with a note saying why — nothing else of a task record
+write(I, idx("1700000001", A, ["a.go"], ["1"]) + line(date="2026-01-01", type="chore", id="abc1234def", commits=["abc1234"], note="CI config"))
+passes("index", "a chore record")
+write(I, idx("1700000001", A, ["a.go"], ["1"]) + line(date="2026-01-01", type="chore", id="abc1234def", commits=["abc1234"]))
+fails("index", "a chore with no note")
+write(I, idx("1700000001", A, ["a.go"], ["1"]))
+
+# the plan and test stores: a line that is not JSON, an id in two areas, a case for no task, a
+# need that names nothing — each is a FAIL, since the gate would otherwise judge a stale or borrowed state
+TS = ".claude/clio/database/test/acct.jsonl"
+write(PLAN, "{broken\n", "a")
+out = validate("all")[1]
+if not re.search(r"acct.jsonl line [0-9]+ is not a JSON record", out):
+    die("bad store line not named", out)
+write(PLAN, plan)
+write(".claude/clio/database/plan/other.jsonl", task("1.1"))
+if "lives in" not in validate("all")[1]:
+    die("a task in two areas not refused")
+os.remove(".claude/clio/database/plan/other.jsonl")
+write(TS, json.dumps({"type": "case", "id": "7.7-u1", "date": "2026-01-01", "task": "7.7", "level": "unit",
+                      "covers": [], "behaviour": "b", "expected": "e", "source": "s", "command": "true",
+                      "repeat": 1, "status": "active"}) + "\n")
+if "task 7.7 is in no plan" not in validate("all")[1]:
+    die("a case for no planned task not refused")
+os.remove(TS)
+write(PLAN, task("1.3", ["8.8"]), "a")
+rc, out = validate("all")
+if rc == 0 or "names 8.8, which no plan holds" not in out:
+    die("a need naming nothing on an open task not refused", out)
+write(PLAN, plan)
+write(PLAN, task("1.3", ["8.8"], status="done"), "a")
+rc, out = validate("all")
+if rc != 0 or "WARN" not in out or "task 1.3 names 8.8" not in out:
+    die("a dangling need on a finished task must warn, not fail", out)
+write(PLAN, plan)
 
 # The manifests and the four places the version lives. There is no CI, so this is the only thing
 # that catches a release naming two different builds — run it before you tag.

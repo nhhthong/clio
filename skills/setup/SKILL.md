@@ -18,14 +18,14 @@ session; the skills read it when they need it.
 ├── docs/
 │   ├── specs/requirements.md   row → spec file index, Domains line   (/clio:ingest)
 │   ├── specs/memory/*.md       distilled decisions per area           (/clio:ingest)
-│   ├── plans/*.md              tasks + test levels, infra.md first    (/clio:plan)
-│   ├── tests/<area>.md         test cases per task                    (/clio:test)
 │   ├── tasks/<feature>/*.md    one doc per sub-task                   (/clio:memo)
 │   └── decisions/*.md          ADRs                                   (/clio:memo, /clio:ingest)
 └── database/
+    ├── plan/<area>.jsonl       tasks + test levels, infra first       (/clio:plan, via clio add)
+    ├── test/<area>.jsonl       test cases per task                    (/clio:test, via clio add)
     ├── index.jsonl             built — append-only                    (/clio:memo)
     ├── debt.jsonl              owed — append-only                     (/clio:memo, /clio:ingest)
-    └── runs.jsonl              test evidence — append-only            (clio test only)
+    └── runs.jsonl              test evidence — append-only            (the test script only)
 ```
 
 ## 0. Take stock, then ASK once
@@ -34,9 +34,13 @@ session; the skills read it when they need it.
 for t in bash python3 git awk sed; do command -v $t >/dev/null || echo "MISSING: $t"; done
 python3 -c 'import sys; sys.exit(sys.version_info < (3, 9))' 2>/dev/null || echo "MISSING: python3 >= 3.9"
 git rev-parse --git-dir >/dev/null 2>&1 || echo "NOT A GIT REPO"
-[ -d .claude/clio/database ] && echo "ALREADY SET UP"
+C=.claude/clio
+[ -f $C/docs/specs/requirements.md ] && [ -f $C/database/index.jsonl ] && [ -f $C/database/debt.jsonl ] && echo "ALREADY SET UP"
+[ -d $C ] && ! [ -f $C/docs/specs/requirements.md ] && echo "PARTLY SET UP"
 ```
-`MISSING` → stop, tell the user. `ALREADY SET UP` → say so and stop.
+`MISSING` → stop, tell the user. `ALREADY SET UP` → say so and stop. `PARTLY SET UP` (an earlier
+setup stopped half way) → ask only what § 1 still needs, then run § 1: every step there skips what
+exists.
 
 **ASK**, one `AskUserQuestion` call, only the items that apply:
 - `NOT A GIT REPO` → `git init`? Never without a yes.
@@ -44,13 +48,15 @@ git rev-parse --git-dir >/dev/null 2>&1 || echo "NOT A GIT REPO"
 - The `domain` vocabulary — the business areas work is filed under (e.g. `account checkout admin
   infra all`). Offer what the repo's top-level directories or the requirement document suggest; the
   user picks. `infra` and `all` are always in it.
-- Commit `.claude/clio/` (recommended: the ledgers are history) or ignore it?
+- Commit `.claude/clio/` (recommended: the ledgers are history) or ignore it? Ignored, the plan and
+  the evidence do not follow a git branch — trying an idea on a branch and dropping it leaves its
+  tasks and runs behind; say so with the question.
 
 ## 1. Scaffold
 
 ```bash
 T="${CLAUDE_PLUGIN_ROOT}/skills/setup/templates"; C=.claude/clio
-mkdir -p $C/database $C/docs/specs/memory $C/docs/plans $C/docs/tests $C/docs/tasks $C/docs/decisions
+mkdir -p $C/database/plan $C/database/test $C/docs/specs/memory $C/docs/tasks $C/docs/decisions
 [ -f $C/docs/specs/requirements.md ] || cp "$T/requirements.md" $C/docs/specs/requirements.md
 touch $C/database/index.jsonl $C/database/debt.jsonl $C/database/runs.jsonl
 ```
@@ -86,3 +92,5 @@ Then say what comes next, in order:
 
 From there, per task: `clio:context` → `/clio:test <task>` (cases, red → green) → `/clio:memo`. The
 only reminder is Clio's `UserPromptSubmit` hook, once per session, when git has work `index.jsonl` does not.
+Plans and cases live in `database/plan|test/*.jsonl`, written only by the skills' own script — the
+skills show them as tables; nobody edits those files by hand.

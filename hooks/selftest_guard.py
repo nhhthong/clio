@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""selftest_guard.py — the smallest check that fails if clio_guard.py stops guarding runs.jsonl."""
+"""selftest_guard.py — the smallest check that fails if clio_guard.py stops guarding runs.jsonl or the stores."""
 import json
 import os
 import subprocess
@@ -74,6 +74,25 @@ deny("Bash", "command", "cp 'unbalanced " + R)                               # u
 allow("Bash", "command", "cp -p %s /tmp/" % R)
 allow("Bash", "command", "ls .claude/clio/database  # runs.jsonl is there")   # a comment is not a write
 allow("Bash", "command", "grep pass %s > /tmp/out.txt" % R)
+
+# the plan and test stores: written only by `clio add` and `clio test` (tick) — a hand-written
+# `"status":"done"` would tick a task the gate never passed
+S = ".claude/clio/database/plan/orders.jsonl"
+deny("Write", "file_path", "/repo/" + S)
+deny("Edit", "file_path", ".claude/clio/database/test/orders.jsonl")
+deny("Bash", "command", "echo '{\"type\":\"task\",\"id\":\"3.1\",\"status\":\"done\"}' >> " + S)
+deny("Bash", "command", "cat >> %s <<'EOF'\n{}\nEOF" % S)
+deny("Bash", "command", "sed -i '$d' " + S)
+deny("Bash", "command", "rm -r .claude/clio/database/test")
+deny("Bash", "command", "git checkout -- " + S)
+allow("Bash", "command", "/p/bin/clio add plan orders <<'EOF'\n{\"type\":\"task\",\"id\":\"3.1\"}\nEOF")
+allow("Bash", "command", "/p/bin/clio test tick 3.1")
+allow("Bash", "command", "jq -c . " + S)
+allow("Bash", "command", "cp %s /tmp/plan-backup.jsonl" % S)
+allow("Write", "file_path", "/repo/test/fixtures/orders.jsonl")                 # the user's own test data
+allow("Bash", "command", "echo x >> test/fixtures/orders.jsonl", cwd=N)
+allow("Bash", "command", "echo x > src/database/test/seed.sql")                # a project's own database/test dir, in a Clio repo
+allow("Bash", "command", "rm -r db/database/plan")
 
 tmp.cleanup()
 if bad == 0:

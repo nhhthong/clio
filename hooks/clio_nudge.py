@@ -9,6 +9,9 @@ import re
 import subprocess
 import sys
 
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "skills", "lib"))
+from cliolib.common import unrecorded_commits  # noqa: E402
+
 IDX = ".claude/clio/database/index.jsonl"
 
 
@@ -86,13 +89,10 @@ def main():
             paths.append(e[3:])
     dirty = sum(1 for p in paths if not p.startswith(".claude/") and p not in recorded)
 
-    # ponytail: 6-char prefix match against the recorded commits. INDEX-IT.md writes short hashes of
-    # unpinned length, so compare on the shortest form either side can produce. A 6-char collision
-    # would cost one missed nudge — use full hashes here only if that ever actually happens.
-    rc, out = git("rev-parse", "--short=6", "HEAD")
-    sha = out.strip() if rc == 0 else ""
-    indexed = not sha or any(sha in text(h) for r in recs for h in items(r.get("commits")))
-    if dirty == 0 and indexed:
+    # The commits `clio q unrecorded` lists — one definition for both: merges and .claude/-only commits
+    # are not work to record, a `chore` record owns the ones the user said belong to no task.
+    pending = unrecorded_commits(recs)
+    if dirty == 0 and not pending:
         return
 
     # Cannot record that we nudged → do not nudge: silence beats the same line on every prompt.
@@ -104,10 +104,11 @@ def main():
     msg = "clio: work is not recorded in .claude/clio/database/index.jsonl — "
     if dirty > 0:
         msg += "%d uncommitted change(s) in the working tree" % dirty
-    if dirty > 0 and not indexed:
+    if dirty > 0 and pending:
         msg += "; "
-    if not indexed:
-        msg += "HEAD %s appears in no index record (recorded before it was committed? /clio:memo only backfills the hash)" % sha
+    if pending:
+        msg += "commit %s%s appears in no index record (recorded before it was committed? /clio:memo only backfills the hash)" % (
+            pending[0][0], " and %d older" % (len(pending) - 1) if len(pending) > 1 else "")
     print(msg + ".")
     print("Tell the user once that /clio:memo is owed for this work, then carry on with their request.")
     print("This notice is not permission to run it. Only the user asking is — they decide the work is done.")

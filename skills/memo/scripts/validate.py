@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""validate.py [index|debt|all] — run from anywhere inside a project that has .claude/clio/
-  index  validate the LAST line appended to index.jsonl
-  debt   validate the LAST line appended to debt.jsonl
+"""validate.py [index [N]|debt [N]|all] — run from anywhere inside a project that has .claude/clio/
+  index  validate the last N lines appended to index.jsonl (default 1) — N = how many you just appended
+  debt   validate the last N lines appended to debt.jsonl (default 1)
   all    repo-wide audit (the "coverage" hop nothing else computes)
 Exit 1 if any FAIL. WARN and INFO never fail the run."""
 import glob
@@ -11,14 +11,15 @@ import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "lib"))
 from cliolib import common as c  # noqa: E402
+from cliolib import store  # noqa: E402
 from cliolib import tables  # noqa: E402
 
 IDX = ".claude/clio/database/index.jsonl"
 DEBT = ".claude/clio/database/debt.jsonl"
 RUNS = ".claude/clio/database/runs.jsonl"
 REQ = ".claude/clio/docs/specs/requirements.md"
-PLANS = ".claude/clio/docs/plans"
-TESTS = ".claude/clio/docs/tests"
+PLANS = store.PLAN_DIR
+TESTS = store.TEST_DIR
 # Every field the schema files say is always present (null / [] allowed, absence is not).
 IDX_FIELDS = "date id type doc domain plan_tasks files commits keywords req specs".split()                  # INDEX-IT.md
 DEBT_FIELDS = "date id kind status domain what req specs docs code action source blocked_by issue".split()  # DEBT-IT.md, all 14
@@ -101,7 +102,7 @@ def check_plan_tasks(ledger, r):
     for t in c.items(r.get("plan_tasks")):
         t = c.tostring(t)
         if t != "" and t not in tasks:
-            fail("%s .plan_tasks %s is in no .claude/clio/docs/plans/*.md row" % (ledger, t))
+            fail("%s .plan_tasks %s is in no %s/*.jsonl task" % (ledger, t, PLANS))
 
 
 def check_specs(ledger, r):
@@ -122,8 +123,19 @@ def index_shape_ok(r):
             and (isinstance(r.get("plan_tasks"), list) or "plan_tasks" not in r))
 
 
+def check_chore(r):
+    """A commit no task owns (CI, tooling), said so once by the user through /clio:memo: id is the hash."""
+    ok = (isinstance(r.get("commits"), list) and len(r["commits"]) > 0 and c.truthy(r.get("date"))
+          and c.truthy(r.get("id")) and isinstance(r.get("note"), str) and r["note"].strip() != "")
+    if not ok:
+        fail("index chore record needs date, id, a non-empty commits list and a note saying why no task owns it")
+    return ok
+
+
 def check_index_line(r, idxjson=None):
     """One index record; idxjson (every parseable record) exists only in `all` mode."""
+    if isinstance(r, dict) and r.get("type") == "chore":
+        return check_chore(r)
     if not index_shape_ok(r):
         fail("index line missing a required field, bad type, or not valid JSON")
         return False
@@ -181,13 +193,10 @@ def check_filed_blocked(debt, only=""):
             fail("debt %s: the record that files a spec-blocked needs a non-null blocked_by" % c.tostring(first.get("id")))
 
 
-def last_line(path):
-    with open(path, encoding="utf-8", errors="surrogateescape") as f:
-        text = f.read()
-    lines = text.split("\n")
-    if text.endswith("\n"):
-        lines.pop()
-    return lines[-1] if lines else ""
+def last_lines(path, n):
+    """The last n lines of a ledger — the records one append just wrote."""
+    lines = [l for _, l in numbered(path)]
+    return lines[-n:] if n > 0 else []
 
 
 def numbered(path):
@@ -282,26 +291,33 @@ def audit():
             info("renamed doc, superseded: " + doc)
         else:
             fail("index record points at a missing doc and nothing supersedes it: " + doc)
-    # One id, one row. A re-plan supersedes an unticked row *in place*; appending a second row with
-    # the same id instead leaves two, and `Done` then depends on which one a reader hits first.
-    seen = {}
-    for r in planrows:
-        seen[(r[0], r[1])] = seen.get((r[0], r[1]), 0) + 1
-    for (pl, dup), n in sorted(seen.items()):
-        if n > 1:
-            fail("%s has task id %s twice — supersede a row in place, never append a copy" % (pl, dup))
-
-    # A pre-4.0 table (Test column) with no table in today's format after it: never re-planned, so its
-    # ticked rows were never brought under /clio:test and the gate refuses its unticked ones.
-    old = {r[0] for r in planrows if r[7] == "old"}
-    new = {r[0] for r in planrows if r[7] == "row"}
-    for pl in sorted(old - new):
-        warn("%s is a pre-4.0 plan (Test column) — /clio:plan re-plans it into sub-tasks" % pl)
-    # Test cases: one id, one row across every tests doc — `clio test` refuses to run a duplicated
-    # id, say so before it does. Level names are not judged here (the gate does), hence no list.
-    ids = [r[0] for r in tables.case_rows("", sorted(glob.glob(TESTS + "/*.md")))]
-    for dup in sorted({i for i in ids if ids.count(i) > 1}):
-        fail("case id %s appears in more than one row of .claude/clio/docs/tests/*.md" % dup)
+    # A 4.x layout nobody migrated: the skills no longer read it, so its plan is invisible until moved.
+    old = sorted(glob.glob(".claude/clio/docs/plans/*.md") + glob.glob(".claude/clio/docs/tests/*.md"))
+    if old:
+        fail("%d Markdown plan/test file(s) in the 4.x layout (%s…) — /clio:plan migrates them (`clio test migrate`)" % (len(old), old[0]))
+    # The plan and test stores: every line a record, every current record well-formed, every id in one
+    # area only — the gate gathers a task's cases by id, so a second home lends it another's evidence.
+    for b in store.bad_lines():
+        fail("%s is not a JSON record — only `clio add` and `clio test` write the stores" % b)
+    for kind in ("plan", "test"):
+        for p, r in store.current(kind):
+            for msg in store.problems(kind, r):
+                fail("%s %s %s: %s" % (p, c.tostring(r.get("type")), c.tostring(r.get("id", "")), msg))
+        for k, ps in sorted(store.conflicts(kind).items()):
+            fail("%s lives in %s — one id, one area" % (k, " and ".join(ps)))
+    planned = set(tasks)
+    for p, r in store.current("test"):
+        tid = c.tostring(r.get("task") if r.get("type") == "case" else r.get("id"))
+        if r.get("type") in ("case", "meta") and tid not in planned:
+            fail("%s %s %s: task %s is in no plan" % (p, r.get("type"), c.tostring(r.get("id")), tid))
+    for p, r in store.current("plan"):
+        if r.get("type") == "task":
+            for x in c.items(r.get("needs")) + ([r.get("by")] if c.truthy(r.get("by")) else []):
+                if c.tostring(x) not in planned:
+                    # A finished task cannot be edited, so a need that already pointed nowhere in 4.x stays
+                    # as history: said, not failed. A task still open is the plan's to fix.
+                    (warn if r.get("status") != "open" else fail)(
+                        "%s task %s names %s, which no plan holds" % (p, c.tostring(r.get("id")), c.tostring(x)))
     if os.path.isfile(RUNS):
         for n, l in numbered(RUNS):
             if l == "":
@@ -320,7 +336,7 @@ def audit():
     # Not checked here: which decided rows have no plan task. `plan` gives a ⚠️/❌ row a placeholder
     # line naming the debt it waits on, so "a plan row exists for an undecided row" is the correct
     # state, not a finding; and "✅ with no plan task" overlaps the ✅-with-no-index-record INFO below.
-    plans = glob.glob(PLANS + "/*.md")
+    plans = store.files("plan")
     if os.path.isfile(REQ) and plans:
         planreq = sorted({x.strip(" ") for r in planrows for x in r[3].split(",") if x.strip(" ")[:1].isdigit()})
         for n in planreq:
@@ -350,12 +366,18 @@ def audit():
     refs = set()
     for top in (".claude/clio/", ".claude/rules/"):
         for base, _, files in os.walk(top):
+            if "/docs/archive" in base:
+                continue                  # 4.x Markdown kept by `clio test migrate` for comparison
             for f in files:
                 if f.endswith(".md"):
                     with open(os.path.join(base, f), encoding="utf-8", errors="surrogateescape") as fh:
                         refs.update(re.findall(r"\.claude/[A-Za-z0-9._/-]+\.md", fh.read()))
+    moved = [r for r in refs if r.startswith((".claude/clio/docs/plans/", ".claude/clio/docs/tests/"))]
+    if moved and os.path.isdir(".claude/clio/docs/archive/v4"):
+        info("%d document path(s) name the 4.x plans/tests Markdown (e.g. %s) — it moved to docs/archive/v4/; "
+             "old docs may keep the reference, they are history" % (len(moved), moved[0]))
     for ref in sorted(refs):
-        if "<" not in ref and not os.path.exists(ref):
+        if ref not in moved and "<" not in ref and not os.path.exists(ref):
             warn("dead link in a document: %s — was it renamed? rewrite the reference" % ref)
 
     # requirements.md markers vs the ledgers
@@ -383,29 +405,37 @@ def main(argv):
     rows = [r[0] for r in tables.req_rows(REQ)]
     # The plan tables, parsed once: `tasks` are the ids `plan_tasks` is allowed to name. No plan file at
     # all is normal (Lite mode, an area nobody planned), and then nothing here can be checked.
-    planrows = tables.plan_rows(sorted(glob.glob(PLANS + "/*.md")))
+    planrows = store.plan_rows()
     tasks = [r[1] for r in planrows]
 
     mode = argv[0] if argv else "all"
+    n = 1
+    if mode in ("index", "debt") and len(argv) > 1:
+        if not argv[1].isdigit() or int(argv[1]) < 1:
+            print("usage: clio validate [index [N]|debt [N]|all]")
+            sys.exit(1)
+        n = int(argv[1])
     if mode == "index":
         if not (os.path.isfile(IDX) and os.path.getsize(IDX) > 0):
             print("FAIL: %s is empty" % IDX)
             sys.exit(1)
-        r = parse(last_line(IDX))
-        if check_index_line(r) and r.get("type") == "task" and length(r.get("files")) == 0:
-            warn("index .files is empty — a task doc with no source files?")
+        for line in last_lines(IDX, n):
+            r = parse(line)
+            if check_index_line(r) and r.get("type") == "task" and length(r.get("files")) == 0:
+                warn("index .files is empty — a task doc with no source files?")
     elif mode == "debt":
         if not (os.path.isfile(DEBT) and os.path.getsize(DEBT) > 0):
             print("FAIL: %s is empty" % DEBT)
             sys.exit(1)
-        r = parse(last_line(DEBT))
-        check_debt_line(r)
-        only = c.tostring(r["id"]) if isinstance(r, dict) and c.truthy(r.get("id")) else ""
-        check_filed_blocked([x for x in parseable(DEBT)], only)
+        for line in last_lines(DEBT, n):
+            r = parse(line)
+            check_debt_line(r)
+            only = c.tostring(r["id"]) if isinstance(r, dict) and c.truthy(r.get("id")) else ""
+            check_filed_blocked([x for x in parseable(DEBT)], only)
     elif mode == "all":
         audit()
     else:
-        print("usage: clio validate [index|debt|all]")
+        print("usage: clio validate [index [N]|debt [N]|all]")
         sys.exit(1)
 
     if fails == 0:

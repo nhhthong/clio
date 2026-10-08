@@ -8,10 +8,8 @@ import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from selftest_common import (  # noqa: E402
-    PLAN_HEAD, RUNS, add, done, git, grep, has, lines, miss, ok, out, read, sub, t, write)
+    RUNS, case, done, git, grep, has, lines, miss, ok, out, read, t, task, write)
 
-P = ".claude/clio/docs/plans/p.md"
-write(P, PLAN_HEAD)
 
 # batch: cases whose command is a `Batch:` template run in ONE runner start; results come from the
 # JUnit XML it writes. fakeunit.sh stands in for mvn/jest/pytest: `fail*` tests fail, `rep*` report
@@ -41,13 +39,11 @@ echo '</testsuite>' >> $out
 """)
 write(".gitignore", "starts.log\n", "a")
 write(".claude/rules/fake.md", "- Batch: `bash fakeunit.sh {tests}` · join: `,` · report: `reports/TEST-*.xml`\n")
-add(P, "| 7.1 | batch | 1 | unit, concurrency | – | – | [ ] |")
-T3 = ".claude/clio/docs/tests/r.md"
-write(T3, "| Case | Task | Level | Covers | Behaviour | Expected | Command | Repeat |\n|---|---|---|---|---|---|---|---|\n")
-add(T3, "| 7.1-u1 | 7.1 | unit | unit.1 | a | a | `bash fakeunit.sh K#okOne` | 1 |",
-    "| 7.1-u2 | 7.1 | unit | unit.1 | b | b | `bash fakeunit.sh K#okTwo` | 1 |",
-    "| 7.1-u3 | 7.1 | unit | unit.1 | c | c | `bash fakeunit.sh K#failThree` | 1 |",
-    "| 7.1-c1 | 7.1 | concurrency | concurrency.1 | d | d | `bash fakeunit.sh K#repFour` | 3 |")
+task('7.1', ['unit', 'concurrency'])
+case('7.1-u1', '7.1', 'unit', 'bash fakeunit.sh K#okOne', covers=['unit.1'])
+case('7.1-u2', '7.1', 'unit', 'bash fakeunit.sh K#okTwo', covers=['unit.1'])
+case('7.1-u3', '7.1', 'unit', 'bash fakeunit.sh K#failThree', covers=['unit.1'])
+case('7.1-c1', '7.1', 'concurrency', 'bash fakeunit.sh K#repFour', 3, covers=['concurrency.1'])
 
 
 def starts():
@@ -74,24 +70,24 @@ if not any(r.get("case") == "7.1-u1" and r.get("cmd") == "bash fakeunit.sh K#okO
            and "K#okOne,K#okTwo" in (r.get("batch") or "") for r in records()):
     miss("batch record lacks the case's own cmd or the batch cmd")
 # a case the report leaves out fails; one reported fewer times than its Repeat runs on its own
-add(T3, "| 7.1-u4 | 7.1 | unit | unit.1 | e | e | `bash fakeunit.sh K#goneFive` | 1 |")
-sub(T3, "K#repFour` | 3 |", "K#repFour` | 5 |")
+case('7.1-u4', '7.1', 'unit', 'bash fakeunit.sh K#goneFive', covers=['unit.1'])
+case('7.1-c1', '7.1', 'concurrency', 'bash fakeunit.sh K#repFour', 5, covers=['concurrency.1'])
 o = out("run-task", "7.1")
 if not grep(r"^fail: 7\.1-u4 \(unit\) 0/0 — batch — not in the report", o):
     miss("missing testcase not failed: " + o)
 if "7.1-c1's report shows fewer repetitions than its Repeat" not in o:
     miss("short repeat did not fall back: " + o)
 # a command that is not the template, word for word, is never merged into the batch
-add(T3, "| 7.1-u5 | 7.1 | unit | unit.1 | f | f | `bash fakeunit.sh K#okSix --verbose` | 1 |")
+case('7.1-u5', '7.1', 'unit', 'bash fakeunit.sh K#okSix --verbose', covers=['unit.1'])
 write("starts.log", "")
 t("run-task", "7.1")
 if starts() < 3:
     miss("a non-template command was merged into the batch")
 
 # #6 a full classname picks one package; a short one covers every package's class of that name
-add(P, "| 7.2 | pkgs | 1 | unit | – | – | [ ] |")
-add(T3, "| 7.2-u1 | 7.2 | unit | unit.1 | a | a | `bash fakeunit.sh pkg.a.K#dupOne` | 1 |",
-    "| 7.2-u2 | 7.2 | unit | unit.1 | b | b | `bash fakeunit.sh K#dupTwo` | 1 |")
+task('7.2', ['unit'])
+case('7.2-u1', '7.2', 'unit', 'bash fakeunit.sh pkg.a.K#dupOne', covers=['unit.1'])
+case('7.2-u2', '7.2', 'unit', 'bash fakeunit.sh K#dupTwo', covers=['unit.1'])
 o = out("run-task", "7.2")
 if not grep(r"^pass: 7\.2-u1 \(unit\) 1/1 — batch", o):
     miss("full classname matched another package: " + o)
@@ -99,9 +95,9 @@ if not grep(r"^fail: 7\.2-u2 \(unit\) 0/1 — batch", o):
     miss("short classname missed a failing package: " + o)
 
 # #9 parameter sets are not repetitions: Repeat 1 passes, Repeat 3 falls back to its own command
-add(P, "| 7.3 | params | 1 | unit, concurrency | – | – | [ ] |")
-add(T3, "| 7.3-u1 | 7.3 | unit | unit.1 | a | a | `bash fakeunit.sh K#parOne` | 1 |",
-    "| 7.3-c1 | 7.3 | concurrency | concurrency.1 | b | b | `bash fakeunit.sh K#parTwo` | 3 |")
+task('7.3', ['unit', 'concurrency'])
+case('7.3-u1', '7.3', 'unit', 'bash fakeunit.sh K#parOne', covers=['unit.1'])
+case('7.3-c1', '7.3', 'concurrency', 'bash fakeunit.sh K#parTwo', 3, covers=['concurrency.1'])
 o = out("run-task", "7.3")
 if not grep(r"^pass: 7\.3-u1 \(unit\) 1/1 — batch", o):
     miss("parameterised Repeat 1: " + o)
@@ -109,8 +105,8 @@ if "7.3-c1's report shows fewer repetitions" not in o:
     miss("parameter sets counted as repeats: " + o)
 
 # #7 the batch is capped too: a runner that hangs is killed at CLIO_TIMEOUT, with the whole batch named
-add(P, "| 7.4 | hang | 1 | unit | – | – | [ ] |")
-add(T3, "| 7.4-u1 | 7.4 | unit | unit.1 | a | a | `bash fakeunit.sh K#hangOne` | 1 |")
+task('7.4', ['unit'])
+case('7.4-u1', '7.4', 'unit', 'bash fakeunit.sh K#hangOne', covers=['unit.1'])
 s0 = time.time()
 o = out("run-task", "7.4", env={"CLIO_TIMEOUT": "2"})
 if time.time() - s0 >= 20:
@@ -120,9 +116,9 @@ if "timed out after 2s (whole batch)" not in o:
 
 # two or more cases that end up running alone are named, with the template their own commands fit —
 # the `-q` in a template but not in the rows is the usual cause and nothing else shows it
-add(P, "| 7.6 | mismatch | 1 | unit | – | – | [ ] |")
-add(T3, "| 7.6-u1 | 7.6 | unit | unit.1 | a | a | `bash fakeunit.sh -q K#okA` | 1 |",
-    "| 7.6-u2 | 7.6 | unit | unit.1 | b | b | `bash fakeunit.sh -q K#okB` | 1 |")
+task('7.6', ['unit'])
+case('7.6-u1', '7.6', 'unit', 'bash fakeunit.sh -q K#okA', covers=['unit.1'])
+case('7.6-u2', '7.6', 'unit', 'bash fakeunit.sh -q K#okB', covers=['unit.1'])
 o = out("run-task", "7.6")
 if "note: 2 cases run one runner start each — their commands match no `Batch:` template" not in o:
     miss("mismatch not reported: " + o)
@@ -143,8 +139,8 @@ write("chk77.txt", "old\n")
 git("add", "chk77.txt")
 git("commit", "-qm", "chk77 before the change")
 write("chk77.txt", "new\n")
-add(P, "| 7.7 | red after pass | 1 | critical · unit | – | – | [ ] |")
-add(T3, "| 7.7-u1 | 7.7 | unit | unit.1 | a | a | `bash fakeunit.sh K#chkSeven` | 1 |")
+task('7.7', ['unit'], critical=True)
+case('7.7-u1', '7.7', 'unit', 'bash fakeunit.sh K#chkSeven', covers=['unit.1'])
 t("approve", "7.7")
 ok("run-task", "7.7")
 o = out("red", "7.7")
@@ -163,8 +159,8 @@ if "7.7-u1\tunit\tpass" not in out("coverage", "7.7"):
     miss("coverage read the red run as last: " + out("coverage", "7.7"))
 
 # a red whose runner never ran the test (build error at the base: not in the report) is not a red
-add(P, "| 7.8 | build broke | 1 | critical · unit | – | – | [ ] |")
-add(T3, "| 7.8-u1 | 7.8 | unit | unit.1 | a | a | `bash fakeunit.sh K#chkEight` | 1 |")
+task('7.8', ['unit'], critical=True)
+case('7.8-u1', '7.8', 'unit', 'bash fakeunit.sh K#chkEight', covers=['unit.1'])
 write("nobuild", "x\n")
 git("add", "nobuild")
 git("commit", "-qm", "base does not build")
@@ -180,8 +176,8 @@ if not grep("^took [0-9]* s$", out("run-task", "7.8")):
 
 # a batch record of a case the report did not show (timeout, build error) is not a fail of the case:
 # passing again on the same code must not read as flaky
-add(P, "| 7.9 | not run is not flaky | 1 | unit | – | – | [ ] |")
-add(T3, "| 7.9-u1 | 7.9 | unit | unit.1 | a | a | `bash fakeunit.sh K#maybeNine` | 1 |")
+task('7.9', ['unit'])
+case('7.9-u1', '7.9', 'unit', 'bash fakeunit.sh K#maybeNine', covers=['unit.1'])
 ok("run-task", "7.9")
 os.makedirs("reports", exist_ok=True)
 write("reports/hide", "x\n")
@@ -196,20 +192,20 @@ if "flaky" in out("gate", "7.9"):
 
 # a class-wide test id (no `#`) matches every method of the class: three methods are three calls,
 # not three repetitions of one — Repeat 3 falls back to its own command
-add(P, "| 7.10 | class id | 1 | unit | – | – | [ ] |")
-add(T3, "| 7.10-u1 | 7.10 | unit | unit.1 | a | a | `bash fakeunit.sh MultiCls` | 3 |")
+task('7.10', ['unit'])
+case('7.10-u1', '7.10', 'unit', 'bash fakeunit.sh MultiCls', 3, covers=['unit.1'])
 o = out("run-task", "7.10")
 if "7.10-u1's report shows fewer repetitions" not in o:
     miss("distinct methods of one class counted as repetitions: " + o)
 
 # a row that cannot run (bad Repeat) runs nothing and records nothing: run-task and red must not
 # read an older record of the case as this call's result
-add(P, "| 7.11 | stale result | 1 | critical · unit | – | – | [ ] |")
-add(T3, "| 7.11-u1 | 7.11 | unit | unit.1 | a | a | `bash fakeunit.sh K#chkEleven` | 1 |")
+task('7.11', ['unit'], critical=True)
+case('7.11-u1', '7.11', 'unit', 'bash fakeunit.sh K#chkEleven', covers=['unit.1'])
 if not grep("^red: 7.11-u1 failed", out("red", "7.11", "--base", "HEAD~1")):   # chk77.txt reads "old" there
     miss("7.11 setup: no red to go stale")
 ok("run-task", "7.11")
-sub(T3, "K#chkEleven` | 1 |", "K#chkEleven` | x |")
+case('7.11-u1', '7.11', 'unit', 'bash fakeunit.sh K#chkEleven', 'x', covers=['unit.1'])
 rc, o = t("run-task", "7.11")
 if rc == 0 or "1/1 cases passed" in o:
     miss("run-task reported a case that did not run as passed: %d %s" % (rc, o))

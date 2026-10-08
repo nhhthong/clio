@@ -4,18 +4,17 @@ checks. It reads runs.jsonl; it runs no test itself.
 
 cmd_gate only gathers what the checks read (a Gate) and calls them in order; each check_* is one
 rule and says its own FAIL lines through g.fail. The order is the output's order."""
-import os
 import re
 
 import testcore as tc
 from cliolib import common as c
 from cliolib import fingerprint as fpm
-from cliolib import tables
+from cliolib import store
 
 
 class Gate:
     """What every check reads, gathered once: the task's case rows, the ledger, the current
-    fingerprint, the plan's Levels cell and the project's mutation settings."""
+    fingerprint, the plan task's levels and the project's mutation settings."""
 
     def __init__(self, task, rows, recs, cur):
         self.task, self.rows, self.recs, self.cur = task, rows, recs, cur
@@ -56,19 +55,19 @@ def check_approval(g):
 
 
 def load_plan(g):
-    """The plan's Levels cell: "critical · unit, api" or "unit, api". plan_rows says, per row, whether
-    its table has a Levels column or a pre-4.0 Test command. False (said) when the row cannot be gated."""
+    """The plan's levels as one cell: "critical · unit, api" or "unit, api". False (said) when the task
+    cannot be gated: in no plan, in two, superseded or void."""
     task = g.task
-    found = next((r for r in tables.plan_rows(tc.plan_files()) if r[1] == task), None)
-    if found is None:
-        tc.say("FAIL: task %s is in no %s/*.md row — the gate needs the plan's Levels" % (task, tc.PLANS))
+    found = [r for r in store.plan_rows() if r[1] == task]
+    if not found:
+        tc.say("FAIL: task %s is in no %s/*.jsonl record — the gate needs the plan's levels" % (task, tc.PLANS))
         return False
-    kind, done, levels = found[7], found[6], found[4]
-    if kind != "row":
-        tc.say("FAIL: task %s is a pre-4.0 row (Test column, no Levels) — /clio:plan <area> adds a sub-task that brings it under /clio:test; gate that" % task)
+    if len(found) > 1:
+        tc.say("FAIL: task %s lives in %s — one id, one area; void one of them" % (task, " and ".join(r[0] for r in found)))
         return False
-    if "superseded" in done:
-        tc.say("FAIL: task %s is superseded (%s) — gate the row that replaced it" % (task, done))
+    done, levels = found[0][6], found[0][4]
+    if done.startswith(("superseded", "void")):
+        tc.say("FAIL: task %s is %s — gate the task that replaced it" % (task, done))
         return False
     g.levels, g.critical = levels, "critical" in levels
     return True
@@ -78,7 +77,7 @@ def load_mutation(g):
     """On a critical task a passing mutation case proves what red would — the tests catch injected
     faults — so it stands in for red on every case of the task. Mutation is required only where the
     plan names it (the user agreed the task is beyond critical), never implied by `critical`.
-    `Mutation: none` in plans/infra.md is an ADR against it, so a row still naming it is a
+    A `mutation` record with tool "none" is an ADR against it, so a row still naming it is a
     contradiction to resolve, not a level to waive quietly. The threshold a mutation case's command
     must show: the project's own `NN%` if it set one, else LEVELS.md's default — one number for
     every mutation case of the task."""
@@ -87,13 +86,12 @@ def load_mutation(g):
             lr = g.last_run(r[0])
             if lr is not None and lr.get("result") == "pass" and lr.get("fp") == g.cur and lr.get("cmd") == r[4]:
                 g.mut_ok = r[0]
-    g.waived = {cid for cid, _ in tables.waiver_rows(tc.test_files())}
-    infra = tables.read_lines(tc.PLANS + "/infra.md") if os.path.isfile(tc.PLANS + "/infra.md") else []
-    g.no_mutation = any(re.match(r"Mutation: *none", l, re.I) for l in infra)
-    mline = next((l for l in infra if re.match(r"Mutation:", l, re.I)), "")
-    m = re.search(r"([0-9]{1,3})%", mline)
-    if m:
-        g.mutation_req = int(m.group(1))
+    g.waived = {cid for cid, _ in store.waiver_rows()}
+    m = store.mutation()
+    if m is not None:
+        g.no_mutation = c.tostring(m.get("tool")).strip().lower() == "none"
+        if isinstance(m.get("threshold"), int) and not isinstance(m.get("threshold"), bool):
+            g.mutation_req = m["threshold"]
 
 
 def check_levels(g):
@@ -105,7 +103,7 @@ def check_levels(g):
             g.fail("%s: plan level '%s' is not one of: %s" % (task, l, tc.LEVELS))
             continue
         if l == "mutation" and g.no_mutation:
-            g.fail("%s: plan names 'mutation' but plans/infra.md says `Mutation: none` — re-plan the task without it, or change the ADR" % task)
+            g.fail("%s: plan names 'mutation' but the project's mutation record says tool none — re-plan the task without it, or change the ADR" % task)
             continue
         if not any(r[2] == l and r[4] not in tc.NA for r in rows):
             g.fail("%s: plan requires level '%s', no runnable case covers it" % (task, l))
@@ -153,7 +151,7 @@ def check_row_rules(g, cid, level, cmd, rep):
         if "#" in cmd:
             g.fail("%s: mutation command contains `#` — bash -c drops everything after it; pass the threshold as a real flag" % cid)
         elif low < g.mutation_req:
-            g.fail("%s: mutation command shows no threshold >= %d%% (lowest threshold flag: %s) — pass it as --thresholds.break N / -DmutationThreshold=N / --threshold N / --min-score N; default is %d, override with `NN%%` on the `Mutation:` line in plans/infra.md"
+            g.fail("%s: mutation command shows no threshold >= %d%% (lowest threshold flag: %s) — pass it as --thresholds.break N / -DmutationThreshold=N / --threshold N / --min-score N; default is %d, override with the `threshold` of the plan's `mutation` record"
                    % (cid, g.mutation_req, "none" if low < 0 else low, tc.MUTATION_MIN_THRESHOLD))
 
 
@@ -249,9 +247,20 @@ def check_cases(g):
 
 def cmd_gate(task):
     cur = fpm.fp(tc.ROOT, tc.RUNS)
+    # A line the store cannot read may be the newer state of this very task or case: judging the older
+    # record behind it could pass what the user changed. Refuse until the line is fixed.
+    bad = store.bad_lines()
+    if bad:
+        for b in bad:
+            tc.say("FAIL: %s is not a JSON record — only `clio add` and `clio test` write the stores; fix or remove it" % b)
+        return 1
     rows = [r for r in tc.cases() if r[1] == task]
     if not rows:
-        tc.say("FAIL: task %s has no cases — run /clio:test %s" % (task, task))
+        plan = [r for r in store.plan_rows() if r[1] == task]
+        if plan and plan[0][6].startswith(("superseded", "void")):    # nothing to prove for a task that was dropped
+            tc.say("FAIL: task %s is %s — gate the task that replaced it, if any" % (task, plan[0][6]))
+        else:
+            tc.say("FAIL: task %s has no cases — run /clio:test %s" % (task, task))
         return 1
     g = Gate(task, rows, tc.records(), cur)
     check_approval(g)

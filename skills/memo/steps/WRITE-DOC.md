@@ -57,7 +57,7 @@ One sentence.
 New feature directory → also write `summary.md`, and only what `ls` cannot say:
 ```markdown
 # <Feature>
-Domain: <domain> · Plan: `.claude/clio/docs/plans/<area>.md` · Spec: `memory/<area>.md`
+Domain: <domain> · Plan: `clio q plan <area>` · Spec: `memory/<area>.md`
 
 ## What this is
 One or two sentences.
@@ -71,8 +71,8 @@ One or two sentences.
   feature. Empty is fine.
 ```
 An existing `summary.md` without `## General Memory` → add the heading when it first gets a bullet.
-**Never list the sub-tasks in it.** `ls` and `plans/<area>.md` already answer that; a hand-kept list
-is one more thing to drift.
+**Never list the sub-tasks in it.** `ls` and `clio q plan <area>` already answer that; a hand-kept
+list is one more thing to drift.
 
 ## UPDATE — the default
 
@@ -99,5 +99,13 @@ an existing doc — the old doc keeps its history, the new one starts at today.
 
 Moving a doc (into a feature directory, or to a different one) keeps its filename and its `id`;
 `INDEX-IT.md` records the new `doc` path under the same `id`.
+
+## Light
+
+Every plan task of this run is `light` (`SKILL.md` § Light work). CREATE writes only the header
+(`Date`, `Updated`, `Commit`, `Plan tasks`), `## Summary` in one sentence and `## Change Log`; UPDATE
+appends one `## Change Log` line and refreshes `Updated:`. A doc that later gets full work grows the
+other sections then, in the order above. Several light changes to the same feature in a row → the
+same doc, one Change Log line each.
 
 Next: `INDEX-IT.md`.

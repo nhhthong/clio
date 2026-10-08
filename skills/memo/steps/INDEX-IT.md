@@ -36,16 +36,31 @@ EOF
 | `type` | `task` or `adr` |
 | `doc` | the doc's current path. A moved or renamed doc keeps its `id` and gets a new `doc` here |
 | `domain` | one term from the `Domains:` line of `.claude/clio/docs/specs/requirements.md` — by business area served, not directory. New term needed → ask, add it there on a yes, say so in the report |
-| `plan_tasks` | the `.claude/clio/docs/plans/<area>.md` task ids this doc implements (`["3.1"]`), `[]` for work outside any plan. An array for the same reason `req` is: one doc can carry several. Unsure whether an id belongs → write `[]`, never guess one in; a wrong id makes `/clio:memo` tick a task nobody tested, and `clio validate` rejects an id no plan table holds |
+| `plan_tasks` | the plan task ids this doc implements (`["3.1"]`), `[]` for work outside any plan. An array for the same reason `req` is: one doc can carry several. Unsure whether an id belongs → write `[]`, never guess one in; a wrong id makes `/clio:memo` tick a task nobody tested, and `clio validate` rejects an id no plan holds |
 | `files` | every source file the doc still covers: previous list + this run's, minus what was reverted. Repo-relative, build output excluded |
 | `commits` | previous list + this run's hash, if step 1 found one (`SKILL.md` § Commits) |
 | `keywords` | previous list + new ones, from the vocabulary above |
+| `fp` | `clio test fp` at the moment of this run (12 characters), so the next `clio q changed` can say nothing moved since. Optional: records from before 5.0 have none, and a backfill run copies the previous one |
 | `req`, `specs` | the doc's full current claim, `req` as strings (`["7.10"]`); `specs` only what `requirements.md` maps `req` to, never a plausible-looking spec |
 
 Validate — never declare done on a line it rejects:
 ```bash
 clio validate index
 ```
-`FAIL` → `sed -i.bak '$d' .claude/clio/database/index.jsonl && rm .claude/clio/database/index.jsonl.bak`, fix, re-append.
+Appended several (a backfill) → `clio validate index <N>`. `FAIL` → remove exactly the lines you
+appended (`sed -i.bak '$d'` once per line, then `rm` the `.bak`), fix, re-append.
+
+## Chore
+
+A commit the user says is no task's work — CI config, tooling, a hand-made dependency bump — gets
+one record instead of a doc, so `clio q unrecorded` and the drift hook stop naming it. It is only
+skipped, never a stopping point: work older than it is still reported.
+```bash
+cat >> .claude/clio/database/index.jsonl <<'EOF'
+{"date":"YYYY-MM-DD","id":"<full hash>","type":"chore","commits":["<hash>"],"note":"<why no task owns it, in the user's words>"}
+EOF
+clio validate index
+```
+Only on the user's word, one commit at a time — never to quiet the hook.
 
 Next: `DEBT-IT.md`.

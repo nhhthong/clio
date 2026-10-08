@@ -20,6 +20,12 @@ that is **not** the doc this run wrote, and relabel the section the change made 
 `## [SUPERSEDED YYYY-MM-DD] <heading>`, plus `— REVERTED, DO NOT RE-IMPLEMENT` when the code is gone
 (`WRITE-DOC.md` § UPDATE). Keep the body; it is still the record of what was built and why.
 
+**A withdrawn task works the same way**: `clio test withdraw` prints `doc: <path> [tasks] relabel …` for each doc
+that describes it. A doc whose tasks are all withdrawn gets `## Summary` and `## Decisions` relabelled in full
+(`## [SUPERSEDED YYYY-MM-DD] <heading> — REVERTED, DO NOT RE-IMPLEMENT`); a doc that also covers live tasks
+gets only the bullets about the withdrawn ones relabelled. Each doc touched gets its `## Change Log` line and
+a restated index record (`clio validate index <N>`). Close the `spec-delta` the withdrawal answers.
+
 Skip this and hop 2 keeps returning that doc as current state, because nothing in a ledger record
 says its subject was replaced — a reader asking how the feature works opens a doc describing code
 this run just removed. Cannot tell which section went stale → file a `doc-stale` record naming the
@@ -31,13 +37,14 @@ Verification is `/clio:test`'s evidence, never your account of it. For each id i
 ```bash
 clio test gate <task-id>
 ```
-- `OK` → tick `[x] YYYY-MM-DD` (+ ` <hash>` if any) on that exact row in `.claude/clio/docs/plans/<area>.md`, in
-  place, and paste the `OK` line under `## Testing Done`.
+- `OK` → `clio test tick <task-id>` (+ `--commit <hash>` if step 1 found one): it runs the gate
+  again and records the task done — the only way a task becomes done. Paste the `OK` line under
+  `## Testing Done`.
 - Anything else → leave `[ ]`, file an `unverified` record naming the gate's FAIL lines, and tell the
   user `/clio:test <task-id>` is owed. A gate line `flaky —` is `code-debt` with `what`
   starting `flaky:`.
 - `plan_tasks` empty (work outside any plan) → no gate to run; `unverified` unless the user names the
-  check that ran. Never tick a row step 1 was unsure about.
+  check that ran. Never tick a task step 1 was unsure about.
 
 ## 3. New records
 
@@ -78,7 +85,7 @@ cat >> .claude/clio/database/debt.jsonl <<'EOF'
 EOF
 clio validate debt
 ```
-`FAIL` → `sed -i.bak '$d' .claude/clio/database/debt.jsonl && rm .claude/clio/database/debt.jsonl.bak`, fix, re-append.
+Appended several → `clio validate debt <N>`. `FAIL` → remove exactly the lines you appended (`sed -i.bak '$d'` once per line, then `rm` the `.bak`), fix, re-append.
 
 ## 4. Ledger honesty, scoped to this area only
 

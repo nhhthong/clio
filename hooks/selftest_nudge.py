@@ -98,6 +98,29 @@ os.makedirs(".claude/clio/docs/tasks")
 write(".claude/clio/docs/tasks/d.md", "z\n")
 git("add", "-A")
 quiet("only .claude/ changed — that is memo's own output")
+git("commit", "-qm", "memo")            # HEAD now holds .claude/ only — a memo or backfill being committed
+quiet("HEAD touches only .claude/")
+write("ci.yml", "x\n")
+git("add", "ci.yml")
+git("commit", "-qm", "ci")
+loud("a code commit no record names", "appears in no index record")
+full = git("rev-parse", "HEAD")
+write(IDX, json.dumps({"date": "2026-01-01", "type": "chore", "id": full, "commits": [full[:7]], "note": "CI"}) + "\n", "a")
+quiet("a chore record owns the CI commit, by a 7-char prefix of its hash")
+
+# a merge commit as HEAD is no work of its own: the commits it merges are what a record names. goremi's
+# own HEAD was one, and the hook nagged about it in every session
+main = git("rev-parse", "--abbrev-ref", "HEAD")
+git("checkout", "-q", "-b", "feat")
+write("m.txt", "m\n")
+git("add", "m.txt")
+git("commit", "-qm", "feat work")
+feat = git("rev-parse", "HEAD")
+git("checkout", "-q", main)
+git("merge", "--no-ff", "-q", "feat", "-m", "merge feat")
+loud("the merged work is in no record yet", "appears in no index record")
+write(IDX, json.dumps({"date": "2026-01-02", "type": "task", "doc": "d.md", "commits": [feat[:7]]}) + "\n", "a")
+quiet("HEAD is a merge and the commit it merged is recorded")
 
 write("a.txt", "y\n", "a")
 if not run():
