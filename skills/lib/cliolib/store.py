@@ -362,16 +362,12 @@ def _lock(f):
         pass
 
 
-def write(kind, area, partials, may_tick=False, legacy=False, check_refs=True, dry=False, withdraw=False):
+def write(kind, area, partials, may_tick=False, withdraw=False):
     """Merge each partial record onto the current one of its (type, id), check the lot, append all or
     nothing. Returns (errors, written records). `done` is reached only through the gate (may_tick, set
     by `clio test tick`), and a done task is final — later work is a new task that names it in needs.
-    A case names the LEVELS.md ids it proves in covers; only a migrated pre-4.1 row (legacy) may name
-    none, and the gate then holds it to nothing, as it did before. A migration writes one area at a
-    time while tasks name each other across areas, so it checks references once all are written
-    (check_refs=False here, `clio validate all` after). dry: check everything, write nothing. withdraw:
-    a done task may become void, and only that (`clio test withdraw`, for work that never left the
-    working tree)."""
+    A case names the LEVELS.md ids it proves in covers. withdraw: a done task may become void, and only
+    that (`clio test withdraw`, for work that never left the working tree)."""
     errs = []
     if not AREA.fullmatch(area or ""):
         return ["area must be lowercase letters, digits, - or _ (it names the file): %r" % area], []
@@ -405,8 +401,7 @@ def write(kind, area, partials, may_tick=False, legacy=False, check_refs=True, d
         rec = {"type": t}
         if t != "mutation":
             rec["id"] = part.get("id")
-        # A migration keeps the date a task was ticked on; everything else is dated now.
-        rec["date"] = part["date"] if legacy and isinstance(part.get("date"), str) else today()
+        rec["date"] = today()
         base = prev if prev is not None else SCHEMA[kind][t]
         for f in SCHEMA[kind][t]:
             rec[f] = part[f] if f in part else base.get(f)
@@ -420,7 +415,7 @@ def write(kind, area, partials, may_tick=False, legacy=False, check_refs=True, d
             wrong = [x for x in rec["covers"] if x not in ids_]
             if wrong:
                 p.append("covers %s, which LEVELS.md § %s does not list (%s)" % (", ".join(wrong), rec["level"], ", ".join(ids_) or "no ids"))
-            elif ids_ and not rec["covers"] and not legacy:
+            elif ids_ and not rec["covers"]:
                 p.append("covers must name the LEVELS.md ids it proves: %s" % ", ".join(ids_))
         if not p and t == "meta":
             wrong = [x for x in rec["na"] if not re.fullmatch(r"[a-z0-9]+\.[0-9]+", x) or x not in level_ids(x.split(".")[0])]
@@ -434,7 +429,7 @@ def write(kind, area, partials, may_tick=False, legacy=False, check_refs=True, d
     # References are checked against the stores plus this batch, so one call may add a task and the
     # task that needs it, or a case and its task.
     ids = set(plan) | {k[1] for k in batch if k[0] == "task"}
-    for rec in (out if check_refs else []):
+    for rec in out:
         t, rid = rec["type"], c.tostring(rec.get("id"))
         if t == "task":
             for x in rec["needs"] + ([rec["by"]] if rec["by"] else []):
@@ -446,8 +441,6 @@ def write(kind, area, partials, may_tick=False, legacy=False, check_refs=True, d
                 errs.append("%s %s: task %s is in no plan — /clio:plan it first" % (t, rid, tid))
     if errs:
         return errs, []
-    if dry:
-        return [], out
     os.makedirs(os.path.dirname(path), exist_ok=True)
     with open(path, "a", encoding="utf-8", errors="surrogateescape") as f:
         _lock(f)

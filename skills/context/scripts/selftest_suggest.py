@@ -100,11 +100,6 @@ git("add", "c.txt")
 git("commit", "-qm", "c")
 ok(any(re.match(r"suggest: /clio:memo — commit [0-9a-f]{7} is in no record", l) for l in suggest()), "unrecorded commit: %s" % suggest())
 
-# a 4.x Markdown plan comes first, whatever else waits
-write(".claude/clio/docs/plans/old.md", "| # | Task |\n")
-s = suggest()
-ok(s and s[0].startswith("suggest: /clio:plan — 4.x Markdown plans"), "migration is not first: %s" % s)
-
 # never more than four lines
 ok(len(suggest()) <= 4, "more than four suggestions")
 done()

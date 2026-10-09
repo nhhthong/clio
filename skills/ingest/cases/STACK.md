@@ -1,30 +1,15 @@
-# The stack — `memory/infra.md`, row `0`
+# The stack: `memory/infra.md`, row 0
 
-Read by `/clio:ingest` on the first run, and on a later run when the source changes a constraint on
-the stack.
+Read on the first run, and on a later run when the source changes a constraint on the stack.
 
-A spec says what the product must do; it rarely says what it is built with, yet every area plan needs
-that settled first. This skill decides the stack **at decision level** — language, framework, build
-tool, test runner, and the constraints behind them. `/clio:plan infra` later turns it into the
-scaffold and toolchain tasks; it does not choose.
+A spec says what the product must do and rarely what it is built with, yet every area plan needs that settled first. Decide the stack at decision level: language, framework, build tool, test runner, and the constraints behind them. `/clio:plan infra` turns it into scaffold tasks. It does not choose.
 
-Collect the constraints the source states that bind the stack — platform (web, desktop, mobile),
-offline, data volume, latency, hosting, licence, a stack the customer already mandates — each with its
-quote. Then one of:
+Collect the constraints the source states that bind the stack, each with its quote: platform, offline use, data volume, latency, hosting, licence, a stack the customer mandates. Then take one branch.
 
-**The repo has code.** Read the manifests and lockfiles; the stack is whatever they pin. Propose
-nothing. Write it as `## Decisions` with the exact versions, and every source constraint the current
-stack does not visibly meet as a ⚠️.
+**The repo has code.** Read the manifests and lockfiles. The stack is what they pin, so propose nothing. Write it under `## Decisions` with exact versions. Every source constraint the current stack does not visibly meet becomes an open point.
 
-**The repo is empty.** Research 2–3 candidate stacks that fit the constraints. **Prefer Context7**
-(fall back to web search, say which). From each stack's own docs: the scaffold command, build and
-test commands, the version they need, the layout they recommend — each with source and the date
-read. Show them side by side against the constraints, then **ASK**: the user picks one or names their
-own. Never pick silently. Record the choice as an ADR (`${CLAUDE_PLUGIN_ROOT}/skills/memo/steps/WRAP-UP.md`
-§ ADR, indexed with `clio add index` as `"type":"adr"`, `"domain":"infra"`, `"req":["0"]`).
+**The repo is empty.** Research 2 or 3 candidate stacks that fit the constraints, using Context7 first and web search as fallback (say which). From each stack's own docs take the scaffold command, build and test commands, required version and recommended layout, each with its source and the date read. Show them side by side against the constraints, then ask. The user picks one or names their own. Never pick silently. Record the choice as an ADR (`${CLAUDE_PLUGIN_ROOT}/skills/memo/steps/WRAP-UP.md`, section ADR), indexed with `clio add index` as type `adr`, domain `infra`, req `["0"]`.
 
-Scope stops at what the scaffold needs. A library for a domain — OCR, image processing, an HTTP
-client — is chosen in that area's spec or plan, not here; the rows it serves are often still ⚠️.
+Stop at what the scaffold needs. A library for one domain (OCR, imaging, an HTTP client) belongs to that area's spec or plan, because the rows it serves are often still open.
 
-`memory/infra.md` uses the template of `SKILL.md` § 1; `## Decisions` holds the chosen stack and the
-commands the docs gave, `## Source` quotes the constraints and names the ADR.
+`memory/infra.md` follows [../SPEC-FORMAT.md](../SPEC-FORMAT.md). `## Decisions` holds the chosen stack and the commands the docs gave. `## Source` quotes the constraints and names the ADR.

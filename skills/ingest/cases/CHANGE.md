@@ -1,61 +1,42 @@
-# A change — rows exist, and something moved
+# A change
 
-For a new source, a spec file or keyword, a change in plain words, or a sweep of hand edits. Specs move while code stands still: work out what the change invalidates **before** writing it. Then `SKILL.md` §§ 1–4.
+Rows exist and something moved: a new source, a spec file or keyword, a change in plain words, or a sweep of hand edits. Specs move while code stands still, so work out what the change invalidates before writing it.
 
-## 1. The change, decision by decision
-Start with one `clio q spec-grep '<key word>'` per word the change turns on (not `cat`/`grep` over `memory/`): it lists the decisions in force that mention it, across areas.
-List every decision added, altered, reversed or resolved: the old rule and the new. The old rule comes from the current `memory/*.md`, or for a sweep from the hand edits since the last ingest (uncommitted and new files included):
-```bash
-clio q spec-diff --stat   # which spec files moved
-clio q spec-diff          # the lines
-```
-The baseline is clone-local (`refs/clio/*` is never pushed), so a fresh checkout has none: try `git diff -M <commit> -- .claude/` from a `Last ingest:` line in an older `requirements.md`, else the dated notes and what the task docs assumed. Still no before-state → the delta is new-rule-only; say so.
+## 1. List the change decision by decision
+For each word the change turns on, run `clio q spec-grep '<word>'`. It lists the decisions in force that mention the word, across areas, which is better than reading `memory/` by hand.
 
-## 2. Weigh it — before anything is written
-```bash
-clio q context <row> [<row>...]     # rows, what was built on them (docs' Decisions / Side Effects / Follow-up), open debt, plan tasks (done = built on it, open = drafts)
-clio q cases <task>...              # cases whose expected rests on the old rule
-clio q spec-grep '<the old value>'  # other decisions in force that mention it (superseded bullets are history)
-```
-One `context` call covers every decision (rows are merged). A value one decision changes is often read by others (a width, a limit, a key, a name): `spec-grep` finds the live ones across areas, and `clio:plan` greps the code per row. Then show the user, **before writing any file**:
-```text
-This change reverses 4 decisions in 3 areas:
-  ui      row 12 · `q` quits → no quit key       built: tasks 12.1, 12.3 (done) · 3 cases expect the old rule
-  ui      row 14 · default theme → none           planned: 14.2 (open) — edited in place, nothing built
-  search  row 20 · search bar bottom → top        built: 20.1 (done) · 2 task docs describe it
-  brand   row 30 · logo → mascot                  nothing built yet
-Spec-delta records: 3 · task docs to relabel: 4 · cases to re-design: 5 · areas to re-plan: ui, search
-Write it all, or one area / one decision at a time?
-```
-**ASK** with that summary. The user may take all, some, or none; a part left for later stays out of every file.
+List every decision added, altered, reversed or resolved, as old rule and new rule. The old rule comes from the current `memory/*.md`. For a sweep it comes from the hand edits since the last ingest, uncommitted and new files included: `clio q spec-diff --stat` shows which files moved, `clio q spec-diff` shows the lines.
+
+The baseline is clone-local (`refs/clio/*` is never pushed), so a fresh checkout has none. Try `git diff -M <commit> -- .claude/` from a `Last ingest:` line in an older `requirements.md`, else the dated notes and what the task docs assumed. With no before-state, the delta has the new rule only. Say so.
+
+## 2. Weigh it before writing anything
+Run `clio q context <row> [<row>...]` for the rows involved. It merges rows and shows what was built on them, open debt and plan tasks. Run `clio q cases <task>...` for the cases whose expected value rests on the old rule. A value one decision changes (a width, a limit, a key, a name) is often read by others, so run `clio q spec-grep '<old value>'` again.
+
+Show the user a summary before touching any file: per decision, the area, row, old rule and new rule, plus what is built on it (done tasks, cases that expect the old rule, task docs that describe it) or planned on it (open drafts) or nothing. End with the counts: spec-delta records, task docs to relabel, cases to re-design, areas to re-plan. Ask whether to write all of it, or one area or decision at a time. The user may take all, some or none. A part left for later stays out of every file.
 
 ## 3. Write what was agreed
-The spec files and `requirements.md` per `SKILL.md` §§ 1–2. Then, per decision:
+Write the spec files and `requirements.md` as in `SKILL.md`. Then per decision:
 
 | The change | Write |
 |---|---|
-| a done task was built on the old decision | a `spec-delta` (reuse the `id` for the same delta): `docs[]` = the task docs from § 2, `code[]` = the paths they name — how `/clio:memo` later relabels them. `blocked_by: null` once the new decision is settled: that is the work queue |
-| only open tasks were planned on it | no delta: `/clio:plan` edits those drafts in place |
-| nothing built or planned | no delta |
-| it answers an open `spec-blocked` | `{"id":"<that id>","blocked_by":null}` — never change its `kind` |
-```bash
-clio add debt <<'EOF'
-{"id":"<kebab-key>","kind":"spec-delta","domain":"checkout","what":["<old> → <new>"],"req":["18"],"specs":[".claude/clio/docs/specs/memory/<file>.md"],"docs":["<task docs built on the old decision>"],"code":["<paths they name>"],"action":"<the rework>","source":"<source §n, date>"}
-EOF
-```
-**Row marker** when the *decision* changed (never build state): ⚠️/❌ → ✅ when the open point got decided (reason = decision + date); ⚠️/❌ stays, reason rewritten, when another part is still open; ✅ → ⚠️ when reopened or reversed; ✅ stays, decision + date appended, when refined. **Moving toward ✅ removes a stop, so it asks first**: every such row in one `AskUserQuestion` as `row · old reason → new decision · deciding source`; write only the approved. Never flip on a low-priority source; the marker and `blocked_by` must tell the same story. Row `0` (the stack) → [STACK.md](STACK.md).
+| A done task was built on the old decision | A `spec-delta` record (reuse the `id` for the same delta). `docs[]` lists the task docs from step 2, `code[]` the paths they name; `/clio:memo` later uses them to relabel. Set `blocked_by` to null once the new decision is settled: that is the work queue |
+| Only open tasks were planned on it | No delta. `/clio:plan` edits those drafts in place |
+| Nothing built or planned | No delta |
+| It answers an open `spec-blocked` record | Update that record with `blocked_by` null. Never change its `kind` |
+
+Write records with `clio add debt` (JSON on stdin; fields in `memo/steps/DEBT-IT.md`). A spec-delta needs `id`, `kind`, `domain`, `what` as "old to new", `req`, `specs`, `docs`, `code`, `action` and `source`.
+
+Row markers follow the decision, never the build state. An open or blocked row becomes decided when the point got decided (reason: decision and date). It stays open or blocked, with the reason rewritten, when another part is still open. A decided row becomes open when reversed or reopened. A decided row stays decided, with decision and date appended, when only refined.
+
+A move toward decided removes a stop, so ask first. Put every such row in one question as `row, old reason, new decision, deciding source`, and write only the approved ones. Never move a row on a low-priority source. The marker and `blocked_by` must tell the same story. Row `0` (the stack) follows [STACK.md](STACK.md).
 
 ## A change withdrawn
-The user drops a change ingested earlier ("không muốn sửa nữa"): written the other way round, after the same weighing.
-- The change's decisions get `Superseded YYYY-MM-DD: withdrawn`; the ones it had superseded get `Reinstated YYYY-MM-DD: <the change> was withdrawn`; one new decision says what holds again, as a pointer, not a copy.
-- A ⚠️ the change opened and the withdrawal makes moot leaves `## Open` (the new decision says so). Row markers go back to what the reinstated decisions say (toward ✅ asks first).
-- Debt: the change's records close (`status` `done`, `action` says withdrawn). Work already built on it gets a new `spec-delta`, which `/clio:plan` turns into voided drafts, withdrawn tasks (never left the working tree) or revert tasks (committed).
+The user drops a change ingested earlier ("không muốn sửa nữa"). Write it the other way round, after the same weighing.
+- Mark the change's decisions `Superseded YYYY-MM-DD: withdrawn`. Mark the ones it had superseded `Reinstated YYYY-MM-DD: <the change> was withdrawn`. Add one decision that says what holds again, as a pointer and not a copy.
+- An open point the change created, now moot, leaves `## Open`; the new decision says so. Row markers go back to what the reinstated decisions say. A move toward decided asks first.
+- Close the change's debt records (`status` done, `action` says withdrawn). Work already built on it gets a new `spec-delta`. `/clio:plan` turns it into voided drafts, withdrawn tasks (never committed) or revert tasks (committed).
 
 ## Report
-Besides `SKILL.md` § 4: each delta as `id` · `blocked_by` · row · action, queue first; rows moved (old → new, deciding source); records unblocked; any `index.jsonl` record the change shows to be wrong (reported, never fixed: `/clio:memo`'s); what the user left for later. Then the areas to re-plan, `infra` (row `0`) first:
-```text
-infra     row 0 · Go 1.22 → 1.23 · rules/go.md names `go test ./...`        →  /clio:plan infra
-ui        row 12 · 12.1, 12.3 done on the old rule · spec-delta ui-no-quit   →  /clio:plan ui
-brand     row 30 · nothing built                                              →  /clio:plan brand
-```
-`/clio:plan` turns each delta into a sub-task and edits open drafts in place; `/clio:test` re-designs the stale cases. This skill writes neither.
+Add to the report in `SKILL.md`: each delta as `id`, `blocked_by`, row, action, work queue first; rows moved (old to new, deciding source); records unblocked; any `index.jsonl` record the change shows to be wrong (report it, never fix it: that is `/clio:memo`'s job); what the user left for later. Then list the areas to re-plan, `infra` first, each with its row, what moved and the `/clio:plan <area>` to run.
+
+`/clio:plan` turns each delta into a sub-task and edits open drafts in place. `/clio:test` re-designs the stale cases. This skill writes neither.

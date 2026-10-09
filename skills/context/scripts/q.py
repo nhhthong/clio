@@ -173,8 +173,6 @@ def suggest(rows):
     """What to do next, from the state alone — [(command, why)], most urgent first. Nothing here is a
     guess: every line is a fact the ledgers or git show, and the command is the skill that answers it."""
     out = []
-    if glob.glob(".claude/clio/docs/plans/*.md") or glob.glob(".claude/clio/docs/tests/*.md"):
-        out.append(("/clio:plan", "4.x Markdown plans are still there and nothing reads them: migrate first"))
     idx = c.read_valid(IDX)
     if c.is_git() and idx:      # a project that never memoed has nothing "owed": the drift hook is silent too
         files, same = work_changes()
@@ -208,8 +206,6 @@ def suggest(rows):
 
 def summary():
     plans = store.files("plan")
-    if glob.glob(".claude/clio/docs/plans/*.md"):
-        print("4.x plans in .claude/clio/docs/plans/*.md — not read any more: /clio:plan migrates them first")
     if not plans:
         print("no plans — /clio:plan has not been run")
     # Every plan's rows at once: `next` may wait on a task ticked in another area (0.4 in infra).
@@ -436,7 +432,7 @@ def spec_mark(args):
 def spec_diff(args):
     base = c.git_out(["rev-parse", "-q", "--verify", "refs/clio/ingest^{tree}"])
     if not base:
-        print("no ingest baseline in this clone (it is clone-local, never pushed) — reconstruct, see /clio:ingest § 6",
+        print("no ingest baseline in this clone (it is clone-local, never pushed) — reconstruct, see skills/ingest/cases/CHANGE.md § 1",
               file=sys.stderr)
         sys.exit(1)
     sys.exit(subprocess.call(["git", "diff"] + args + [base, spec_tree()]))

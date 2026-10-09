@@ -291,10 +291,6 @@ def audit():
             info("renamed doc, superseded: " + doc)
         else:
             fail("index record points at a missing doc and nothing supersedes it: " + doc)
-    # A 4.x layout nobody migrated: the skills no longer read it, so its plan is invisible until moved.
-    old = sorted(glob.glob(".claude/clio/docs/plans/*.md") + glob.glob(".claude/clio/docs/tests/*.md"))
-    if old:
-        fail("%d Markdown plan/test file(s) in the 4.x layout (%s…) — /clio:plan migrates them (`clio test migrate`)" % (len(old), old[0]))
     # The plan and test stores: every line a record, every current record well-formed, every id in one
     # area only — the gate gathers a task's cases by id, so a second home lends it another's evidence.
     for b in store.bad_lines():
@@ -366,18 +362,12 @@ def audit():
     refs = set()
     for top in (".claude/clio/", ".claude/rules/"):
         for base, _, files in os.walk(top):
-            if "/docs/archive" in base:
-                continue                  # 4.x Markdown kept by `clio test migrate` for comparison
             for f in files:
                 if f.endswith(".md"):
                     with open(os.path.join(base, f), encoding="utf-8", errors="surrogateescape") as fh:
                         refs.update(re.findall(r"\.claude/[A-Za-z0-9._/-]+\.md", fh.read()))
-    moved = [r for r in refs if r.startswith((".claude/clio/docs/plans/", ".claude/clio/docs/tests/"))]
-    if moved and os.path.isdir(".claude/clio/docs/archive/v4"):
-        info("%d document path(s) name the 4.x plans/tests Markdown (e.g. %s) — it moved to docs/archive/v4/; "
-             "old docs may keep the reference, they are history" % (len(moved), moved[0]))
     for ref in sorted(refs):
-        if ref not in moved and "<" not in ref and not os.path.exists(ref):
+        if "<" not in ref and not os.path.exists(ref):
             warn("dead link in a document: %s — was it renamed? rewrite the reference" % ref)
 
     # requirements.md markers vs the ledgers

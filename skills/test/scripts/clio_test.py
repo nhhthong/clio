@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""clio test run <case-id> | run-task <task-id>... | red <task-id>... [--base <rev>] [--fresh] | approve <task-id>... | diff <task-id>... | gate <task-id> | tick <task-id> [--commit h] | withdraw <task-id>... | coverage <task-id> | history <case-id> | migrate [--write] | fp
+"""clio test run <case-id> | run-task <task-id>... | red <task-id>... [--base <rev>] [--fresh] | approve <task-id>... | diff <task-id>... | gate <task-id> | tick <task-id> [--commit h] | withdraw <task-id>... | coverage <task-id> | history <case-id> | fp
   run       run one case from .claude/clio/database/test/*.jsonl `repeat` times, append the result to runs.jsonl
   run-task  run every case of each task that way — one call proves a whole task
   red       run the cases that must be seen red (regression, critical) on the code at a base commit,
@@ -10,7 +10,6 @@
   tick      the gate, then mark the plan task done — the only way a task becomes done
   withdraw  void done tasks whose work never left the working tree (needs the user's yes, like approve)
   diff      what changed in each task's cases since its last approval, one line per kind of edit
-  migrate   move a 4.x project's Markdown plans and case tables into the stores (--write to do it)
   coverage  per case of a task: level and last recorded result (pass/fail/never) — what /clio:plan
             reads to decide whether a ticked task's tests fall short
   history   every recorded run of one case, oldest first
@@ -33,14 +32,13 @@ from cmds.coverage import cmd_coverage  # noqa: E402
 from cmds.diff import cmd_diff  # noqa: E402
 from cmds.gate import cmd_gate  # noqa: E402
 from cmds.history import cmd_history  # noqa: E402
-from cmds.migrate import cmd_migrate  # noqa: E402
 from cmds.red import cmd_red  # noqa: E402
 from cmds.run_task import cmd_run_task  # noqa: E402
 from cmds.withdraw import cmd_withdraw  # noqa: E402
 from cmds.tick import cmd_tick  # noqa: E402
 
 USAGE = ("usage: clio test run <case-id> | run-task <task-id>... | red <task-id>... [--base <rev>] [--fresh]"
-         " | approve <task-id>... | diff <task-id>... | gate <task-id> | tick <task-id> [--commit h] | coverage <task-id> | history <case-id> | migrate [--write] | fp")
+         " | approve <task-id>... | diff <task-id>... | gate <task-id> | tick <task-id> [--commit h] | coverage <task-id> | history <case-id> | fp")
 
 
 def main(argv):
@@ -83,8 +81,6 @@ def main(argv):
         return cmd_withdraw(argv[1:]) if arg else (tc.say("usage: clio test withdraw <task-id>...") or 1)
     if cmd == "tick":
         return cmd_tick(argv[1:]) if arg else (tc.say("usage: clio test tick <task-id> [--commit <hash>]") or 1)
-    if cmd == "migrate":
-        return cmd_migrate(argv[1:])
     if cmd == "fp":
         tc.say(fpm.fp(tc.ROOT, tc.RUNS))
         return 0

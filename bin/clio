@@ -4,6 +4,7 @@
   clio q <cmd> ...         every read of Clio's ledgers, read-only      (skills/context/scripts/q.py)
   clio validate [mode]     check index.jsonl / debt.jsonl / the repo    (skills/memo/scripts/validate.py)
   clio add <plan|test> <area> | index | debt   the writer of the ledgers      (skills/lib/clio_add.py)
+  clio setup <check|run>   create .claude/clio/ in a project            (skills/setup/scripts/setup.py)
   clio doc                 create or update a task doc from one JSON object (skills/memo/scripts/doc.py)
   clio selftest            run every selftest of the plugin — for contributors
 Each subcommand prints its own usage when called without arguments. The hooks are not routed
@@ -22,6 +23,7 @@ CMDS = {
     "validate": "skills/memo/scripts/validate.py",
     "add": "skills/lib/clio_add.py",
     "doc": "skills/memo/scripts/doc.py",
+    "setup": "skills/setup/scripts/setup.py",
 }
 
 

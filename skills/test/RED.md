@@ -1,6 +1,6 @@
 # Red — for tasks that must be seen failing
 
-Read by `/clio:test` § 4 only when the batch holds a `regression` case or a `critical` task.
+Read by `/clio:test` step 5 only when the batch holds a `regression` case or a `critical` task.
 
 **Tasks that need red.** Write the tests first, then:
 - **The code does not exist yet** → add the bare seam (the signature, a route returning 501, a stub
@@ -28,10 +28,4 @@ script reports `NOT RED` passed on the old code. Two different reasons, two diff
   does not reproduce its bug — rewrite it until it does. If the task names `mutation`, a passing
   mutation case stands in for red on its other cases (the gate prints a `NOTE`). If it does not and many cases come back `NOT RED`, propose
   `mutation` for the task to the user (`/clio:plan` adds it) — unless the project's `mutation`
-  record says tool `none`. Otherwise, one case at a time, propose a waiver in the task's test meta:
-  ```json
-  {"type":"meta","id":"3.4","waived":{"3.4-u2":"correct since before a1b2c3d; red --base a1b2c3d passed"}}
-  ```
-  It is part of what the user approves, so they say yes to it like to a case. The gate accepts it
-  only if a `red` run of that case with these test files **passed** on a base commit — a waiver
-  stands on a tried red, never instead of one.
+  record says tool `none`. Otherwise, one case at a time, propose a waiver in the task's test meta: a `waived` entry that maps the case id to a reason, for example "correct since before a1b2c3d; red --base a1b2c3d passed". It is part of what the user approves, so they say yes to it like to a case. The gate accepts it only if a `red` run of that case with these test files passed on a base commit. A waiver stands on a tried red, never instead of one.

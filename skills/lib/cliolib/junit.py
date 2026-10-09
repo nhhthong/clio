@@ -2,7 +2,7 @@
 report says about each. Text in, tuples out — nothing here runs a test or writes evidence.
 
 A runner that boots something heavy (Maven + JVM + Spring: ~7 s) pays it once per case when every
-case is its own command. A `Batch:` line in .claude/rules/*.md (test/SKILL.md § 1b finds and writes
+case is its own command. A `Batch:` line in .claude/rules/*.md (test/BATCH.md finds and writes
 it) names the one command that runs many tests and the JUnit XML it leaves behind:
   Batch: `mvn -pl api test -Dtest={tests}` · join: `,` · report: `api/target/surefire-reports/TEST-*.xml`
 A case joins a batch only if its own command IS that template with {tests} = its test id, so the

@@ -2,15 +2,7 @@
 
 `.claude/clio/docs/tasks/<feature>/<id>_<name>.md`, one per sub-task, plus a `summary.md` per feature. The feature is kebab-case, the business area a task is scoped to (never a source directory). `<id>` is the creation timestamp, forever (filename prefix and the index's `id`); `<name>` is 1–4 lowercase words, from the plan task's wording; plan ids go in `plan_tasks`, never in the filename.
 
-```bash
-clio doc <<'EOF'
-{"feature":"order-page","name":"loyalty-lookup","plan_tasks":["3.1"],"summary":"One sentence.",
- "files":["src/orders/loyalty.ts — why it changed"],"decisions":["Why X instead of Y"],
- "side_effects":["What could affect other features"],"testing":["OK: task 3.1 — every case passed at <fp>"],
- "related":["tasks/order-page/1789430400_order-fetch.md"],"follow_up":["An open question"],
- "commit":"3f2a1c","feature_what":"One or two sentences, for a new feature's summary.md","domain":"account"}
-EOF
-```
+Run `clio doc` with one JSON object on stdin. Keys: `feature`, `name`, `plan_tasks`, `summary`, `files` (each "path — why it changed"), `decisions`, `side_effects`, `testing` (for example "OK: task 3.1 — every case passed at <fp>"), `related`, `follow_up`, `commit`, `feature_what`, `domain`.
 It prints `doc:` and `id:` for step 3. **CREATE** takes `feature` and `name`; **UPDATE**, the default, takes `"doc":"<path>"` instead. Every other key is optional. Do not read the doc first or edit it by hand: the command applies the rules.
 
 | You give | It does |

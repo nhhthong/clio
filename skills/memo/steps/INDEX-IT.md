@@ -2,13 +2,9 @@
 
 One line per document **every run**, UPDATE runs too; the last line per `id` is the doc's current state, earlier ones its history. `id` is the doc's creation timestamp and filename prefix (`1789430400_loyalty-lookup.md`); it never changes, not when the doc moves.
 
-```bash
-clio add index <<'EOF'
-{"id":"1789430400","type":"task","doc":".claude/clio/docs/tasks/orders/1789430400_order-list.md","domain":"account","plan_tasks":["3.1"],"files":["src/orders/order-service.ts"],"keywords":["orders","pagination"],"specs":[".claude/clio/docs/specs/memory/ui-design.md"],"req":["2"],"fp":"<clio test fp>"}
-EOF
-```
+Write it with `clio add index`, JSON objects on stdin, one per line. A record has `id`, `type`, `doc`, `domain`, `plan_tasks`, `files`, `keywords`, `specs`, `req` and `fp`.
 - **A record names only what is its own.** A new doc names `type`, `doc`, `domain`, `keywords` and what it claims (`date` is today; `commits`, `plan_tasks`, `files`, `req`, `specs` start empty). An **update** names the `id` and what changed; the rest is carried over. A list is replaced whole: give the full new `files` or `commits`.
-- **It checks before it keeps**: the lines are appended, `clio validate` runs on exactly them, a `FAIL` removes them again (`nothing written`). Several docs in one call are validated together; one bad record refuses all. A `'` in a value is fine in a quoted heredoc.
+- **It checks before it keeps**: the lines are appended, `clio validate` runs on exactly them, a `FAIL` removes them again (`nothing written`). Several docs in one call are validated together; one bad record refuses all.
 
 | Field | Rule |
 |---|---|

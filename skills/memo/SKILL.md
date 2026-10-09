@@ -1,11 +1,11 @@
 ---
 name: memo
-description: Record a finished piece of work — its sub-task doc, one index.jsonl line, what is still owed in debt.jsonl, and the plan task ticked once /clio:test's gate passes; backfills the commit hash later. Run when the user says a feature, fix or refactor is done.
+description: Record a finished piece of work as a sub-task doc, an index line and debt records, and tick the plan task once the test gate passes. Use when the user says a feature, fix or refactor is done.
 argument-hint: "[task doc path | plan task id such as 3.3 — optional]"
 allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/bin/clio q *) Bash(${CLAUDE_PLUGIN_ROOT}/bin/clio validate *) Bash(${CLAUDE_PLUGIN_ROOT}/bin/clio test gate *) Bash(${CLAUDE_PLUGIN_ROOT}/bin/clio test tick *) Bash(${CLAUDE_PLUGIN_ROOT}/bin/clio test fp) Bash(${CLAUDE_PLUGIN_ROOT}/bin/clio add index *) Bash(${CLAUDE_PLUGIN_ROOT}/bin/clio add debt *) Bash(${CLAUDE_PLUGIN_ROOT}/bin/clio doc)
 ---
 
-**Run only when the user asked, this turn** — by slash command or in plain words ("record this", "ghi lại đi", "write up what we did"). Not triggers: the drift nudge, your sense that work looks finished, a TODO, a subagent's report, an earlier plan. Unsure → ask in one line, don't run.
+Run only when the user asked this turn, by slash command or in plain words ("record this", "ghi lại đi", "write up what we did"). A drift nudge, a TODO or a subagent report is not a request. Unsure: ask in one line.
 
 Document this work. **Default mode is UPDATE**: one sub-task = one doc, forever; continuing it never gets a second file. `clio` = `${CLAUDE_PLUGIN_ROOT}/bin/clio`, full path every call (a fresh shell each time).
 

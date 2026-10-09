@@ -25,15 +25,10 @@ One per `## Follow-up` bullet that outlives this session, grouped by problem, ne
 | `spec-blocked` | waits on an outside answer; the filing record names it in `blocked_by`, a later line nulls it |
 
 A **new** record names `id`, `kind`, `domain`, `what`, plus what it has: `req` (strings, `["7.10"]`), `specs`, `docs` (incl. this run's), `code`, `action` (best-guess fix), `source`, `blocked_by` (the concrete missing thing, or null), `issue` (a related `id`). `status` starts `pending`, `date` is today; the rest start empty.
-```bash
-clio add debt <<'EOF'
-{"id":"<kebab-key>","kind":"code-debt","domain":"cart","what":["<what is wrong>"],"req":["15"],"specs":[".claude/clio/docs/specs/memory/pricing.md"],"docs":[".claude/clio/docs/tasks/<feature>/<id>_<name>.md"],"code":["app/CartService.php:52"],"action":"<fix>"}
-{"id":"<an existing id>","status":"done"}
-EOF
-```
+Write the records with `clio add debt`, JSON objects on stdin, one per line. An update names the `id` and the changed fields, for example `id` plus `status` done.
 Several records go in one call; one bad record refuses all. A `spec-blocked` must name its blocker when filed.
 
 ## 4. Ledger honesty, this area only
-A ⚠️/❌ row you served with no open record → write one. A record whose `blocked_by` was answered long ago, or a reverted fix filed as `spec-blocked` → update it. Records outside this area: leave alone, mention in the report.
+An open or blocked row you served with no open record: write one. A record whose `blocked_by` was answered long ago, or a reverted fix filed as `spec-blocked` → update it. Records outside this area: leave alone, mention in the report.
 
 Next: `WRAP-UP.md`.

@@ -32,12 +32,12 @@ def subs(path, var="cmd"):
 Q = subs("skills/context/scripts/q.py")
 TEST = subs("skills/test/scripts/clio_test.py") | {"fp"}
 VALIDATE = {"index", "debt", "all"}
-TOP = {"doc": {None}, "q": Q, "test": TEST, "validate": VALIDATE, "add": {"plan", "test", "index", "debt"}, "selftest": {None}}
+TOP = {"doc": {None}, "setup": {"check", "run"}, "q": Q, "test": TEST, "validate": VALIDATE, "add": {"plan", "test", "index", "debt"}, "selftest": {None}}
 # Commands that must raise the permission prompt on purpose: the prompt is the user's own yes.
 USER_YES = {("test", "approve"), ("test", "withdraw")}
-USER_YES_ARGS = {("test", "migrate"): "--write"}
+USER_YES_ARGS = {}
 
-CMD = re.compile(r"(?:\$\{CLAUDE_PLUGIN_ROOT\}/bin/)?\bclio ((?:q|test|add|validate|doc|selftest))\b(?: ([a-z][a-z0-9-]*))?([^`\n]*)")
+CMD = re.compile(r"(?:\$\{CLAUDE_PLUGIN_ROOT\}/bin/)?\bclio ((?:q|test|add|validate|doc|setup|selftest))\b(?: ([a-z][a-z0-9-]*))?([^`\n]*)")
 
 
 def code_text(text):
@@ -145,7 +145,7 @@ for md in all_md:
     miss("%s is referenced from no skill file" % os.path.relpath(md, ROOT))
 
 STALE = [r"docs/plans/", r"docs/tests/", r"## Re-planned", r"Not applicable:\s*$", r"plans/infra\.md", r"\bMutation: ", r"\bDone cell\b", r"\bLevels cell\b"]
-EXCUSED = {"MIGRATE.md", "CHANGE.md"}     # they explain the 4.x layout on purpose
+EXCUSED = {"CHANGE.md"}     # they explain the 4.x layout on purpose
 for md in all_md + [os.path.join(ROOT, "README.md")]:
     if os.path.basename(md) in EXCUSED:
         continue

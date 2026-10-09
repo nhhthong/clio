@@ -1,6 +1,6 @@
 # Batch — the fastest way to run, found once per stack
 
-Read by `/clio:test` § 1b before the first run on a stack. Everything here is about *how* cases run,
+Read by `/clio:test` step 1 before the first run on a stack. Everything here is about *how* cases run,
 never about *what* they test.
 
 How cases run costs more than anything else here, whatever the stack: a runner that boots something
@@ -34,15 +34,8 @@ just as much existing ones (a re-run, cases written before 4.2.0) — check for 
      (Spring's test-context cache — same config, one boot; Testcontainers reuse).
   3. **Measure**, don't assume: one existing test on its own, then several in one command. Show both
      numbers.
-  4. Propose the line for `.claude/rules/<stack>.md` and **ASK** before writing it:
-     ```
-     - Batch: `mvn -pl cafefin-api test -Dtest={tests}` · join: `,` · report: `cafefin-api/target/surefire-reports/TEST-*.xml`
-     ```
-     The template is the case commands' own text with the test id cut out — **copy it from the cases,
-     never from this example**: one extra flag (`-q`) and not a single case matches. `run-task` prints
-     a `note:` with the template the commands actually fit when two or more cases end up running alone.
-     `{tests}` is where the joined test ids go, `join` the separator the runner wants, `report` the
-     glob of the JUnit XML it leaves. One line per runner (per module when modules test apart).
+  4. Propose the line for `.claude/rules/<stack>.md` and ask before writing it. Format: `- Batch: ` then the command template in backticks, then `· join: ` the separator in backticks, then `· report: ` the glob of the XML report in backticks. For example, a Maven repo uses `mvn -pl cafefin-api test -Dtest={tests}`, join `,`, and report glob `cafefin-api/target/surefire-reports/TEST-*.xml`.
+     The template is the case commands' own text with the test id cut out. Copy it from the cases, never from this example: one extra flag (`-q`) and not a single case matches. `run-task` prints a `note:` with the template the commands actually fit when two or more cases end up running alone. `{tests}` is where the joined test ids go, `join` the separator the runner wants, `report` the glob of the JUnit XML it leaves. Write one line per runner (per module when modules test apart).
   5. No way to select several tests in one command, no XML report, or the measurement shows no gain
      → no line; say why. Cases then run one command each, as before.
 
