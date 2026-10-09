@@ -6,13 +6,10 @@
   clio add <plan|test> <area> | index | debt   the writer of the ledgers      (skills/lib/clio_add.py)
   clio setup <check|run>   create .claude/clio/ in a project            (skills/setup/scripts/setup.py)
   clio doc                 create or update a task doc from one JSON object (skills/memo/scripts/doc.py)
-  clio selftest            run every selftest of the plugin — for contributors
 Each subcommand prints its own usage when called without arguments. The hooks are not routed
 here: hooks.json calls hooks/clio_guard.py and hooks/clio_nudge.py directly."""
-import glob
 import importlib.util
 import os
-import subprocess
 import sys
 
 sys.dont_write_bytecode = True   # keep the plugin directory free of __pycache__
@@ -27,31 +24,8 @@ CMDS = {
 }
 
 
-def selftest():
-    """Every selftest*.py under skills/ and hooks/, all at once — each builds its own scratch repo, so
-    none waits on another: one name and verdict per line, exit 1 if any failed."""
-    files = sorted(glob.glob(os.path.join(ROOT, "skills", "**", "selftest*.py"), recursive=True)
-                   + glob.glob(os.path.join(ROOT, "hooks", "selftest*.py")))
-    procs = [(os.path.relpath(f, ROOT),
-              subprocess.Popen([sys.executable, f], stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                               universal_newlines=True))
-             for f in files if os.path.basename(f) != "selftest_common.py"]
-    bad = 0
-    for name, p in procs:
-        text = p.communicate()[0]
-        if p.returncode == 0:
-            print("OK    " + name)
-        else:
-            bad = 1
-            print("FAIL  " + name)
-            sys.stdout.write("".join("      " + l + "\n" for l in text.rstrip("\n").split("\n")))
-    return bad
-
-
 def main(argv):
     cmd = argv[0] if argv else ""
-    if cmd == "selftest":
-        return selftest()
     if cmd not in CMDS:
         print(__doc__.split("\n", 1)[1].rstrip(), file=sys.stderr)
         return 1
