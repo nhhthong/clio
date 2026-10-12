@@ -30,7 +30,7 @@ spec, not against habit. A task usually answers yes to several; each yes is a le
 | 10 | Does the spec state a latency or throughput number? | p95, req/s | `perf` |
 | 11 | Does the spec state an expected load or a limit? | concurrent users, N minutes, a max | `load`, `stress` |
 | 12 | Is it a bug fix or a revert? | a `code-debt` or `spec-delta` record | `regression` |
-| 13 | Is it toolchain or scaffold? | an `infra` task | `smoke` |
+| 13 | Is it toolchain or scaffold? | a task that only sets up the build | tier `none` (see Tier), not a level |
 
 Not a question — derived:
 - **Critical** → `"critical": true` when a bug here would corrupt shared state, grant access it
@@ -71,16 +71,24 @@ Where a yes still does not earn the level:
 
 How much ceremony a task gets. Answer each question against what § 2 found:
 1. **Seen** — would a mistake show the moment someone looks at it (a colour, a layout, a label, an
-   animation, a message's wording)?
+   animation, a message's wording, a build that fails)?
 2. **Undone by the code alone** — does reverting the commit put everything back, with nothing
    stored, sent, migrated or charged in between?
 3. **Contained** — does it leave every trust boundary, shared record and other task's behaviour
    as it was?
+4. **Logic-free** — does it hold no branch, calculation, validation or transformation of its own
+   (a scaffold, a config key, a static page, a rename, a dependency bump that builds)?
 
-All three yes, and it is not critical → `"tier": "light"`: one level (usually `smoke` or `unit`,
-whichever proves it), one case, no red. Any no → `full`. Cosmetic work in a UI is the common light
-task, not the definition: a "small" change to a price format or a permission check fails Q2 or Q3.
-Light changes nothing the gate checks — it only shortens what the skills write around it.
+All four yes, and it is not critical → `"tier": "none"`: no levels, no cases, no approval. The plan
+gives a `skip` reason (the user approved it with the plan) and, if the repo has a build or compile
+line, a `check` command. `clio test check <id>` runs it once, and the gate wants that run on the
+current code. With no command the gate accepts the reason and prints a `NOTE`, and `/clio:memo`
+files an `unverified` record.
+
+Q1 to Q3 yes, Q4 no, and it is not critical → `"tier": "light"`: one level (usually `unit`,
+whichever proves it), one case, no red. Any of Q1 to Q3 no → `full`. Cosmetic work in a UI is the
+common light task, not the definition: a "small" change to a price format or a permission check
+fails Q2 or Q3. Light changes nothing the gate checks — it only shortens what the skills write around it.
 
 ## unit
 One class or function through its public signature (`UserService.createUser()`).
@@ -173,7 +181,7 @@ One per bug fixed: reproduces the bug through a public seam. It must be **run re
 
 ## smoke
 The small fixed suite that says the build is alive: it starts, the health route answers, one read and
-one write succeed. Lives under the `infra` plan; every other area's gate assumes it passes.
+one write succeed. Only where the spec or the user asks for it; plain scaffold work is a `none` task.
 
 ## mutation
 Only where the plan names it: a critical task the user agreed is beyond critical (§ Choosing).

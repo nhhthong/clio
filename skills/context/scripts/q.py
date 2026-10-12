@@ -208,7 +208,7 @@ def summary():
     plans = store.files("plan")
     if not plans:
         print("no plans — /clio:plan has not been run")
-    # Every plan's rows at once: `next` may wait on a task ticked in another area (0.4 in infra).
+    # Every plan's rows at once: `next` may wait on a task ticked in another area (a scaffold task of another area).
     rows = store.plan_rows()
     ok = {r[1] for r in rows if r[6].startswith("[x]")}
     for p in plans:

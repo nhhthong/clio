@@ -52,7 +52,6 @@ Once per repository:
 ```text
 /clio:setup                  # create .claude/clio/
 /clio:ingest docs/spec.md    # spec → areas + proposed stack
-/clio:plan infra             # stack → toolchain tasks
 /clio:plan checkout          # one area → small testable tasks
 ```
 
@@ -95,7 +94,7 @@ Neither writes a ledger itself.
 |---|---|
 | `/clio:setup` | Create the layout (once per repo) |
 | `/clio:ingest [doc]` | Requirements → specs and stack; on change, flags what existing code it invalidates |
-| `/clio:plan <area>` | Specs → smallest testable tasks, each with its test levels (`infra` first) |
+| `/clio:plan <area>` | Specs → smallest testable tasks, each with its test levels (it checks the toolchain itself) |
 | `/clio:context [x]` | What's decided, built, and owed — before you start work |
 | `/clio:test [task\|area]` | Design, approve, run, and gate the tests |
 | `/clio:memo` | Record finished work; tick the plan only on a passing gate |

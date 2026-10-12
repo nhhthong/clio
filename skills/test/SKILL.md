@@ -2,7 +2,7 @@
 name: test
 description: Design, write, run and gate the tests for plan tasks, in batches. Cases are designed per level the plan named, with expected values taken from the spec, approved in one question, and run by a script that records the evidence. Use when the user asks to test, design test cases or run tests.
 argument-hint: "[task id such as 3.3 | several ids | area | gate <task-id>]"
-allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/bin/clio test run *) Bash(${CLAUDE_PLUGIN_ROOT}/bin/clio test run-task *) Bash(${CLAUDE_PLUGIN_ROOT}/bin/clio test red *) Bash(${CLAUDE_PLUGIN_ROOT}/bin/clio test gate *) Bash(${CLAUDE_PLUGIN_ROOT}/bin/clio test diff *) Bash(${CLAUDE_PLUGIN_ROOT}/bin/clio test history *) Bash(${CLAUDE_PLUGIN_ROOT}/bin/clio test coverage *) Bash(${CLAUDE_PLUGIN_ROOT}/bin/clio test fp) Bash(${CLAUDE_PLUGIN_ROOT}/bin/clio q *) Bash(${CLAUDE_PLUGIN_ROOT}/bin/clio add test *)
+allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/bin/clio test run *) Bash(${CLAUDE_PLUGIN_ROOT}/bin/clio test run-task *) Bash(${CLAUDE_PLUGIN_ROOT}/bin/clio test red *) Bash(${CLAUDE_PLUGIN_ROOT}/bin/clio test check *) Bash(${CLAUDE_PLUGIN_ROOT}/bin/clio test gate *) Bash(${CLAUDE_PLUGIN_ROOT}/bin/clio test diff *) Bash(${CLAUDE_PLUGIN_ROOT}/bin/clio test history *) Bash(${CLAUDE_PLUGIN_ROOT}/bin/clio test coverage *) Bash(${CLAUDE_PLUGIN_ROOT}/bin/clio test fp) Bash(${CLAUDE_PLUGIN_ROOT}/bin/clio q *) Bash(${CLAUDE_PLUGIN_ROOT}/bin/clio add test *)
 ---
 
 Target: $ARGUMENTS
@@ -21,6 +21,7 @@ Run only when the user asked this turn, by slash command or in plain words ("tes
 ## Steps
 1. **Load and pick the batch.** Run `clio q context <ids|area>` for rows, spec, built work, debt, rules and ready tasks. Read the spec's `## Decisions`, the code in `touches`, and `.claude/rules/*.md` for test commands. `clio q plan --id <id>` gives a task's `levels`, `tier` and `touches`. `clio q cases <task|area>` lists existing cases for a re-design.
    - For an area, take its open tasks whose `needs` are done, in plan order, capped at 5 tasks or about 30 cases (past that a yes is skimmed). Say what waits.
+   - A `none` task has no cases and nothing to approve: run `clio test check <id>` (it runs the task's `check` command once), then gate it. A task you find trivial but the plan made `light` or `full` goes back to `/clio:plan` to be re-tiered; never skip its cases yourself.
    - For a void or superseded task, remove its cases with a record of `status` removed. Nothing to run.
    - If a `Batch:` line in `.claude/rules/*.md` covers the stack, each case's `command` is that template with `{tests}` replaced by the case's one test id. Otherwise read [BATCH.md](BATCH.md) before the first run.
 2. **Fix the seams.** A seam is a public boundary the tests observe: a signature, route, CLI command, queue message or page. List them in the task's meta `seams`; they appear in the same question as the cases. Test only through seams: no private methods, and no mocking the task's own collaborators. Mock only what the task does not own (third-party API, clock, randomness). A test that breaks on a behaviour-preserving refactor is wrong.

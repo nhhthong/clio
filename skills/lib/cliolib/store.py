@@ -35,7 +35,8 @@ AREA = re.compile(r"[a-z0-9][a-z0-9_-]*")
 SCHEMA = {
     "plan": {
         "task": {"task": None, "req": [], "levels": None, "critical": False, "tier": "full", "needs": [],
-                 "touches": [], "na": {}, "status": "open", "by": None, "commit": None, "delta": None},
+                 "touches": [], "na": {}, "status": "open", "by": None, "commit": None, "delta": None,
+                 "skip": None, "check": None},
         "mutation": {"tool": None, "threshold": None, "adr": None},
     },
     "test": {
@@ -178,13 +179,21 @@ def problems(kind, r):
             if not _strs(r[f]):
                 p.append(f + " must be a list of strings")
         # A task planned before levels existed (a pre-4.0 Test column) keeps none once it is history.
-        if not (_strs(r["levels"]) and all(x in LEVELS for x in r["levels"])
-                and (r["levels"] or r["status"] != "open")):
+        # A `none` task has no levels: it carries a `skip` reason instead (LEVELS.md § Tier).
+        none = r["tier"] == "none"
+        if none:
+            if r["levels"] != []:
+                p.append("a none task names no levels")
+        elif not (_strs(r["levels"]) and all(x in LEVELS for x in r["levels"])
+                  and (r["levels"] or r["status"] != "open")):
             p.append("levels must be a non-empty list from: " + " ".join(LEVELS))
         if not isinstance(r["critical"], bool):
             p.append("critical must be true or false")
-        if r["tier"] not in ("full", "light"):
-            p.append("tier must be full or light")
+        if r["tier"] not in ("full", "light", "none"):
+            p.append("tier must be full, light or none")
+        elif r["tier"] == "none":
+            if r["critical"] or not (isinstance(r["skip"], str) and r["skip"].strip()):
+                p.append("a none task is not critical and says why in skip — LEVELS.md § Tier")
         elif r["tier"] == "light" and (r["critical"] or len(r["levels"]) != 1 or r["levels"][0] in ("regression", "mutation")):
             p.append("a light task is not critical and names one level, not regression or mutation — LEVELS.md § Tier")
         if not (_strmap(r["na"]) and all(k in LEVELS for k in r["na"])):
@@ -193,9 +202,11 @@ def problems(kind, r):
             p.append("status must be one of: " + ", ".join(STATUSES))
         if r["status"] == "superseded" and not isinstance(r["by"], str):
             p.append("a superseded task names the task that replaced it in by")
-        for f in ("by", "commit", "delta"):
+        for f in ("by", "commit", "delta", "skip"):
             if r[f] is not None and not isinstance(r[f], str):
                 p.append(f + " must be a string or null")
+        if r["check"] is not None and not (isinstance(r["check"], str) and r["check"].strip() and "\n" not in r["check"]):
+            p.append("check must be one non-empty line, or null")
     elif t == "mutation":
         if not (isinstance(r["tool"], str) and r["tool"].strip()):
             p.append("tool must name the mutation tester, or be \"none\"")
@@ -257,6 +268,8 @@ def done_cell(r):
 
 
 def levels_cell(r):
+    if r.get("tier") == "none":
+        return "none"
     lv = ", ".join(c.tostring(x) for x in c.items(r.get("levels")))
     return ("critical · " + lv if r.get("critical") is True else lv) or DASH
 
@@ -292,8 +305,8 @@ def _cases():
 
 
 def case_tasks():
-    """The ids of the tasks that have at least one active case — without validating a single case."""
-    return {c.tostring(r.get("task")) for _, r in _cases()}
+    """The ids of the tasks that have at least one active case (a `none` task needs none) — without validating a single case."""
+    return {c.tostring(r.get("task")) for _, r in _cases()} | {t for t, r in tasks().items() if r.get("tier") == "none"}
 
 
 def case_rows(levels=" ".join(LEVELS), task=None):
@@ -405,6 +418,8 @@ def write(kind, area, partials, may_tick=False, withdraw=False):
         base = prev if prev is not None else SCHEMA[kind][t]
         for f in SCHEMA[kind][t]:
             rec[f] = part[f] if f in part else base.get(f)
+        if t == "task" and rec["tier"] == "none" and rec["levels"] is None:
+            rec["levels"] = []
         unknown = [f for f in part if f not in rec]
         if unknown:
             errs.append("%s: unknown field(s): %s" % (where, ", ".join(unknown)))

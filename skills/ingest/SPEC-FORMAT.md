@@ -18,7 +18,7 @@ A short file full of open points is correct when the source is silent. On a late
 ## `requirements.md` rows
 | # | Task | Spec file(s) | Decision status |
 |---|------|--------------|-----------------|
-| 0 | Stack and scaffold | [memory/infra.md](memory/infra.md) | ✅ ADR <ts>_stack |
+| 0 | Stack constraints | [memory/infra.md](memory/infra.md) | ✅ stack chosen at first plan, or ADR <ts>_stack |
 | 7.1 | <requirement> | [memory/ocr.md](memory/ocr.md) | ⚠️ <what is open, date> |
 | 11 | <requirement> | [memory/batch.md](memory/batch.md) | ❌ <what blocks it, who owes it> |
 

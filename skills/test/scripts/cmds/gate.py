@@ -245,6 +245,32 @@ def check_cases(g):
             check_flaky_and_red(g, cid, level, cmd, last)
 
 
+def gate_none(task, cur):
+    """A `none` task has no cases (LEVELS.md § Tier): its proof is the one `check` command run on this
+    code, or, with no command, the skip reason the user approved with the plan."""
+    rec = store.tasks()[task]
+    cmd = rec.get("check")
+    if not cmd:
+        tc.say("NOTE: task %s: no check command — skipped on the plan's reason: %s; /clio:memo files it `unverified`" % (task, rec.get("skip")))
+        tc.say("OK: task %s — skipped, not tested" % task)
+        return 0
+    last = next((r for r in reversed(tc.records()) if r.get("check") == task), None)
+    if last is None:
+        tc.say("FAIL: %s: check never run — `clio test check %s`" % (task, task))
+        return 1
+    if last.get("result") != "pass":
+        tc.say("FAIL: %s: last check failed" % task)
+        return 1
+    if last.get("fp") != cur:
+        tc.say("FAIL: %s: code changed since the last check — `clio test check %s`" % (task, task))
+        return 1
+    if last.get("cmd") != cmd:
+        tc.say("FAIL: %s: check command changed since the last run — `clio test check %s`" % (task, task))
+        return 1
+    tc.say("OK: task %s — check passed at %s" % (task, cur))
+    return 0
+
+
 def cmd_gate(task):
     cur = fpm.fp(tc.ROOT, tc.RUNS)
     # A line the store cannot read may be the newer state of this very task or case: judging the older
@@ -254,6 +280,9 @@ def cmd_gate(task):
         for b in bad:
             tc.say("FAIL: %s is not a JSON record — only `clio add` and `clio test` write the stores; fix or remove it" % b)
         return 1
+    plan = [r for r in store.plan_rows() if r[1] == task]
+    if plan and store.tasks().get(task, {}).get("tier") == "none" and not plan[0][6].startswith(("superseded", "void")):
+        return gate_none(task, cur)
     rows = tc.cases(task)
     if not rows:
         plan = [r for r in store.plan_rows() if r[1] == task]

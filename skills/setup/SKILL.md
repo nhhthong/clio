@@ -28,6 +28,6 @@ Run `${CLAUDE_PLUGIN_ROOT}/bin/clio setup run --domains "<domains>"`. Add `--lit
 
 ## 4. Verify, then point to the next step
 Run `${CLAUDE_PLUGIN_ROOT}/bin/clio validate all`. Then:
-- Full: `/clio:ingest <file>`, then `/clio:plan infra`, then `/clio:plan <area>` per area.
-- Lite: `/clio:plan infra`. With no spec and an empty repo, `/clio:ingest` a short brief or the user's stack first.
+- Full: `/clio:ingest <file>`, then `/clio:plan <area>` per area.
+- Lite: `/clio:plan <area>`. With no spec and an empty repo, `/clio:ingest` a short brief or name the stack first.
 - Per task after that: `/clio:context`, `/clio:test <task>`, `/clio:memo`.

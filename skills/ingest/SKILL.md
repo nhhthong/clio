@@ -28,6 +28,6 @@ A plain-words change is a source like any other. Quote the user, with the date, 
 1. **Write the area files** in `.claude/clio/docs/specs/memory/`. Format: [SPEC-FORMAT.md](SPEC-FORMAT.md). Final decisions only, shortest unambiguous form. Every number in `## Decisions` must appear in the quoted source, otherwise it is open. Two sources that conflict: list both under `## Open` and ask. Never pick the newer.
 2. **Update `requirements.md`**, one row per agreed number. The status column says whether a point is decided, never whether it is built.
 3. **File debt** for every open or blocked row and every spec delta. Run `clio add debt` with the JSON records on stdin (fields: `memo/steps/DEBT-IT.md`). Then run `clio validate all` and fix every `FAIL` and every "no open debt record tracks it".
-4. **Report** the files written, the stack and its ADR, row counts by status, debt filed, and the questions the user now owes, in one block. Then point to `/clio:plan infra` and `/clio:plan <area>`, or the areas the change names. Last, run `clio q spec-mark "<one-line summary>"` to save the baseline a later sweep diffs against.
+4. **Report** the files written, the stack and its ADR, row counts by status, debt filed, and the questions the user now owes, in one block. Then point to `/clio:plan <area>`, or the areas the change names. Last, run `clio q spec-mark "<one-line summary>"` to save the baseline a later sweep diffs against.
 
 Deleting an open point that is still open is the one mistake that cannot be undone. Resolve it only when the source now answers it.

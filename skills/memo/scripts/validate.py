@@ -321,6 +321,7 @@ def audit():
             r = parse(l)
             good = isinstance(r, dict) and (
                 (c.truthy(r.get("case")) and c.truthy(r.get("fp")) and r.get("result") in ("pass", "fail"))
+                or (c.truthy(r.get("check")) and c.truthy(r.get("fp")) and r.get("result") in ("pass", "fail"))
                 or (c.truthy(r.get("approve")) and c.truthy(r.get("hash"))))
             if not good:
                 fail("%s line %d is not a `clio test` record — only the script writes this file" % (RUNS, n))

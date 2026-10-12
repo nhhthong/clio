@@ -11,6 +11,7 @@
 Verification is `/clio:test`'s evidence, never your account of it. For each id in `plan_tasks`: `clio test gate <id>`.
 - `OK` → `clio test tick <id>` (+ `--commit <hash>` if step 1 found one): it gates again and records the task done, the only way a task becomes done. Put the `OK` line in `testing`.
 - Anything else → leave it open, file an `unverified` record naming the FAIL lines, tell the user `/clio:test <id>` is owed. A `flaky —` line is `code-debt` with `what` starting `flaky:`.
+- `NOTE: … no check command — skipped` (a `none` task) → tick it, and file an `unverified` record with the skip reason.
 - `plan_tasks` empty → no gate; `unverified` unless the user names the check that ran. Never tick a task step 1 was unsure about.
 
 ## 3. New records
